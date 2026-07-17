@@ -71,7 +71,7 @@ export function assertPaystackModeCompatibility(secretKey: string, browserPublic
   }
 
   if (publicMode && publicMode !== secretMode) {
-    throw new Error("Paystack public and secret keys are not configured for the same environment.");
+    throw new Error("Paystack public and secret keys must use the same environment.");
   }
 
   return secretMode;

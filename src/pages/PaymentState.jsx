@@ -1,33 +1,60 @@
 import { Link, useSearchParams } from "react-router-dom";
-import { CircleX, Clock, TriangleAlert } from "lucide-react";
+import { CircleX, RotateCcw, TriangleAlert } from "lucide-react";
 import BrandLogo from "../components/BrandLogo";
 import { siteConfig } from "../data/site";
+import { readTemporaryPayment } from "../services/paymentService";
+import { formatCurrency, formatDateTime, isValidEmail } from "../utils/format";
 import { normalizePaymentReference } from "../utils/paymentCalculations";
 import { usePageMeta } from "../utils/usePageMeta";
 
-const copyByState = {
-  failed: {
-    title: "Payment Failed",
-    body: "The payment could not be completed. No enrolment was activated.",
-    icon: TriangleAlert
-  },
+const copyByReason = {
   cancelled: {
-    title: "Payment Cancelled",
-    body: "The payment window was closed before completion. No enrolment was activated.",
+    title: "Payment was not completed",
+    body: "You closed or cancelled the Paystack checkout. No enrolment has been activated.",
     icon: CircleX
   },
+  declined: {
+    title: "Payment was declined",
+    body: "Your bank or Paystack declined the transaction. No enrolment has been activated.",
+    icon: TriangleAlert
+  },
+  error: {
+    title: "Payment could not be completed",
+    body: "Paystack reported an error while processing the payment. No enrolment has been activated.",
+    icon: TriangleAlert
+  },
+  failed: {
+    title: "Payment could not be completed",
+    body: "The payment was not completed. No enrolment has been activated.",
+    icon: TriangleAlert
+  },
   pending: {
-    title: "Payment Confirmation Pending",
-    body: "Payment confirmation is still pending. Keep your reference and check again shortly.",
-    icon: Clock
+    title: "Payment confirmation pending",
+    body: "The checkout has not been marked complete in this browser session.",
+    icon: RotateCcw
   }
 };
 
-export default function PaymentState({ state = "pending" }) {
-  const [searchParams] = useSearchParams();
-  const copy = copyByState[state] || copyByState.pending;
-  const Icon = copy.icon;
+function getPaymentState(searchParams, routeState) {
   const reference = normalizePaymentReference(searchParams.get("reference"), searchParams.get("trxref"));
+  const reason = String(searchParams.get("reason") || routeState || "failed").toLowerCase();
+  const record = readTemporaryPayment(reference);
+  if (!reference || !record) return { reference, record: null, reason: "unavailable" };
+  const statusReason = record.failureReason || record.temporaryStatus || reason;
+  return { reference, record, reason: statusReason === "success" ? "pending" : statusReason };
+}
+
+export default function PaymentState({ state = "failed" }) {
+  const [searchParams] = useSearchParams();
+  const { reference, record, reason } = getPaymentState(searchParams, state);
+  const copy = reason === "unavailable"
+    ? {
+        title: "Payment details unavailable",
+        body: "We could not find the payment details for this page.",
+        icon: TriangleAlert
+      }
+    : copyByReason[reason] || copyByReason.failed;
+  const Icon = copy.icon;
 
   usePageMeta({
     path: `/payment-${state}`,
@@ -53,14 +80,30 @@ export default function PaymentState({ state = "pending" }) {
               <p>{copy.body}</p>
             </div>
           </div>
-          {reference ? (
+
+          {record ? (
+            <dl className="receipt-details">
+              <div><dt>Reference</dt><dd>{record.reference}</dd></div>
+              <div><dt>Programme</dt><dd>{record.productTitle}</dd></div>
+              {record.trackName ? <div><dt>Track</dt><dd>{record.trackName}</dd></div> : null}
+              <div><dt>Amount</dt><dd>{formatCurrency(record.amountKobo / 100)}</dd></div>
+              <div><dt>Customer</dt><dd>{record.customerName}</dd></div>
+              <div>
+                <dt>Email</dt>
+                <dd>{isValidEmail(record.customerEmail) ? <a href={`mailto:${record.customerEmail}`}>{record.customerEmail}</a> : record.customerEmail}</dd>
+              </div>
+              <div><dt>Phone</dt><dd>{record.customerPhone}</dd></div>
+              <div><dt>Date</dt><dd>{formatDateTime(record.updatedAt || record.createdAt)}</dd></div>
+            </dl>
+          ) : reference ? (
             <dl className="receipt-details">
               <div><dt>Reference</dt><dd>{reference}</dd></div>
             </dl>
           ) : null}
+
           <div className="receipt-actions">
-            {reference ? <Link className="button button-secondary" to={`/payment-status?reference=${encodeURIComponent(reference)}`}>Check Status</Link> : null}
-            <Link className="button button-primary" to="/programs">Retry Payment</Link>
+            <Link className="button button-primary" to="/programs">Try Again</Link>
+            <Link className="button button-secondary" to="/programs">Return to Programs</Link>
             <Link className="button button-secondary" to="/contact">Contact Support</Link>
           </div>
         </div>

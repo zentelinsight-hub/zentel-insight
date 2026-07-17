@@ -121,7 +121,6 @@ export default function ContactForm({ brand = "main" }) {
             name="studentClass"
             value={values.studentClass}
             onChange={updateField}
-            placeholder="Example: JSS2 or SSS1"
           />
         </label>
       ) : null}

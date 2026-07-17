@@ -45,7 +45,7 @@ const issues = [];
 for (const key of requiredKeys) {
   const value = String(env[key] || "").trim();
   if (!value) issues.push(`${key} is missing.`);
-  if (/replace_me|your-|example\.com/i.test(value)) issues.push(`${key} still contains a placeholder value.`);
+  if (/replace_me|your-|example\.com/i.test(value)) issues.push(`${key} still contains a sample value.`);
 }
 
 if (env.VITE_SUPABASE_URL && env.VITE_SUPABASE_URL !== "https://auzbmfwdxprtvjsvcxcj.supabase.co") {

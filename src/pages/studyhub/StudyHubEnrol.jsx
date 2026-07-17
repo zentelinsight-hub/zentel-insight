@@ -117,28 +117,23 @@ export default function StudyHubEnrol({ programme = "" }) {
           setLoading(false);
           if (transaction && !hasNavigatedRef.current) {
             hasNavigatedRef.current = true;
-            const params = new URLSearchParams({
-              reference: transaction.reference
-            });
-            navigate(`/studyhub/payment-cancelled?${params.toString()}`);
+            navigate(transaction.path || `/studyhub/payment-failed?reference=${encodeURIComponent(transaction.reference || "")}&reason=cancelled`);
           }
         },
         onError: (paymentError, transaction) => {
           paymentOpeningRef.current = false;
           setLoading(false);
-          setStatus(
-            transaction?.reference
-              ? `${paymentError.message} Reference: ${transaction.reference}`
-              : paymentError.message
-          );
+          if (transaction && !hasNavigatedRef.current) {
+            hasNavigatedRef.current = true;
+            navigate(transaction.path || `/studyhub/payment-failed?reference=${encodeURIComponent(transaction.reference || "")}&reason=error`);
+            return;
+          }
+          setStatus(paymentError.message);
         },
         onSuccess: (transaction) => {
           if (hasNavigatedRef.current) return;
           hasNavigatedRef.current = true;
-          const params = new URLSearchParams({
-            reference: transaction.reference
-          });
-          navigate(`/studyhub/payment-status?${params.toString()}`);
+          navigate(transaction.path || `/studyhub/payment-success?reference=${encodeURIComponent(transaction.reference || "")}`);
         }
       });
       setStatus("Paystack checkout opened. Complete or cancel the popup to continue.");
@@ -176,7 +171,7 @@ export default function StudyHubEnrol({ programme = "" }) {
             <p>
               {isSummerLessons
                 ? "Summer Lessons uses a fixed one-time price for one complete month. It is not multiplied by subjects or months."
-                : "StudyHub enrolment is public. The displayed total is calculated from class, subjects and months; the payment service still verifies successful payments before activation."}
+                : "StudyHub enrolment is public. The displayed total is calculated from class, subjects and months; keep your Paystack reference for manual confirmation."}
             </p>
           </div>
           <form className="form-card" onSubmit={handlePayment}>

@@ -7,12 +7,6 @@ import { formatCurrency, isValidEmail } from "../../utils/format";
 import { resolveCourseCheckout } from "../../utils/paymentCalculations";
 import { startPaystackPayment } from "../../services/paymentService";
 
-function buildReferenceParams(transaction) {
-  return new URLSearchParams({
-    reference: transaction.reference || ""
-  });
-}
-
 export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lockedSelection = false }) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -93,24 +87,24 @@ export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lock
           setStatus({ type: "warning", message });
           if (transaction && !hasNavigatedRef.current) {
             hasNavigatedRef.current = true;
-            navigate(`/payment-cancelled?${buildReferenceParams(transaction).toString()}`);
+            navigate(transaction.path || `/payment-failed?reference=${encodeURIComponent(transaction.reference || "")}&reason=cancelled`);
           }
         },
         onError: (paymentError, transaction) => {
           paymentOpeningRef.current = false;
           setPaymentState("failed");
-          setStatus({
-            type: "error",
-            message: transaction?.reference
-              ? `${paymentError.message} Reference: ${transaction.reference}`
-              : paymentError.message
-          });
+          if (transaction && !hasNavigatedRef.current) {
+            hasNavigatedRef.current = true;
+            navigate(transaction.path || `/payment-failed?reference=${encodeURIComponent(transaction.reference || "")}&reason=error`);
+            return;
+          }
+          setStatus({ type: "error", message: paymentError.message });
         },
         onSuccess: (transaction) => {
           if (hasNavigatedRef.current) return;
           hasNavigatedRef.current = true;
           setPaymentState("verifying");
-          navigate(`/payment-status?${buildReferenceParams(transaction).toString()}`);
+          navigate(transaction.path || `/payment-success?reference=${encodeURIComponent(transaction.reference || "")}`);
         }
       });
       setPaymentState((current) => (current === "creating_session" ? "opening" : current));
@@ -250,8 +244,8 @@ export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lock
       </div>
 
       <p className="payment-notice">
-        Card details are handled by Paystack. Your course access is activated only after server-side payment
-        verification confirms a successful transaction.
+        Card details are handled by Paystack. Keep your payment reference for manual confirmation; course access is not
+        activated by this temporary checkout page.
       </p>
 
       {status.message ? <div className={`form-status ${status.type}`} aria-live="polite">{status.message}</div> : null}

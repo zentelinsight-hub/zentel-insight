@@ -56,6 +56,8 @@ const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
+const EmailVerified = lazy(() => import("./pages/EmailVerified"));
+const EmailVerificationFailed = lazy(() => import("./pages/EmailVerificationFailed"));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const Payment = lazy(() => import("./pages/Payment"));
 const PaymentStatus = lazy(() => import("./pages/PaymentStatus"));
@@ -126,6 +128,8 @@ export default function App() {
               <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
               <Route path="/signup" element={<GuestRoute><Signup /></GuestRoute>} />
               <Route path="/verify-email" element={<GuestRoute><VerifyEmail /></GuestRoute>} />
+              <Route path="/email-verified" element={<EmailVerified />} />
+              <Route path="/email-verification-failed" element={<EmailVerificationFailed />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
@@ -145,15 +149,19 @@ export default function App() {
             </Route>
             <Route path="/portal" element={<ProtectedRoute><PortalLayout /></ProtectedRoute>}>
               <Route index element={<PortalOverview />} />
-              <Route path="programs" element={<PortalSection title="Programs" />} />
-              <Route path="enrolments" element={<PortalSection title="My Enrolments" />} />
-              <Route path="payments" element={<PortalSection title="Payments" />} />
-              <Route path="timetable" element={<PortalSection title="Timetable" />} />
-              <Route path="resources" element={<PortalSection title="Resources" />} />
-              <Route path="announcements" element={<PortalSection title="Announcements" />} />
+              <Route path="programs" element={<Navigate to="/programs" replace />} />
+              <Route path="enrolments" element={<Navigate to="/portal/my-courses" replace />} />
+              <Route path="my-courses" element={<PortalSection page="my-courses" />} />
+              <Route path="timetable" element={<PortalSection page="timetable" />} />
+              <Route path="announcements" element={<PortalSection page="announcements" />} />
+              <Route path="assignments" element={<PortalSection page="assignments" />} />
+              <Route path="resources" element={<PortalSection page="resources" />} />
+              <Route path="payments" element={<PortalSection page="payments" />} />
+              <Route path="certificates" element={<PortalSection page="certificates" />} />
+              <Route path="notifications" element={<PortalSection page="notifications" />} />
+              <Route path="support" element={<PortalSection page="support" />} />
+              <Route path="settings" element={<PortalSection page="settings" />} />
               <Route path="profile" element={<PortalProfile />} />
-              <Route path="support" element={<PortalSection title="Support" />} />
-              <Route path="settings" element={<PortalSection title="Settings" />} />
             </Route>
             </Routes>
           )}

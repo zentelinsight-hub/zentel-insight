@@ -17,10 +17,12 @@ async function repairMissingProfile(supabase, currentUser) {
     id: currentUser.id,
     full_name: metadata.full_name || "",
     date_of_birth: metadata.date_of_birth || null,
+    education_level: metadata.education_level || "",
     phone: metadata.phone || "",
     address: metadata.address || "",
     email: currentUser.email || "",
-    profile_completed: Boolean(metadata.full_name)
+    profile_completed: Boolean(metadata.full_name),
+    profile_completion: metadata.full_name ? 70 : 20
   };
 
   const { data, error } = await withTimeout(
@@ -38,6 +40,8 @@ export function AuthProvider({ children }) {
   const [authReady, setAuthReady] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState("");
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState("");
   const configured = hasSupabaseConfig();
 
   useEffect(() => {
@@ -58,28 +62,41 @@ export function AuthProvider({ children }) {
   const refreshProfile = useCallback(async (currentUser) => {
     if (!currentUser) {
       setProfile(null);
+      setProfileError("");
       return null;
     }
     const supabase = await getSupabaseClient();
     if (!supabase) return null;
-    const { data, error } = await withTimeout(
-      supabase.from("profiles").select("*").eq("id", currentUser.id).maybeSingle(),
-      "Profile loading timed out."
-    );
-    if (error) {
-      setProfile(null);
-      return null;
-    }
-    let profileData = data || null;
-    if (!profileData) {
-      try {
+    setProfileLoading(true);
+    setProfileError("");
+    try {
+      const { data, error } = await withTimeout(
+        supabase.from("profiles").select("*").eq("id", currentUser.id).maybeSingle(),
+        "Profile loading timed out."
+      );
+      if (error) throw error;
+      let profileData = data || null;
+      if (!profileData) {
         profileData = await repairMissingProfile(supabase, currentUser);
-      } catch {
-        profileData = null;
       }
+      setProfile(profileData || null);
+      return profileData || null;
+    } catch (error) {
+      setProfile(null);
+      setProfileError(error.message || "Profile information could not be loaded.");
+      return null;
+    } finally {
+      setProfileLoading(false);
     }
-    setProfile(profileData || null);
-    return profileData || null;
+  }, []);
+
+  const signOut = useCallback(async () => {
+    const supabase = await getSupabaseClient();
+    window.dispatchEvent(new CustomEvent("zentel:portal-cache-clear"));
+    setProfile(null);
+    setSession(null);
+    setUser(null);
+    await supabase?.auth.signOut();
   }, []);
 
   useEffect(() => {
@@ -112,8 +129,9 @@ export function AuthProvider({ children }) {
           if (nextSession?.user) {
             void refreshProfile(nextSession.user);
           } else {
-            setProfile(null);
-          }
+          setProfile(null);
+          setProfileError("");
+        }
         });
         subscription = listener.data.subscription;
       } catch (error) {
@@ -144,13 +162,16 @@ export function AuthProvider({ children }) {
       authReady,
       authLoading,
       authError,
+      profileLoading,
+      profileError,
       loading: authLoading,
       session,
       user,
       profile,
-      refreshProfile: () => refreshProfile(user)
+      refreshProfile: () => refreshProfile(user),
+      signOut
     }),
-    [authError, authLoading, authReady, configured, session, user, profile, refreshProfile]
+    [authError, authLoading, authReady, configured, session, user, profile, profileLoading, profileError, refreshProfile, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

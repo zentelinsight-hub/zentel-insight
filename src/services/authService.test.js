@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { loginWithEmail, signupWithEmail, verifyEmailOtp } from "./authService";
+import { getEmailRedirectTo, loginWithEmail, resendSignupConfirmation, signupWithEmail } from "./authService";
 
 const mockState = vi.hoisted(() => ({ supabase: null }));
 
@@ -9,11 +9,12 @@ vi.mock("./supabaseClient", () => ({
 }));
 
 beforeEach(() => {
+  vi.stubEnv("VITE_SITE_URL", "https://zentelinsight.com.ng");
   mockState.supabase = {
     auth: {
       signInWithPassword: vi.fn(),
       signUp: vi.fn(),
-      verifyOtp: vi.fn(),
+      resend: vi.fn(),
       signOut: vi.fn()
     },
     functions: {
@@ -24,6 +25,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe("auth service", () => {
@@ -47,7 +49,25 @@ describe("auth service", () => {
     expect(mockState.supabase.functions.invoke).toHaveBeenCalledWith("claim-my-enrolments", { body: {} });
   });
 
-  it("signs up through Supabase once with profile metadata", async () => {
+  it("blocks unverified login before the portal and signs out locally", async () => {
+    mockState.supabase.auth.signInWithPassword.mockResolvedValue({
+      data: {
+        session: { access_token: "token" },
+        user: { id: "user-1", email: "student@example.com" }
+      },
+      error: null
+    });
+
+    const result = await loginWithEmail({ email: "student@example.com", password: "password123" });
+
+    expect(result.ok).toBe(false);
+    expect(result.unverified).toBe(true);
+    expect(result.message).toBe("Your email address has not been verified. Open your verification email or request a new one.");
+    expect(mockState.supabase.auth.signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(mockState.supabase.functions.invoke).not.toHaveBeenCalled();
+  });
+
+  it("signs up through Supabase once with profile metadata and a confirmation-link redirect", async () => {
     mockState.supabase.auth.signUp.mockResolvedValue({
       data: { user: { id: "user-2", email: "new@example.com" } },
       error: null
@@ -58,8 +78,9 @@ describe("auth service", () => {
       password: "password123",
       fullName: "New Student",
       dateOfBirth: "2006-01-01",
+      educationLevel: "Senior Secondary School",
       phone: "07000000000",
-      address: "Lagos"
+      address: "Lagos address"
     });
 
     expect(result.ok).toBe(true);
@@ -68,12 +89,31 @@ describe("auth service", () => {
       email: "new@example.com",
       password: "password123",
       options: {
+        emailRedirectTo: "https://zentelinsight.com.ng/auth/callback?next=/email-verified",
         data: {
           full_name: "New Student",
           date_of_birth: "2006-01-01",
+          education_level: "Senior Secondary School",
           phone: "07000000000",
-          address: "Lagos"
+          address: "Lagos address"
         }
+      }
+    });
+    expect(mockState.supabase.auth.signUp).toHaveBeenCalledOnce();
+  });
+
+  it("resends a signup confirmation link without revealing account existence", async () => {
+    mockState.supabase.auth.resend.mockResolvedValue({ data: {}, error: null });
+
+    const result = await resendSignupConfirmation(" New@Example.COM ");
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe("If an unverified account exists for this email address, a new verification message has been sent.");
+    expect(mockState.supabase.auth.resend).toHaveBeenCalledWith({
+      type: "signup",
+      email: "new@example.com",
+      options: {
+        emailRedirectTo: "https://zentelinsight.com.ng/auth/callback?next=/email-verified"
       }
     });
   });
@@ -108,8 +148,9 @@ describe("auth service", () => {
       password: "password123",
       fullName: "New Student",
       dateOfBirth: "2006-01-01",
+      educationLevel: "Graduate",
       phone: "07000000000",
-      address: "Lagos"
+      address: "Lagos address"
     });
 
     expect(result.ok).toBe(false);
@@ -117,24 +158,7 @@ describe("auth service", () => {
     expect(mockState.supabase.auth.signUp).toHaveBeenCalledOnce();
   });
 
-  it("confirms signup OTP through Supabase verifyOtp", async () => {
-    mockState.supabase.auth.verifyOtp.mockResolvedValue({
-      data: {
-        session: { access_token: "token" },
-        user: { id: "user-3", email: "otp@example.com" }
-      },
-      error: null
-    });
-
-    const result = await verifyEmailOtp({ email: " OTP@Example.COM ", token: "123456" });
-
-    expect(result.ok).toBe(true);
-    expect(mockState.supabase.auth.verifyOtp).toHaveBeenCalledOnce();
-    expect(mockState.supabase.auth.verifyOtp).toHaveBeenCalledWith({
-      email: "otp@example.com",
-      token: "123456",
-      type: "email"
-    });
-    expect(mockState.supabase.functions.invoke).toHaveBeenCalledWith("claim-my-enrolments", { body: {} });
+  it("builds the email redirect URL for the shared callback route", () => {
+    expect(getEmailRedirectTo()).toBe("https://zentelinsight.com.ng/auth/callback?next=/email-verified");
   });
 });

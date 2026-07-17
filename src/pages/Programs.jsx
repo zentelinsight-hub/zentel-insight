@@ -57,7 +57,6 @@ export default function Programs() {
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search by skill, track, or mode"
               />
             </label>
             <div className="segmented-control" aria-label="Filter by track">
