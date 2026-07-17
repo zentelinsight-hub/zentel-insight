@@ -1,14 +1,13 @@
-import PaystackPop from "@paystack/inline-js";
 import { isValidEmail } from "../utils/format";
 import {
   COURSE_PAYMENT_TYPE,
   STUDYHUB_PAYMENT_TYPE,
   normalizePaymentReference
 } from "../utils/paymentCalculations";
-import { getSupabaseClient } from "./supabaseClient";
+import { getSupabaseClient, getSupabaseSafeStatus } from "./supabaseClient";
 
 const requestTimeoutMs = 15000;
-const paymentAttemptTimeoutMessage = "We could not create a secure payment attempt. No payment has been charged. Please try again.";
+const paymentAttemptTimeoutMessage = "The payment server did not return a usable session. No payment has been charged. Please try again.";
 
 function readEnvValue(key) {
   return String(import.meta.env[key] || "").trim();
@@ -58,6 +57,25 @@ export function isPaymentConfigured() {
   return getPaymentEnvironmentStatus().supabaseConfigured;
 }
 
+function isPaymentDebugEnabled() {
+  if (import.meta.env.DEV) return true;
+  try {
+    return window.localStorage?.getItem("zentel_payment_debug") === "true";
+  } catch {
+    return false;
+  }
+}
+
+function logPaymentInfo(message, details = {}) {
+  if (!isPaymentDebugEnabled()) return;
+  console.info(message, details);
+}
+
+function logPaymentError(message, details = {}) {
+  if (!isPaymentDebugEnabled()) return;
+  console.error(message, details);
+}
+
 async function withTimeout(promise, message, timeoutMs = requestTimeoutMs) {
   let timeoutId;
   const timeout = new Promise((_, reject) => {
@@ -77,19 +95,32 @@ function getErrorMessageFromResponse(result, fallback = paymentAttemptTimeoutMes
   return fallback;
 }
 
-async function getAuthorizationToken() {
-  const publicKey = getSupabasePublicKey();
-  let token = publicKey;
+async function getFunctionErrorBody(error) {
+  const context = error?.context;
+  if (!context || typeof context.clone !== "function") return null;
+  return context.clone().json().catch(() => null);
+}
 
+function createPaymentInvocationError(error, responseBody) {
+  const status = error?.context?.status || null;
+  const reference = normalizePaymentReference(responseBody?.reference);
+  const message = getErrorMessageFromResponse(
+    responseBody,
+    error?.message || "The payment server could not create a session. No payment has been charged."
+  );
+  const invocationError = new Error(message);
+  invocationError.status = status;
+  if (reference) invocationError.paymentReference = reference;
+  return invocationError;
+}
+
+async function createPaystackPopup() {
   try {
-    const supabase = await getSupabaseClient();
-    const { data } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
-    token = data?.session?.access_token || publicKey;
+    const { default: PaystackPop } = await import("@paystack/inline-js");
+    return new PaystackPop();
   } catch {
-    token = publicKey;
+    throw new Error("Paystack could not be opened. No payment has been charged. Please check your connection and try again.");
   }
-
-  return token;
 }
 
 function getStudyHubProductType(studyHub = {}) {
@@ -256,40 +287,65 @@ export async function verifyPayment(reference) {
 }
 
 export async function createPaymentSession({ item, customer }) {
-  const endpoint = getSupabaseFunctionUrl("create-payment-session", readEnvValue("VITE_PAYMENT_SESSION_ENDPOINT"));
-  if (!endpoint) {
-    throw new Error(paymentAttemptTimeoutMessage);
-  }
-
   validatePaymentRequest({ item, customer });
 
-  const publicKey = getSupabasePublicKey();
-  const token = await getAuthorizationToken();
+  const supabaseStatus = getSupabaseSafeStatus();
+  if (!supabaseStatus.ready) {
+    logPaymentError("[payment-config]", {
+      supabaseUrlConfigured: supabaseStatus.urlConfigured,
+      supabaseKeyConfigured: supabaseStatus.publishableKeyConfigured,
+      issues: supabaseStatus.issues
+    });
+    throw new Error("Payment configuration is incomplete. No payment has been charged. Please contact support.");
+  }
+
+  const supabase = await getSupabaseClient();
+  if (!supabase) {
+    throw new Error("Payment configuration is incomplete. No payment has been charged. Please contact support.");
+  }
+
   const payload = buildPaymentPayload({ item, customer });
 
-  try {
-    const response = await withTimeout(fetch(endpoint, {
-      method: "POST",
-      headers: {
-        ...(publicKey ? { apikey: publicKey } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
-    }), "Payment session creation timed out. Please try again.");
+  logPaymentInfo("[payment] submit started");
+  logPaymentInfo("[payment] invoking create-payment-session", {
+    brand: payload.brand,
+    productType: payload.productType,
+    hasEmail: Boolean(payload.customer?.email),
+    hasPhone: Boolean(payload.customer?.phone)
+  });
 
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || result?.ok === false) {
-      const error = new Error(getErrorMessageFromResponse(result));
-      const reference = normalizePaymentReference(result?.reference);
-      if (reference) error.paymentReference = reference;
-      throw error;
+  try {
+    const { data, error } = await withTimeout(
+      supabase.functions.invoke("create-payment-session", { body: payload }),
+      "Payment session creation timed out. Please try again."
+    );
+
+    if (error) {
+      const responseBody = await getFunctionErrorBody(error);
+      logPaymentError("[create-payment-session]", {
+        message: error.message,
+        status: error.context?.status || null,
+        responseBody
+      });
+      throw createPaymentInvocationError(error, responseBody);
     }
 
-    return normalizeSession(result);
+    logPaymentInfo("[payment] function response received", {
+      ok: Boolean(data?.ok),
+      mode: data?.mode,
+      hasReference: Boolean(data?.reference)
+    });
+
+    if (data?.ok === false) {
+      throw createPaymentInvocationError(new Error(data.error || paymentAttemptTimeoutMessage), data);
+    }
+
+    return normalizeSession(data);
   } catch (error) {
-    if (error?.message && error.message !== "Failed to fetch") throw error;
-    throw new Error(paymentAttemptTimeoutMessage);
+    if (error?.message === "Failed to fetch") {
+      throw new Error("The payment server could not be reached. No payment has been charged. Please check your connection and try again.");
+    }
+    throw error;
   }
 }
 
@@ -345,7 +401,7 @@ export async function startPaystackPayment({ item, customer, onSuccess, onCancel
   const callbacks = createPopupCallbacks({ session, item, customer, onSuccess, onCancel, onError });
 
   if (session.mode === "backend") {
-    const popup = new PaystackPop();
+    const popup = await createPaystackPopup();
     popup.resumeTransaction(session.accessCode, callbacks);
     return session;
   }
@@ -357,7 +413,7 @@ export async function startPaystackPayment({ item, customer, onSuccess, onCancel
     throw error;
   }
 
-  const popup = new PaystackPop();
+  const popup = await createPaystackPopup();
   popup.newTransaction({
     key: publicKey,
     email: session.email,

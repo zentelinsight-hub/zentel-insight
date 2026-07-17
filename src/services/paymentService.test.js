@@ -7,6 +7,10 @@ const paystackMocks = vi.hoisted(() => ({
   resumeTransaction: vi.fn()
 }));
 
+const supabaseMocks = vi.hoisted(() => ({
+  invoke: vi.fn()
+}));
+
 vi.mock("@paystack/inline-js", () => ({
   default: vi.fn(function PaystackPopMock() {
     this.newTransaction = paystackMocks.newTransaction;
@@ -15,7 +19,17 @@ vi.mock("@paystack/inline-js", () => ({
 }));
 
 vi.mock("./supabaseClient", () => ({
-  getSupabaseClient: vi.fn(async () => null)
+  getSupabaseClient: vi.fn(async () => ({
+    functions: {
+      invoke: supabaseMocks.invoke
+    }
+  })),
+  getSupabaseSafeStatus: vi.fn(() => ({
+    ready: true,
+    urlConfigured: true,
+    publishableKeyConfigured: true,
+    issues: []
+  }))
 }));
 
 const customer = {
@@ -44,6 +58,7 @@ async function loadPaymentService(overrides = {}) {
 beforeEach(() => {
   paystackMocks.newTransaction.mockReset();
   paystackMocks.resumeTransaction.mockReset();
+  supabaseMocks.invoke.mockReset();
 });
 
 afterEach(() => {
@@ -54,22 +69,20 @@ afterEach(() => {
 
 describe("secure payment sessions", () => {
   it("does not create a frontend-only session when Supabase is unreachable", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => {
-      throw new TypeError("Failed to fetch");
-    }));
+    supabaseMocks.invoke.mockRejectedValue(new TypeError("Failed to fetch"));
     const { createPaymentSession } = await loadPaymentService();
 
     await expect(createPaymentSession({ item: courseItem, customer })).rejects.toThrow(
-      "We could not create a secure payment attempt"
+      "The payment server could not be reached"
     );
 
-    expect(fetch).toHaveBeenCalledOnce();
+    expect(supabaseMocks.invoke).toHaveBeenCalledOnce();
+    expect(supabaseMocks.invoke.mock.calls[0][0]).toBe("create-payment-session");
   });
 
   it("sends product identifiers only and accepts a backend-initialized session", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (_url, options) => ({
-      ok: true,
-      json: async () => ({
+    supabaseMocks.invoke.mockResolvedValue({
+      data: {
         ok: true,
         mode: "backend",
         reference: "ZI-COURSE-1790000000000-ABCDEF1234",
@@ -77,13 +90,13 @@ describe("secure payment sessions", () => {
         amountKobo: 2000000,
         currency: "NGN",
         brand: "zentel_insight"
-      }),
-      requestBody: options.body
-    })));
+      },
+      error: null
+    });
     const { createPaymentSession } = await loadPaymentService();
 
     const session = await createPaymentSession({ item: courseItem, customer });
-    const payload = JSON.parse(fetch.mock.calls[0][1].body);
+    const payload = supabaseMocks.invoke.mock.calls[0][1].body;
 
     expect(session).toMatchObject({
       mode: "backend",
@@ -91,6 +104,7 @@ describe("secure payment sessions", () => {
       amountKobo: 2000000,
       accessCode: "access_code_test"
     });
+    expect(supabaseMocks.invoke.mock.calls[0][0]).toBe("create-payment-session");
     expect(payload).toMatchObject({
       brand: "zentel_insight",
       productType: "zentel_course",
@@ -103,9 +117,8 @@ describe("secure payment sessions", () => {
   });
 
   it("opens backend-initialized Paystack with the access code", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => ({
-      ok: true,
-      json: async () => ({
+    supabaseMocks.invoke.mockResolvedValue({
+      data: {
         ok: true,
         mode: "backend",
         reference: "ZI-COURSE-1790000000000-ABCDEF1234",
@@ -113,8 +126,9 @@ describe("secure payment sessions", () => {
         amountKobo: 2000000,
         currency: "NGN",
         brand: "zentel_insight"
-      })
-    })));
+      },
+      error: null
+    });
     const { startPaystackPayment } = await loadPaymentService();
 
     await startPaystackPayment({
@@ -130,9 +144,8 @@ describe("secure payment sessions", () => {
   });
 
   it("uses only the server reference and trusted amount for safe frontend fallback", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => ({
-      ok: true,
-      json: async () => ({
+    supabaseMocks.invoke.mockResolvedValue({
+      data: {
         ok: true,
         mode: "frontend_fallback",
         paymentId: "payment-id",
@@ -146,8 +159,9 @@ describe("secure payment sessions", () => {
           brand: "studyhub",
           product_type: "studyhub_jss"
         }
-      })
-    })));
+      },
+      error: null
+    });
     const { startPaystackPayment } = await loadPaymentService();
 
     await startPaystackPayment({
@@ -190,9 +204,8 @@ describe("secure payment sessions", () => {
   });
 
   it("blocks frontend fallback safely when the public key is missing", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => ({
-      ok: true,
-      json: async () => ({
+    supabaseMocks.invoke.mockResolvedValue({
+      data: {
         ok: true,
         mode: "frontend_fallback",
         paymentId: "payment-id",
@@ -202,8 +215,9 @@ describe("secure payment sessions", () => {
         currency: "NGN",
         brand: "zentel_insight",
         metadata: { payment_id: "payment-id" }
-      })
-    })));
+      },
+      error: null
+    });
     const { startPaystackPayment } = await loadPaymentService({ paystackPublicKey: "" });
 
     await expect(startPaystackPayment({

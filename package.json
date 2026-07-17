@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "prebuild": "node scripts/validate-public-env.mjs",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "lint": "eslint . --ext js,jsx --max-warnings 0",
