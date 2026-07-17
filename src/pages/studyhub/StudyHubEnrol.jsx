@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import BrandLogo from "../../components/BrandLogo";
 import { siteConfig } from "../../data/site";
 import { studyHubPricing } from "../../data/programs";
-import { isPaymentConfigured, startPaystackPayment } from "../../services/paymentService";
+import { startPaystackPayment } from "../../services/paymentService";
 import { calculateStudyHubPrice, nairaToKobo, STUDYHUB_PAYMENT_TYPE } from "../../utils/paymentCalculations";
 import { formatCurrency, isValidEmail } from "../../utils/format";
 import { usePageMeta } from "../../utils/usePageMeta";
@@ -118,42 +118,25 @@ export default function StudyHubEnrol({ programme = "" }) {
           if (transaction && !hasNavigatedRef.current) {
             hasNavigatedRef.current = true;
             const params = new URLSearchParams({
-            brand: "studyhub",
-            status: "cancelled",
-            reference: transaction.reference,
-              program: productTitle,
-              amount: String(total),
-              name: form.parentName,
-              email: form.email,
-              phone: form.phone,
-              student: form.studentName,
-              class: classLevel,
-              productType: item.studyHub.productType,
-              subjects: item.studyHub.subjects.join(", "),
-              months: String(item.studyHub.months),
-              date: transaction.date
+              reference: transaction.reference
             });
             navigate(`/studyhub/payment-cancelled?${params.toString()}`);
           }
+        },
+        onError: (paymentError, transaction) => {
+          paymentOpeningRef.current = false;
+          setLoading(false);
+          setStatus(
+            transaction?.reference
+              ? `${paymentError.message} Reference: ${transaction.reference}`
+              : paymentError.message
+          );
         },
         onSuccess: (transaction) => {
           if (hasNavigatedRef.current) return;
           hasNavigatedRef.current = true;
           const params = new URLSearchParams({
-            brand: "studyhub",
-            status: "success",
-            reference: transaction.reference,
-            program: productTitle,
-            amount: String(total),
-            name: form.parentName,
-            email: form.email,
-            phone: form.phone,
-            student: form.studentName,
-            class: classLevel,
-            productType: item.studyHub.productType,
-            subjects: item.studyHub.subjects.join(", "),
-            months: String(item.studyHub.months),
-            date: transaction.date
+            reference: transaction.reference
           });
           navigate(`/studyhub/payment-status?${params.toString()}`);
         }
@@ -161,7 +144,11 @@ export default function StudyHubEnrol({ programme = "" }) {
       setStatus("Paystack checkout opened. Complete or cancel the popup to continue.");
     } catch (paymentError) {
       paymentOpeningRef.current = false;
-      setStatus(paymentError.message);
+      setStatus(
+        paymentError.paymentReference
+          ? `${paymentError.message} Reference: ${paymentError.paymentReference}`
+          : paymentError.message
+      );
       setLoading(false);
     }
   }
@@ -266,9 +253,8 @@ export default function StudyHubEnrol({ programme = "" }) {
               <div className="total"><span>Total</span><strong>{formatCurrency(total)}</strong></div>
             </div>
 
-            {!isPaymentConfigured() ? <div className="form-status warning">Online payment is temporarily unavailable. Please contact StudyHub support.</div> : null}
             {status ? <div className="form-status warning">{status}</div> : null}
-            <button className="button button-primary" type="submit" disabled={loading || !isPaymentConfigured()}>
+            <button className="button button-primary" type="submit" disabled={loading}>
               {loading ? "Opening Paystack" : "Pay with Paystack"}
               <CreditCard size={18} aria-hidden="true" />
             </button>

@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { CircleCheck, CircleX, Clock, RefreshCw, Receipt, TriangleAlert } from "lucide-react";
 import BrandLogo from "../components/BrandLogo";
 import { siteConfig } from "../data/site";
 import { verifyPayment } from "../services/paymentService";
 import { formatCurrency, formatDateTime, isValidEmail, sanitizeText } from "../utils/format";
-import { mapPaymentStatus } from "../utils/paymentCalculations";
+import { mapPaymentStatus, normalizePaymentReference } from "../utils/paymentCalculations";
 import { usePageMeta } from "../utils/usePageMeta";
 
-const maxVerificationAttempts = 6;
+const maxVerificationAttempts = 3;
 const verificationIntervalMs = 5000;
 
 const statusCopy = {
@@ -51,18 +51,14 @@ const statusCopy = {
 };
 
 function getInitialStatus(searchParams) {
-  const reference = searchParams.get("reference") || "";
-  const browserStatus = mapPaymentStatus(searchParams.get("status") || (reference ? "pending" : ""));
+  const reference = normalizePaymentReference(searchParams.get("reference"), searchParams.get("trxref"));
   if (!reference) return "invalid reference";
-  if (["cancelled", "failed"].includes(browserStatus)) return browserStatus;
-  if (searchParams.get("verified") === "true") return "successful";
-  if (browserStatus === "successful" || browserStatus === "pending") return "verifying";
-  return browserStatus;
+  return "verifying";
 }
 
 function readDetails(searchParams) {
   return {
-    reference: sanitizeText(searchParams.get("reference"), ""),
+    reference: normalizePaymentReference(searchParams.get("reference"), searchParams.get("trxref")),
     program: sanitizeText(searchParams.get("program"), "Selected programme"),
     level: sanitizeText(searchParams.get("level"), ""),
     amount: Number(searchParams.get("amount")),
@@ -80,8 +76,11 @@ function readDetails(searchParams) {
 
 export default function PaymentStatus() {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const details = useMemo(() => readDetails(searchParams), [searchParams]);
-  const brand = searchParams.get("brand") === "studyhub" || details.reference.startsWith("ZISH-") ? "studyhub" : "main";
+  const [verifiedPayment, setVerifiedPayment] = useState(null);
+  const routeBrand = location.pathname.startsWith("/studyhub") || details.reference.startsWith("ZH-") ? "studyhub" : "main";
+  const brand = verifiedPayment?.brand === "studyhub" ? "studyhub" : verifiedPayment?.brand ? "main" : routeBrand;
   const brandConfig = brand === "studyhub" ? siteConfig.studyHub : siteConfig.main;
   const [status, setStatus] = useState(() => getInitialStatus(searchParams));
   const [attempts, setAttempts] = useState(0);
@@ -93,22 +92,41 @@ export default function PaymentStatus() {
   const canVerify = details.reference && ["verifying", "pending"].includes(status);
   const retryHref = brand === "studyhub" ? "/studyhub/enrol" : "/programs";
   const supportHref = brand === "studyhub" ? "/studyhub/contact" : "/contact";
+  const display = {
+    reference: verifiedPayment?.reference || details.reference,
+    program: verifiedPayment?.product_name || details.program,
+    level: verifiedPayment?.selected_level || details.level,
+    amount: Number.isFinite(Number(verifiedPayment?.amount_kobo || verifiedPayment?.expected_amount_kobo))
+      ? Number(verifiedPayment?.amount_kobo || verifiedPayment?.expected_amount_kobo) / 100
+      : details.amount,
+    name: verifiedPayment?.customer_name || details.name,
+    email: verifiedPayment?.customer_email || details.email,
+    phone: verifiedPayment?.customer_phone || details.phone,
+    student: verifiedPayment?.student_name || details.student,
+    classLevel: verifiedPayment?.class_level || verifiedPayment?.selected_class || details.classLevel,
+    productType: verifiedPayment?.product_type || details.productType,
+    subjects: Array.isArray(verifiedPayment?.selected_subjects)
+      ? verifiedPayment.selected_subjects.join(", ")
+      : details.subjects,
+    months: verifiedPayment?.months ? String(verifiedPayment.months) : details.months,
+    date: verifiedPayment?.paid_at || verifiedPayment?.created_at || details.date
+  };
 
   const receiptParams = new URLSearchParams({
     brand,
-    reference: details.reference,
-    program: details.program,
-    level: details.level,
-    amount: Number.isFinite(details.amount) ? String(details.amount) : "",
-    name: details.name,
-    email: details.email,
-    phone: details.phone,
-    student: details.student,
-    class: details.classLevel,
-    productType: details.productType,
-    subjects: details.subjects,
-    months: details.months,
-    date: details.date,
+    reference: display.reference,
+    program: display.program,
+    level: display.level,
+    amount: Number.isFinite(display.amount) ? String(display.amount) : "",
+    name: display.name,
+    email: display.email,
+    phone: display.phone,
+    student: display.student,
+    class: display.classLevel,
+    productType: display.productType,
+    subjects: display.subjects,
+    months: display.months,
+    date: display.date,
     verified: "true",
     verificationConfigured: "true"
   });
@@ -134,6 +152,7 @@ export default function PaymentStatus() {
     setStatus(getInitialStatus(searchParams));
     setAttempts(0);
     setMessage("");
+    setVerifiedPayment(null);
     window.clearTimeout(timeoutRef.current);
   }, [searchParams]);
 
@@ -149,6 +168,7 @@ export default function PaymentStatus() {
       try {
         const result = await verifyPayment(details.reference);
         if (!mountedRef.current) return;
+        if (result.payment) setVerifiedPayment(result.payment);
         if (result.verified || result.status === "success") {
           setStatus("successful");
           setMessage(result.message || "Payment verified.");
@@ -166,7 +186,7 @@ export default function PaymentStatus() {
         setMessage(error.message || "Payment verification is unavailable.");
         setAttempts((current) => current + 1);
       }
-    }, attempts === 0 ? 0 : verificationIntervalMs);
+    }, attempts === 0 ? 0 : verificationIntervalMs * attempts);
 
     return () => window.clearTimeout(timeoutRef.current);
   }, [attempts, canVerify, details.reference, status]);
@@ -197,23 +217,23 @@ export default function PaymentStatus() {
 
           {details.reference ? (
             <dl className="receipt-details">
-              <div><dt>Reference</dt><dd>{details.reference}</dd></div>
-              <div><dt>Programme</dt><dd>{details.level ? `${details.program} - ${details.level}` : details.program}</dd></div>
-              <div><dt>Amount</dt><dd>{formatCurrency(details.amount)}</dd></div>
-              <div><dt>Payer</dt><dd>{details.name}</dd></div>
-              {details.student ? <div><dt>Student</dt><dd>{details.student}</dd></div> : null}
-              {details.classLevel ? <div><dt>Class</dt><dd>{details.classLevel}</dd></div> : null}
-              {details.productType ? <div><dt>Product type</dt><dd>{details.productType === "studyhub_summer_lessons" ? "Summer Lessons" : details.productType}</dd></div> : null}
-              {details.subjects ? <div><dt>Selected subjects</dt><dd>{details.subjects}</dd></div> : null}
-              {details.months ? <div><dt>Months</dt><dd>{details.months}</dd></div> : null}
+              <div><dt>Reference</dt><dd>{display.reference}</dd></div>
+              <div><dt>Programme</dt><dd>{display.level ? `${display.program} - ${display.level}` : display.program}</dd></div>
+              <div><dt>Amount</dt><dd>{formatCurrency(display.amount)}</dd></div>
+              <div><dt>Payer</dt><dd>{display.name}</dd></div>
+              {display.student ? <div><dt>Student</dt><dd>{display.student}</dd></div> : null}
+              {display.classLevel ? <div><dt>Class</dt><dd>{display.classLevel}</dd></div> : null}
+              {display.productType ? <div><dt>Product type</dt><dd>{display.productType === "studyhub_summer_lessons" ? "Summer Lessons" : display.productType}</dd></div> : null}
+              {display.subjects ? <div><dt>Selected subjects</dt><dd>{display.subjects}</dd></div> : null}
+              {display.months ? <div><dt>Months</dt><dd>{display.months}</dd></div> : null}
               <div>
                 <dt>Email</dt>
                 <dd>
-                  {isValidEmail(details.email) ? <a href={`mailto:${details.email}`}>{details.email}</a> : details.email}
+                  {isValidEmail(display.email) ? <a href={`mailto:${display.email}`}>{display.email}</a> : display.email}
                 </dd>
               </div>
-              {details.phone ? <div><dt>Phone</dt><dd>{details.phone}</dd></div> : null}
-              <div><dt>Date</dt><dd>{formatDateTime(details.date)}</dd></div>
+              {display.phone ? <div><dt>Phone</dt><dd>{display.phone}</dd></div> : null}
+              <div><dt>Date</dt><dd>{formatDateTime(display.date)}</dd></div>
               <div><dt>Verification attempts</dt><dd>{Math.min(attempts, maxVerificationAttempts)} of {maxVerificationAttempts}</dd></div>
             </dl>
           ) : null}
@@ -240,7 +260,7 @@ export default function PaymentStatus() {
             ) : null}
             {status === "successful" && brand === "main" ? (
               <>
-                <Link className="button button-primary" to={`/signup?email=${encodeURIComponent(details.email)}`}>
+                <Link className="button button-primary" to={`/signup?email=${encodeURIComponent(display.email)}`}>
                   Create Student Account
                 </Link>
                 <Link className="button button-secondary" to={`/login?redirect=${encodeURIComponent("/portal")}`}>

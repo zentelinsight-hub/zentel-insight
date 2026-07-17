@@ -6,8 +6,10 @@ import {
   calculateSummerLessonsPrice,
   calculateStudyHubPrice,
   getProgramLevelPrice,
+  isValidPaymentReference,
   mapPaymentStatus,
   nairaToKobo,
+  normalizePaymentReference,
   resolveCourseCheckout,
   resolveSummerLessonsCheckout,
   safeRedirectPath
@@ -86,9 +88,26 @@ describe("payment calculations", () => {
     expect(nairaToKobo(10000)).toBe(1000000);
   });
 
+  it("normalizes Paystack references without generating replacements", () => {
+    expect(normalizePaymentReference("", " ZI-COURSE-1790000000000-ABCDEF1234 ")).toBe("ZI-COURSE-1790000000000-ABCDEF1234");
+    expect(normalizePaymentReference("ZH-JSS-1790000000000-FEDCBA9876")).toBe("ZH-JSS-1790000000000-FEDCBA9876");
+    expect(normalizePaymentReference("ZH/SSS/1790000000000")).toBe("");
+  });
+
+  it("validates the server-generated reference families", () => {
+    expect(isValidPaymentReference("ZI-COURSE-1790000000000-ABCDEF1234")).toBe(true);
+    expect(isValidPaymentReference("ZH-JSS-1790000000000-FEDCBA9876")).toBe(true);
+    expect(isValidPaymentReference("ZH-SSS-1790000000000-FEDCBA9876")).toBe(true);
+    expect(isValidPaymentReference("ZH-SUMMER-1790000000000-FEDCBA9876")).toBe(true);
+    expect(isValidPaymentReference("ZI-1790000000000-ABCDEF")).toBe(false);
+    expect(isValidPaymentReference("ZH-JSS/1790000000000/FEDCBA9876")).toBe(false);
+  });
+
   it("maps cancellation separately from success", () => {
     expect(mapPaymentStatus("cancelled")).toBe("cancelled");
     expect(mapPaymentStatus("success")).toBe("successful");
+    expect(mapPaymentStatus("initialized")).toBe("pending");
+    expect(mapPaymentStatus("processing")).toBe("pending");
   });
 
   it("does not activate enrolment without successful server verification", () => {

@@ -5,20 +5,11 @@ import { useAuth } from "../../context/authHooks";
 import { getProgramBySlug, getProgramLevel, programs } from "../../data/programs";
 import { formatCurrency, isValidEmail } from "../../utils/format";
 import { resolveCourseCheckout } from "../../utils/paymentCalculations";
-import { isPaymentConfigured, startPaystackPayment } from "../../services/paymentService";
+import { startPaystackPayment } from "../../services/paymentService";
 
-function buildPaymentStatusParams({ transaction, status }) {
+function buildReferenceParams(transaction) {
   return new URLSearchParams({
-    brand: "main",
-    status,
-    reference: transaction.reference || "",
-    program: transaction.item.title,
-    level: transaction.item.level,
-    amount: String(transaction.amount),
-    name: transaction.customer.name,
-    email: transaction.customer.email,
-    phone: transaction.customer.phone,
-    date: transaction.date
+    reference: transaction.reference || ""
   });
 }
 
@@ -37,7 +28,6 @@ export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lock
   const [paymentState, setPaymentState] = useState("idle");
   const paymentOpeningRef = useRef(false);
   const hasNavigatedRef = useRef(false);
-  const configured = isPaymentConfigured();
 
   const selectedProgram = useMemo(() => getProgramBySlug(programSlug), [programSlug]);
   const selected = useMemo(() => getProgramLevel(programSlug, levelSlug), [programSlug, levelSlug]);
@@ -103,22 +93,37 @@ export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lock
           setStatus({ type: "warning", message });
           if (transaction && !hasNavigatedRef.current) {
             hasNavigatedRef.current = true;
-            navigate(`/payment-status?${buildPaymentStatusParams({ transaction, status: "cancelled" }).toString()}`);
+            navigate(`/payment-cancelled?${buildReferenceParams(transaction).toString()}`);
           }
+        },
+        onError: (paymentError, transaction) => {
+          paymentOpeningRef.current = false;
+          setPaymentState("failed");
+          setStatus({
+            type: "error",
+            message: transaction?.reference
+              ? `${paymentError.message} Reference: ${transaction.reference}`
+              : paymentError.message
+          });
         },
         onSuccess: (transaction) => {
           if (hasNavigatedRef.current) return;
           hasNavigatedRef.current = true;
           setPaymentState("verifying");
-          navigate(`/payment-status?${buildPaymentStatusParams({ transaction, status: "success" }).toString()}`);
+          navigate(`/payment-status?${buildReferenceParams(transaction).toString()}`);
         }
       });
-      setPaymentState("opening");
+      setPaymentState((current) => (current === "creating_session" ? "opening" : current));
       setStatus({ type: "success", message: "Paystack checkout opened. Complete or cancel the popup to continue." });
     } catch (error) {
       paymentOpeningRef.current = false;
       setPaymentState("failed");
-      setStatus({ type: "error", message: error.message || "Payment could not be started." });
+      setStatus({
+        type: "error",
+        message: error.paymentReference
+          ? `${error.message} Reference: ${error.paymentReference}`
+          : error.message || "Payment could not be started."
+      });
     }
   }
 
@@ -249,18 +254,13 @@ export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lock
         verification confirms a successful transaction.
       </p>
 
-      {!configured ? (
-        <div className="form-status warning">
-          Online payment is temporarily unavailable. Please contact support for assistance.
-        </div>
-      ) : null}
       {status.message ? <div className={`form-status ${status.type}`} aria-live="polite">{status.message}</div> : null}
 
       <div className="button-row">
         <Link className="button button-secondary" to={`/programs/${selectedProgram.slug}`}>
           Back to Programme
         </Link>
-        <button className="button button-primary" type="submit" disabled={loading || !configured || !selected}>
+        <button className="button button-primary" type="submit" disabled={loading || !selected}>
           {loading ? "Opening Paystack" : "Pay with Paystack"}
           <CreditCard size={18} aria-hidden="true" />
         </button>

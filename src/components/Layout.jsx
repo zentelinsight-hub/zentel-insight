@@ -6,8 +6,8 @@ function getActiveBrand(location) {
   const params = new URLSearchParams(location.search);
   const reference = params.get("reference") || "";
   const isStudyHubPayment =
-    ["/payment-status", "/payment-success"].includes(location.pathname) &&
-    (params.get("brand") === "studyhub" || reference.startsWith("ZISH-"));
+    ["/payment-status", "/payment-success", "/payment-failed", "/payment-cancelled"].includes(location.pathname) &&
+    reference.startsWith("ZH-");
 
   return isStudyHubPayment ? "studyhub" : "main";
 }

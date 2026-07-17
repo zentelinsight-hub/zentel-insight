@@ -9,8 +9,8 @@ function getRouteBrand(location) {
   const reference = params.get("reference") || "";
   if (location.pathname.startsWith("/studyhub")) return "studyhub";
   if (
-    ["/payment-status", "/payment-success"].includes(location.pathname) &&
-    (params.get("brand") === "studyhub" || reference.startsWith("ZISH-"))
+    ["/payment-status", "/payment-success", "/payment-failed", "/payment-cancelled"].includes(location.pathname) &&
+    reference.startsWith("ZH-")
   ) {
     return "studyhub";
   }

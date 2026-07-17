@@ -64,8 +64,19 @@ export function resolveSummerLessonsCheckout() {
   };
 }
 
+const paymentReferencePattern = /^(ZI-COURSE|ZH-JSS|ZH-SSS|ZH-SUMMER)-\d{10,}-[A-Z0-9]{8,}$/;
+const paystackSafeReferencePattern = /^[A-Za-z0-9.\-=]+$/;
+
+export function normalizePaymentReference(...values) {
+  const candidate = values.find((value) => typeof value === "string" && value.trim());
+  if (!candidate) return "";
+  const reference = candidate.trim();
+  if (!paystackSafeReferencePattern.test(reference)) return "";
+  return reference;
+}
+
 export function isValidPaymentReference(reference) {
-  return /^ZI(SH)?-\d{10,}-[A-Z0-9]{6,}$/.test(String(reference));
+  return paymentReferencePattern.test(String(reference));
 }
 
 export function mapPaymentStatus(status) {
@@ -73,7 +84,7 @@ export function mapPaymentStatus(status) {
   if (["success", "successful"].includes(normalized)) return "successful";
   if (["cancelled", "canceled", "abandoned"].includes(normalized)) return "cancelled";
   if (["failed", "reversed"].includes(normalized)) return "failed";
-  if (["pending", "initiated"].includes(normalized)) return "pending";
+  if (["pending", "initiated", "initialized", "ongoing", "processing"].includes(normalized)) return "pending";
   return "invalid reference";
 }
 

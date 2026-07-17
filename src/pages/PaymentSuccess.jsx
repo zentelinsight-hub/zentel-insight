@@ -19,7 +19,7 @@ function getReceiptData(searchParams) {
   const program = sanitizeText(searchParams.get("program"), "Selected programme");
   const reference = sanitizeText(searchParams.get("reference"), "Missing reference");
   const brand =
-    searchParams.get("brand") === "studyhub" || reference.startsWith("ZISH-") || program.toLowerCase().includes("studyhub")
+    reference.startsWith("ZH-") || program.toLowerCase().includes("studyhub")
       ? "studyhub"
       : "main";
   return {

@@ -2,7 +2,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import { CircleX, Clock, TriangleAlert } from "lucide-react";
 import BrandLogo from "../../components/BrandLogo";
 import { siteConfig } from "../../data/site";
-import { formatCurrency, sanitizeText } from "../../utils/format";
+import { formatCurrency } from "../../utils/format";
+import { normalizePaymentReference } from "../../utils/paymentCalculations";
 import { usePageMeta } from "../../utils/usePageMeta";
 
 const copyByState = {
@@ -28,8 +29,10 @@ export default function StudyHubPaymentState({ state = "pending" }) {
   const copy = copyByState[state] || copyByState.pending;
   const Icon = copy.icon;
   const amount = Number(searchParams.get("amount"));
-  const reference = sanitizeText(searchParams.get("reference"), "");
-  const retryHref = searchParams.get("productType") === "studyhub_summer_lessons" ? "/studyhub/enrol/summer-lessons" : "/studyhub/enrol";
+  const reference = normalizePaymentReference(searchParams.get("reference"), searchParams.get("trxref"));
+  const retryHref = searchParams.get("productType") === "studyhub_summer_lessons" || reference.startsWith("ZH-SUMMER")
+    ? "/studyhub/enrol/summer-lessons"
+    : "/studyhub/enrol";
 
   usePageMeta({
     path: `/studyhub/payment-${state}`,
@@ -63,6 +66,7 @@ export default function StudyHubPaymentState({ state = "pending" }) {
             {Number.isFinite(amount) ? <div><dt>Amount</dt><dd>{formatCurrency(amount)}</dd></div> : null}
           </dl>
           <div className="receipt-actions">
+            {reference ? <Link className="button button-secondary" to={`/studyhub/payment-status?reference=${encodeURIComponent(reference)}`}>Check Status</Link> : null}
             <Link className="button button-primary" to={retryHref}>Retry Payment</Link>
             <Link className="button button-secondary" to="/studyhub/contact">Contact StudyHub</Link>
             <Link className="button button-secondary" to="/studyhub">Return to StudyHub</Link>

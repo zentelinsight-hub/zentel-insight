@@ -12,8 +12,8 @@ function getRouteBrand(location) {
   const reference = params.get("reference") || "";
   if (location.pathname.startsWith("/studyhub")) return "studyhub";
   if (
-    ["/payment-status", "/payment-success"].includes(location.pathname) &&
-    (params.get("brand") === "studyhub" || reference.startsWith("ZISH-"))
+    ["/payment-status", "/payment-success", "/payment-failed", "/payment-cancelled"].includes(location.pathname) &&
+    reference.startsWith("ZH-")
   ) {
     return "studyhub";
   }
@@ -60,6 +60,7 @@ const Checkout = lazy(() => import("./pages/Checkout"));
 const Payment = lazy(() => import("./pages/Payment"));
 const PaymentStatus = lazy(() => import("./pages/PaymentStatus"));
 const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
+const PaymentState = lazy(() => import("./pages/PaymentState"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const TermsAndConditions = lazy(() => import("./pages/TermsAndConditions"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -132,6 +133,8 @@ export default function App() {
               <Route path="/payment" element={<Payment />} />
               <Route path="/payment-status" element={<PaymentStatus />} />
               <Route path="/payment-success" element={<PaymentSuccess />} />
+              <Route path="/payment-failed" element={<PaymentState state="failed" />} />
+              <Route path="/payment-cancelled" element={<PaymentState state="cancelled" />} />
               <Route path="/privacy-policy" element={<PrivacyPolicy />} />
               <Route path="/privacy" element={<Navigate to="/privacy-policy" replace />} />
               <Route path="/terms-and-conditions" element={<TermsAndConditions />} />

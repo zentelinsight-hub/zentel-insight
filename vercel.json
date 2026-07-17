@@ -1,4 +1,15 @@
 {
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://js.paystack.co https://checkout.paystack.com https://standard.paystack.co; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://zentelinsight.com.ng https://www.zentelinsight.com.ng https://auzbmfwdxprtvjsvcxcj.supabase.co https://*.paystack.co https://*.paystack.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://auzbmfwdxprtvjsvcxcj.supabase.co wss://auzbmfwdxprtvjsvcxcj.supabase.co https://api.paystack.co https://checkout.paystack.com https://standard.paystack.co; frame-src https://checkout.paystack.com https://standard.paystack.co https://*.paystack.co https://*.paystack.com; object-src 'none'; base-uri 'self'; form-action 'self' https://checkout.paystack.com; frame-ancestors 'self'; upgrade-insecure-requests"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/((?!robots.txt|sitemap.xml|manifest.json).*)",

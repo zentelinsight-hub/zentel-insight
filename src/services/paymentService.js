@@ -1,58 +1,61 @@
+import PaystackPop from "@paystack/inline-js";
 import { isValidEmail } from "../utils/format";
-import { COURSE_PAYMENT_TYPE, STUDYHUB_PAYMENT_TYPE, nairaToKobo } from "../utils/paymentCalculations";
+import {
+  COURSE_PAYMENT_TYPE,
+  STUDYHUB_PAYMENT_TYPE,
+  normalizePaymentReference
+} from "../utils/paymentCalculations";
 import { getSupabaseClient } from "./supabaseClient";
 
-const paystackScriptUrl = "https://js.paystack.co/v1/inline.js";
-let paystackScriptPromise;
 const requestTimeoutMs = 15000;
+const paymentAttemptTimeoutMessage = "We could not create a secure payment attempt. No payment has been charged. Please try again.";
 
-function getPaystackPublicKey() {
-  return import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "";
+function readEnvValue(key) {
+  return String(import.meta.env[key] || "").trim();
+}
+
+export function getPaystackPublicKey() {
+  return readEnvValue("VITE_PAYSTACK_PUBLIC_KEY");
+}
+
+function getSupabasePublicKey() {
+  return readEnvValue("VITE_SUPABASE_PUBLISHABLE_KEY");
 }
 
 function getSupabaseFunctionUrl(functionName, explicitEndpoint) {
   if (explicitEndpoint) return explicitEndpoint;
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseUrl = readEnvValue("VITE_SUPABASE_URL");
   if (!supabaseUrl) return "";
   return `${supabaseUrl.replace(/\/$/, "")}/functions/v1/${functionName}`;
 }
 
-function getSupabasePublicKey() {
-  return import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
+export function getPaystackPublicKeyMode(publicKey = getPaystackPublicKey()) {
+  if (publicKey.startsWith("pk_test_")) return "test";
+  if (publicKey.startsWith("pk_live_")) return "live";
+  return "";
 }
 
-function getPaymentReferencePrefix(item) {
-  return (item.paymentType || COURSE_PAYMENT_TYPE) === STUDYHUB_PAYMENT_TYPE ? "ZISH" : "ZI";
+function isPlaceholderPublicKey(publicKey) {
+  return !publicKey || publicKey === "pk_test_replace_me" || publicKey === "pk_live_replace_me";
 }
 
-function getClientAmountKobo(item) {
-  const amountKobo = item.priceKobo || nairaToKobo(item.price);
-  if (!Number.isFinite(amountKobo) || amountKobo <= 0) {
-    throw new Error("Select a valid programme with an approved payment amount.");
-  }
-  return amountKobo;
-}
+export function getPaymentEnvironmentStatus(env = import.meta.env) {
+  const supabaseUrl = String(env.VITE_SUPABASE_URL || "").trim();
+  const supabaseKey = String(env.VITE_SUPABASE_PUBLISHABLE_KEY || "").trim();
+  const publicKey = String(env.VITE_PAYSTACK_PUBLIC_KEY || "").trim();
+  const siteUrl = String(env.VITE_SITE_URL || "").trim();
+  const paystackMode = getPaystackPublicKeyMode(publicKey);
 
-function getErrorSummary(error) {
-  if (!error) return "unknown payment-session error";
-  return error.message || String(error);
-}
-
-function logPaymentFallback(reason) {
-  if (!import.meta.env.DEV) return;
-  console.warn("Payment session service unavailable; using frontend Paystack fallback.", {
-    reason: getErrorSummary(reason)
-  });
-}
-
-export function createFrontendPaymentSession({ item, reason }) {
-  logPaymentFallback(reason);
   return {
-    reference: createTransactionReference(getPaymentReferencePrefix(item)),
-    amountKobo: getClientAmountKobo(item),
-    currency: "NGN",
-    frontendOnly: true
+    supabaseConfigured: Boolean(supabaseUrl && supabaseKey),
+    siteUrlConfigured: Boolean(siteUrl),
+    paystackPublicKeyConfigured: Boolean(!isPlaceholderPublicKey(publicKey) && paystackMode),
+    paystackMode
   };
+}
+
+export function isPaymentConfigured() {
+  return getPaymentEnvironmentStatus().supabaseConfigured;
 }
 
 async function withTimeout(promise, message, timeoutMs = requestTimeoutMs) {
@@ -68,68 +71,160 @@ async function withTimeout(promise, message, timeoutMs = requestTimeoutMs) {
   }
 }
 
-function loadPaystackScript() {
-  if (window.PaystackPop) return Promise.resolve();
+function getErrorMessageFromResponse(result, fallback = paymentAttemptTimeoutMessage) {
+  if (result?.error && typeof result.error === "string") return result.error;
+  if (result?.message && typeof result.message === "string") return result.message;
+  return fallback;
+}
 
-  if (!paystackScriptPromise) {
-    paystackScriptPromise = new Promise((resolve, reject) => {
-      const existingScript = document.querySelector(`script[src="${paystackScriptUrl}"]`);
-      if (existingScript) {
-        existingScript.addEventListener("load", resolve, { once: true });
-        existingScript.addEventListener("error", reject, { once: true });
-        return;
-      }
+async function getAuthorizationToken() {
+  const publicKey = getSupabasePublicKey();
+  let token = publicKey;
 
-      const script = document.createElement("script");
-      script.src = paystackScriptUrl;
-      script.async = true;
-      script.onload = resolve;
-      script.onerror = () => reject(new Error("Payment service could not be loaded. Please check your connection."));
-      document.head.appendChild(script);
-    });
+  try {
+    const supabase = await getSupabaseClient();
+    const { data } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
+    token = data?.session?.access_token || publicKey;
+  } catch {
+    token = publicKey;
   }
 
-  return paystackScriptPromise;
+  return token;
 }
 
-export function isPaymentConfigured() {
+function getStudyHubProductType(studyHub = {}) {
+  if (studyHub.productType === "studyhub_summer_lessons") return "studyhub_summer_lessons";
+  if (studyHub.classGroup === "SSS" || String(studyHub.classLevel || "").startsWith("SSS")) return "studyhub_sss";
+  return "studyhub_jss";
+}
+
+function buildPaymentPayload({ item, customer }) {
+  const customerName = customer.name.trim();
+  const customerEmail = customer.email.trim().toLowerCase();
+  const customerPhone = customer.phone.trim();
+  const paymentType = item.paymentType || COURSE_PAYMENT_TYPE;
   const publicKey = getPaystackPublicKey();
-  return Boolean(publicKey && publicKey !== "pk_test_replace_me");
-}
 
-export function createTransactionReference(prefix = "ZI") {
-  const randomPart = Math.random().toString(36).slice(2, 9).toUpperCase();
-  return `${prefix}-${Date.now()}-${randomPart}`;
+  const shared = {
+    customer: {
+      fullName: customerName,
+      email: customerEmail,
+      phone: customerPhone
+    },
+    customerName,
+    customerEmail,
+    customerPhone,
+    paystackPublicKeyConfigured: Boolean(!isPlaceholderPublicKey(publicKey) && getPaystackPublicKeyMode(publicKey)),
+    paystackPublicKeyMode: getPaystackPublicKeyMode(publicKey) || null
+  };
+
+  if (paymentType === STUDYHUB_PAYMENT_TYPE) {
+    const studyHub = item.studyHub || {};
+    const subjects = Array.isArray(studyHub.subjects) ? studyHub.subjects : [];
+    const productType = getStudyHubProductType(studyHub);
+
+    return {
+      ...shared,
+      brand: "studyhub",
+      productType,
+      customer: {
+        ...shared.customer,
+        studentName: customer.studentName?.trim() || customerName
+      },
+      studentName: customer.studentName?.trim() || customerName,
+      parentName: customer.parentName?.trim() || customerName,
+      classGroup: studyHub.classGroup,
+      classLevel: studyHub.classLevel,
+      subjectIds: subjects,
+      subjects,
+      months: productType === "studyhub_summer_lessons" ? 1 : studyHub.months,
+      learningPriority: studyHub.learningPriority || ""
+    };
+  }
+
+  return {
+    ...shared,
+    brand: "zentel_insight",
+    productType: COURSE_PAYMENT_TYPE,
+    programSlug: item.programSlug,
+    trackSlug: item.levelSlug,
+    levelSlug: item.levelSlug,
+    level: item.level
+  };
 }
 
 export function validatePaymentRequest({ item, customer }) {
-  if (!item || !Number.isFinite(item.price)) {
-    throw new Error("Select a valid programme with an approved payment amount.");
+  const paymentType = item?.paymentType || COURSE_PAYMENT_TYPE;
+  const hasStudyHubProduct = paymentType === STUDYHUB_PAYMENT_TYPE && item?.studyHub?.productType;
+  const hasCourseProduct = paymentType !== STUDYHUB_PAYMENT_TYPE && item?.programSlug && item?.levelSlug;
+
+  if (!item || (!hasStudyHubProduct && !hasCourseProduct)) {
+    throw new Error("This programme or payment option is unavailable. Return to the programmes page and choose a valid option.");
   }
 
-  if (!customer?.name?.trim()) {
-    throw new Error("Enter the payer's full name.");
-  }
-
-  if (!isValidEmail(customer?.email)) {
-    throw new Error("Enter a valid email address.");
-  }
-
-  if (!customer?.phone?.trim() || customer.phone.trim().length < 7) {
-    throw new Error("Enter a valid phone number.");
+  if (!customer?.name?.trim() || !isValidEmail(customer?.email) || !customer?.phone?.trim() || customer.phone.trim().length < 7) {
+    throw new Error("Please complete the required payment information.");
   }
 
   return true;
 }
 
+function normalizeSession(result) {
+  const reference = normalizePaymentReference(result?.reference, result?.trxref);
+  const amountKobo = Number(result?.amountKobo);
+  const mode = result?.mode || (result?.accessCode ? "backend" : "");
+
+  if (!reference || !Number.isFinite(amountKobo) || amountKobo <= 0) {
+    throw new Error("The payment server returned an incomplete payment session. No payment has been charged. Please try again.");
+  }
+
+  if (mode === "backend" && !result.accessCode) {
+    throw new Error("Paystack could not be opened. No payment has been charged. Please check your connection and try again.");
+  }
+
+  if (mode === "frontend_fallback" && !result.email) {
+    throw new Error("The payment fallback response was incomplete. No payment has been charged. Please try again.");
+  }
+
+  if (!["backend", "frontend_fallback"].includes(mode)) {
+    throw new Error("The payment server did not return a supported Paystack session. No payment has been charged.");
+  }
+
+  return {
+    ok: Boolean(result.ok),
+    mode,
+    paymentId: result.paymentId || "",
+    reference,
+    accessCode: result.accessCode || "",
+    authorizationUrl: result.authorizationUrl || "",
+    email: String(result.email || "").trim().toLowerCase(),
+    amountKobo,
+    currency: result.currency || "NGN",
+    brand: result.brand === "studyhub" ? "studyhub" : "zentel_insight",
+    metadata: result.metadata || {}
+  };
+}
+
 export async function verifyPayment(reference) {
-  const endpoint = getSupabaseFunctionUrl("verify-payment", import.meta.env.VITE_PAYMENT_VERIFICATION_ENDPOINT);
+  const canonicalReference = normalizePaymentReference(reference);
+  if (!canonicalReference) {
+    return {
+      verified: false,
+      configured: true,
+      status: "invalid_reference",
+      message: "A valid payment reference is required."
+    };
+  }
+
+  const endpoint = getSupabaseFunctionUrl("verify-payment", readEnvValue("VITE_PAYMENT_VERIFICATION_ENDPOINT"));
 
   if (!endpoint) {
     return {
       verified: false,
       configured: false,
-      message: "Payment confirmation is pending."
+      status: "pending",
+      reference: canonicalReference,
+      message: "Your payment confirmation is still being checked. Keep your reference and use Check Again shortly."
     };
   }
 
@@ -140,68 +235,37 @@ export async function verifyPayment(reference) {
       ...(publicKey ? { apikey: publicKey, Authorization: `Bearer ${publicKey}` } : {}),
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ reference })
+    body: JSON.stringify({ reference: canonicalReference })
   }), "Payment verification timed out. Please check again.");
 
-  if (!response.ok) {
-    throw new Error("The server could not verify this transaction yet.");
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok && response.status !== 404) {
+    throw new Error(getErrorMessageFromResponse(result, "Payment verification is temporarily unavailable."));
   }
 
-  const result = await response.json();
   return {
     verified: Boolean(result.verified || result.status === "success"),
     configured: true,
-    message: result.message || "The transaction was checked successfully."
+    status: result.status || (response.status === 404 ? "invalid_reference" : "pending"),
+    message: result.message || "The transaction was checked successfully.",
+    reference: normalizePaymentReference(result.reference, canonicalReference),
+    payment: result.payment || null,
+    brand: result.payment?.brand || result.brand || "",
+    amountKobo: result.payment?.amount_kobo || result.payment?.expected_amount_kobo || null
   };
 }
 
 export async function createPaymentSession({ item, customer }) {
-  const endpoint = getSupabaseFunctionUrl("create-payment-session", import.meta.env.VITE_PAYMENT_SESSION_ENDPOINT);
+  const endpoint = getSupabaseFunctionUrl("create-payment-session", readEnvValue("VITE_PAYMENT_SESSION_ENDPOINT"));
   if (!endpoint) {
-    return createFrontendPaymentSession({
-      item,
-      reason: new Error("Payment session service is unavailable.")
-    });
+    throw new Error(paymentAttemptTimeoutMessage);
   }
+
+  validatePaymentRequest({ item, customer });
 
   const publicKey = getSupabasePublicKey();
-  let token = publicKey;
-
-  try {
-    const supabase = await getSupabaseClient();
-    const { data } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
-    token = data?.session?.access_token || publicKey;
-  } catch (error) {
-    logPaymentFallback(error);
-  }
-
-  const paymentType = item.paymentType || COURSE_PAYMENT_TYPE;
-  const payload =
-    paymentType === STUDYHUB_PAYMENT_TYPE
-      ? {
-          brand: "studyhub",
-          customerName: customer.name.trim(),
-          customerEmail: customer.email.trim().toLowerCase(),
-          customerPhone: customer.phone.trim(),
-          studentName: customer.studentName?.trim() || customer.name.trim(),
-          parentName: customer.parentName?.trim() || customer.name.trim(),
-          productType: item.studyHub?.productType || STUDYHUB_PAYMENT_TYPE,
-          classGroup: item.studyHub?.classGroup,
-          classLevel: item.studyHub?.classLevel,
-          subjects: item.studyHub?.subjects || [],
-          months: item.studyHub?.months,
-          learningPriority: item.studyHub?.learningPriority || ""
-        }
-      : {
-          brand: "zentel_insight",
-          productType: COURSE_PAYMENT_TYPE,
-          customerName: customer.name.trim(),
-          customerEmail: customer.email.trim().toLowerCase(),
-          customerPhone: customer.phone.trim(),
-          programSlug: item.programSlug,
-          levelSlug: item.levelSlug,
-          level: item.level
-        };
+  const token = await getAuthorizationToken();
+  const payload = buildPaymentPayload({ item, customer });
 
   try {
     const response = await withTimeout(fetch(endpoint, {
@@ -215,86 +279,94 @@ export async function createPaymentSession({ item, customer }) {
     }), "Payment session creation timed out. Please try again.");
 
     const result = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      return createFrontendPaymentSession({
-        item,
-        reason: new Error(result.error || "Payment session could not be created.")
-      });
+    if (!response.ok || result?.ok === false) {
+      const error = new Error(getErrorMessageFromResponse(result));
+      const reference = normalizePaymentReference(result?.reference);
+      if (reference) error.paymentReference = reference;
+      throw error;
     }
 
-    if (!result.reference || !Number.isFinite(result.amountKobo)) {
-      return createFrontendPaymentSession({
-        item,
-        reason: new Error("Payment session response was incomplete.")
-      });
-    }
-
-    return result;
+    return normalizeSession(result);
   } catch (error) {
-    return createFrontendPaymentSession({ item, reason: error });
+    if (error?.message && error.message !== "Failed to fetch") throw error;
+    throw new Error(paymentAttemptTimeoutMessage);
   }
 }
 
-export async function startPaystackPayment({ item, customer, onSuccess, onCancel }) {
-  validatePaymentRequest({ item, customer });
-
-  const publicKey = getPaystackPublicKey();
-  if (!isPaymentConfigured()) {
-    throw new Error("Live payment is not available yet.");
-  }
-
-  await loadPaystackScript();
-  const session = await createPaymentSession({ item, customer });
-  const paymentType = item.paymentType || COURSE_PAYMENT_TYPE;
-  const reference = session.reference;
-  const amountKobo = session.amountKobo || item.priceKobo || nairaToKobo(item.price);
+function createPopupCallbacks({ session, item, customer, onSuccess, onCancel, onError }) {
   let completed = false;
+  const transactionSnapshot = {
+    reference: session.reference,
+    item,
+    customer,
+    amount: session.amountKobo / 100,
+    amountKobo: session.amountKobo,
+    date: new Date().toISOString(),
+    brand: session.brand,
+    mode: session.mode
+  };
 
-  const handler = window.PaystackPop.setup({
-    key: publicKey,
-    email: customer.email.trim(),
-    firstname: customer.name.trim().split(" ")[0],
-    amount: amountKobo,
-    currency: session.currency || "NGN",
-    ref: reference,
-    metadata: {
-      custom_fields: [
-        {
-          display_name: "Programme",
-          variable_name: "program",
-          value: item.title
-        },
-        {
-          display_name: "Payment Type",
-          variable_name: "payment_type",
-          value: paymentType
-        }
-      ]
-    },
-    callback: (response) => {
+  return {
+    onSuccess(transaction) {
       completed = true;
+      const callbackReference = normalizePaymentReference(transaction?.reference, transaction?.trxref, session.reference);
+      if (callbackReference !== session.reference) {
+        onError?.(
+          new Error("Paystack returned an unexpected reference. Keep your payment reference and contact support."),
+          transactionSnapshot
+        );
+        return;
+      }
       onSuccess?.({
-        reference: response.reference || reference,
-        status: response.status || "success",
-        item,
-        customer,
-        amount: amountKobo / 100,
-        date: new Date().toISOString()
+        ...transactionSnapshot,
+        reference: session.reference,
+        status: "pending",
+        paystackTransactionId: transaction?.id || null
       });
     },
-    onClose: () => {
+    onCancel() {
       if (!completed) {
-        onCancel?.("The payment window was closed before completion.", {
-          reference,
-          item,
-          customer,
-          amount: amountKobo / 100,
-          date: new Date().toISOString()
-        });
+        onCancel?.("The payment window was closed before completion.", transactionSnapshot);
       }
+    },
+    onError(error) {
+      onError?.(
+        new Error(error?.message || "Paystack could not be opened. No payment has been charged. Please check your connection and try again."),
+        transactionSnapshot
+      );
     }
+  };
+}
+
+export async function startPaystackPayment({ item, customer, onSuccess, onCancel, onError }) {
+  validatePaymentRequest({ item, customer });
+
+  const session = await createPaymentSession({ item, customer });
+  const callbacks = createPopupCallbacks({ session, item, customer, onSuccess, onCancel, onError });
+
+  if (session.mode === "backend") {
+    const popup = new PaystackPop();
+    popup.resumeTransaction(session.accessCode, callbacks);
+    return session;
+  }
+
+  const publicKey = getPaystackPublicKey();
+  if (isPlaceholderPublicKey(publicKey) || !getPaystackPublicKeyMode(publicKey)) {
+    const error = new Error("Online payment configuration is incomplete. Please contact support and provide the payment reference shown below.");
+    error.paymentReference = session.reference;
+    throw error;
+  }
+
+  const popup = new PaystackPop();
+  popup.newTransaction({
+    key: publicKey,
+    email: session.email,
+    amount: session.amountKobo,
+    currency: session.currency,
+    reference: session.reference,
+    metadata: session.metadata,
+    ...callbacks
   });
 
-  handler.openIframe();
-  return { reference, amountKobo, currency: session.currency || "NGN" };
+  return session;
 }
