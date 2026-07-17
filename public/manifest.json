@@ -1,0 +1,16 @@
+{
+  "name": "Zentel Insight",
+  "short_name": "Zentel",
+  "description": "Practical digital skills and learning support from Zentel Insight.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fffaf7",
+  "theme_color": "#FF914D",
+  "icons": [
+    {
+      "src": "/brands/zentel-insight/favicon.jpg",
+      "sizes": "64x64",
+      "type": "image/jpeg"
+    }
+  ]
+}

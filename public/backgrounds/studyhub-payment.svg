@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" role="img" aria-label="StudyHub payment worksheet pattern">
+  <rect width="1200" height="560" fill="#fffaf7"/>
+  <g fill="#ffffff" stroke="#eadfd8">
+    <rect x="230" y="100" width="740" height="360" rx="22"/>
+    <rect x="290" y="160" width="250" height="44" rx="10"/>
+    <rect x="290" y="235" width="620" height="1"/>
+    <rect x="290" y="295" width="620" height="1"/>
+    <rect x="290" y="355" width="620" height="1"/>
+  </g>
+  <g fill="#8a9aa7" opacity=".3">
+    <rect x="300" y="258" width="150" height="14" rx="7"/>
+    <rect x="300" y="318" width="210" height="14" rx="7"/>
+    <rect x="300" y="378" width="120" height="14" rx="7"/>
+  </g>
+  <g fill="#ff914d" opacity=".78">
+    <rect x="720" y="250" width="140" height="28" rx="14"/>
+    <rect x="690" y="310" width="170" height="28" rx="14"/>
+    <rect x="735" y="370" width="125" height="28" rx="14"/>
+  </g>
+</svg>

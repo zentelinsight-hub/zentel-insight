@@ -1,0 +1,2 @@
+export const NAVBAR_DESKTOP_BREAKPOINT_PX = 1280;
+export const NAVBAR_DESKTOP_MEDIA = `(min-width: ${NAVBAR_DESKTOP_BREAKPOINT_PX}px)`;

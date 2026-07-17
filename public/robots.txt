@@ -1,0 +1,23 @@
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /signup
+Disallow: /verify-email
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /auth/callback
+Disallow: /portal
+Disallow: /checkout
+Disallow: /payment
+Disallow: /payment-status
+Disallow: /payment-success
+Disallow: /payment-failed
+Disallow: /payment-cancelled
+Disallow: /studyhub/enrol
+Disallow: /studyhub/payment
+Disallow: /studyhub/payment-status
+Disallow: /studyhub/payment-success
+Disallow: /studyhub/payment-failed
+Disallow: /studyhub/payment-cancelled
+
+Sitemap: https://zentelinsight.com.ng/sitemap.xml

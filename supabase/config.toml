@@ -1,0 +1,16 @@
+project_id = "auzbmfwdxprtvjsvcxcj"
+
+[functions.create-payment-session]
+verify_jwt = false
+
+[functions.verify-payment]
+verify_jwt = false
+
+[functions.paystack-webhook]
+verify_jwt = false
+
+[functions.claim-my-enrolments]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true

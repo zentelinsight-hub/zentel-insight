@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-label="Connected study support nodes">
+  <rect width="1200" height="520" fill="#f5f0ec"/>
+  <g stroke="#8a9aa7" stroke-width="3" fill="none" opacity=".3">
+    <path d="M250 260h220l160-110h220l100 110"/>
+    <path d="M470 260l160 110h220"/>
+  </g>
+  <g fill="#ffffff" stroke="#eadfd8">
+    <circle cx="250" cy="260" r="58"/>
+    <circle cx="470" cy="260" r="58"/>
+    <circle cx="630" cy="150" r="58"/>
+    <circle cx="850" cy="150" r="58"/>
+    <circle cx="850" cy="370" r="58"/>
+    <circle cx="950" cy="260" r="58"/>
+  </g>
+  <g fill="#ff914d" opacity=".75">
+    <circle cx="250" cy="260" r="16"/>
+    <circle cx="470" cy="260" r="16"/>
+    <circle cx="630" cy="150" r="16"/>
+    <circle cx="850" cy="150" r="16"/>
+    <circle cx="850" cy="370" r="16"/>
+    <circle cx="950" cy="260" r="16"/>
+  </g>
+</svg>

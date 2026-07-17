@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-label="Abstract course pathways">
+  <rect width="1200" height="520" fill="#f5f0ec"/>
+  <g fill="#ffffff" stroke="#e8ddd5">
+    <rect x="120" y="100" width="170" height="108" rx="14"/>
+    <rect x="365" y="170" width="170" height="108" rx="14"/>
+    <rect x="610" y="100" width="170" height="108" rx="14"/>
+    <rect x="855" y="170" width="170" height="108" rx="14"/>
+  </g>
+  <g stroke="#8a9aa7" stroke-width="4" fill="none" opacity=".34">
+    <path d="M290 154h75M535 224h75M780 154h75"/>
+  </g>
+  <g fill="#ff914d" opacity=".72">
+    <circle cx="205" cy="154" r="16"/>
+    <circle cx="450" cy="224" r="16"/>
+    <circle cx="695" cy="154" r="16"/>
+    <circle cx="940" cy="224" r="16"/>
+  </g>
+  <g fill="#8a9aa7" opacity=".26">
+    <rect x="160" y="330" width="880" height="12" rx="6"/>
+    <rect x="240" y="366" width="720" height="10" rx="5"/>
+  </g>
+</svg>

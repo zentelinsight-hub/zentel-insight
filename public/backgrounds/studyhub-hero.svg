@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="760" viewBox="0 0 1440 760" role="img" aria-label="StudyHub academic support pattern">
+  <rect width="1440" height="760" fill="#fffaf7"/>
+  <g fill="#ffffff" stroke="#eadfd8">
+    <path d="M900 185h210c42 0 76 34 76 76v220c0 42-34 76-76 76H900z"/>
+    <path d="M900 185H690c-42 0-76 34-76 76v220c0 42 34 76 76 76h210z"/>
+  </g>
+  <path d="M900 200v342" stroke="#ff914d" stroke-width="8" opacity=".65"/>
+  <g stroke="#8a9aa7" stroke-width="12" stroke-linecap="round" opacity=".25">
+    <path d="M700 285h130M700 345h150M970 285h130M970 345h120M970 405h96"/>
+  </g>
+  <g fill="#ff914d" opacity=".18">
+    <circle cx="300" cy="250" r="82"/>
+    <circle cx="1180" cy="615" r="64"/>
+  </g>
+</svg>

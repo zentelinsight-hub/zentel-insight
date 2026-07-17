@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="720" viewBox="0 0 920 720" role="img" aria-label="Secure learning account pattern">
+  <rect width="920" height="720" fill="#fffaf7"/>
+  <g fill="none" stroke="#d8c8bd" stroke-width="1" opacity=".5">
+    <path d="M80 80h760v560H80z"/>
+    <path d="M160 80v560M760 80v560M80 180h760M80 540h760"/>
+  </g>
+  <g fill="#ffffff" stroke="#eadfd8">
+    <rect x="310" y="190" width="300" height="220" rx="22"/>
+    <path d="M390 270a70 70 0 0 1 140 0v34H390z"/>
+  </g>
+  <rect x="372" y="304" width="176" height="92" rx="14" fill="#ff914d" opacity=".82"/>
+  <circle cx="460" cy="344" r="14" fill="#fffaf7"/>
+  <rect x="453" y="354" width="14" height="24" rx="7" fill="#fffaf7"/>
+  <g fill="#8a9aa7" opacity=".24">
+    <circle cx="210" cy="515" r="54"/>
+    <circle cx="725" cy="185" r="42"/>
+  </g>
+</svg>
