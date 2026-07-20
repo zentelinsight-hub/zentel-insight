@@ -174,6 +174,22 @@ export function PortalLayout() {
     void claimMyEnrolments();
   }, []);
 
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") setMenuOpen(false);
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    document.body.classList.add("portal-menu-open");
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.classList.remove("portal-menu-open");
+    };
+  }, [menuOpen]);
+
   usePageMeta({
     path: "/portal",
     title: "Student Portal",
@@ -208,6 +224,14 @@ export function PortalLayout() {
           Sign Out
         </button>
       </aside>
+      {menuOpen ? (
+        <button
+          className="portal-drawer-backdrop"
+          type="button"
+          aria-label="Close portal menu"
+          onClick={closeMenu}
+        />
+      ) : null}
       <main className="portal-main">
         <header className="portal-header">
           <button className="icon-button portal-menu-button" type="button" aria-label={menuOpen ? "Close portal menu" : "Open portal menu"} aria-expanded={menuOpen} onClick={() => setMenuOpen((current) => !current)}>

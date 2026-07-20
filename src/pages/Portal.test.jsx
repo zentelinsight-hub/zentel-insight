@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthContext } from "../context/authContextCore";
@@ -156,6 +156,30 @@ afterEach(() => {
 });
 
 describe("Portal routes", () => {
+  it("opens and closes the portal drawer cleanly", () => {
+    renderPortal("/portal");
+
+    const menuButton = screen.getByRole("button", { name: "Open portal menu" });
+    const sidebar = document.querySelector(".portal-sidebar");
+
+    fireEvent.click(menuButton);
+
+    expect(sidebar).toHaveClass("open");
+    expect(document.body).toHaveClass("portal-menu-open");
+    expect(document.querySelector(".portal-drawer-backdrop")).toBeInTheDocument();
+
+    fireEvent.click(document.querySelector(".portal-drawer-backdrop"));
+
+    expect(sidebar).not.toHaveClass("open");
+    expect(document.body).not.toHaveClass("portal-menu-open");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open portal menu" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(sidebar).not.toHaveClass("open");
+    expect(document.body).not.toHaveClass("portal-menu-open");
+  });
+
   it.each([
     ["/portal", "Student Dashboard", "useStudentDashboard"],
     ["/portal/profile", "Student Profile", "useStudentProfile"],
