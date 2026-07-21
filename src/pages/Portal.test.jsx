@@ -1,13 +1,15 @@
 /** @vitest-environment jsdom */
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthContext } from "../context/authContextCore";
 import { ThemeProvider } from "../context/ThemeContext";
 import { PortalLayout, PortalOverview, PortalProfile, PortalSection } from "./Portal";
+import { saveStudentProgramPreference } from "../services/portal/portalRepository";
 
 const hookMocks = vi.hoisted(() => ({
+  useProgramCatalog: vi.fn(),
   usePortalPageContent: vi.fn(),
   useStudentDashboard: vi.fn(),
   useStudentProfile: vi.fn(),
@@ -21,6 +23,7 @@ const hookMocks = vi.hoisted(() => ({
   useStudentCertificates: vi.fn(),
   useStudentNotifications: vi.fn(),
   useStudentPreferences: vi.fn(),
+  useStudentProgramPreference: vi.fn(),
   useStudentSupportTickets: vi.fn()
 }));
 
@@ -38,6 +41,7 @@ vi.mock("../services/portal/portalRepository", async () => {
     createSupportTicket: vi.fn(),
     markAllNotificationsRead: vi.fn(),
     markNotificationRead: vi.fn(),
+    saveStudentProgramPreference: vi.fn(),
     updateStudentProfile: vi.fn()
   };
 });
@@ -134,17 +138,41 @@ beforeEach(() => {
     empty_title: "No records",
     empty_message: "Records are listed after they are available."
   }));
+  saveStudentProgramPreference.mockResolvedValue({
+    id: "preference-1",
+    user_id: user.id,
+    program_id: "program-1"
+  });
   hookMocks.useStudentDashboard.mockReturnValue(query({
     activeEnrolments: [],
     pendingAssignments: [],
+    resources: [],
+    payments: [],
     certificates: [],
     unreadNotifications: [],
+    timetable: [],
+    resolvedProgramme: { id: "program-1", title: "Graphic Design" },
+    resolvedTrack: null,
+    programmeSource: "self_selected",
+    needsProgrammeSelection: false,
     upcomingClass: null,
+    todayClass: null,
     announcements: []
   }));
   hookMocks.useStudentProfile.mockReturnValue(query(profile));
   hookMocks.useStudentEnrolments.mockReturnValue(query([]));
-  hookMocks.useStudentTimetable.mockReturnValue(query([]));
+  hookMocks.useProgramCatalog.mockReturnValue(query([
+    { id: "program-1", title: "Graphic Design", short_description: "Design foundations" }
+  ]));
+  hookMocks.useStudentTimetable.mockReturnValue(query({
+    records: [],
+    resolvedProgramme: { id: "program-1", title: "Graphic Design" },
+    resolvedTrack: null,
+    source: "self_selected",
+    needsProgrammeSelection: false,
+    todayClass: null,
+    nextClass: null
+  }));
   hookMocks.useStudentAnnouncements.mockReturnValue(query([]));
   hookMocks.useStudentAssignments.mockReturnValue(query([]));
   hookMocks.useStudentResources.mockReturnValue(query([]));
@@ -156,6 +184,13 @@ beforeEach(() => {
     email_notifications: true,
     portal_reminders: true,
     session_security_warnings: true
+  }));
+  hookMocks.useStudentProgramPreference.mockReturnValue(query({
+    id: "preference-1",
+    user_id: user.id,
+    program_id: "program-1",
+    selection_source: "self_selected",
+    programs: { id: "program-1", title: "Graphic Design" }
   }));
   hookMocks.useStudentSupportTickets.mockReturnValue(query([]));
 });
@@ -209,5 +244,45 @@ describe("Portal routes", () => {
     expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
     if (hookName) expect(hookMocks[hookName]).toHaveBeenCalled();
     expect(screen.queryByText(/signed-in learner/i)).not.toBeInTheDocument();
+  });
+
+  it("requires programme selection only when no active programme or preference exists", async () => {
+    hookMocks.useStudentProgramPreference.mockReturnValue(query(null));
+
+    renderPortal("/portal");
+
+    expect(await screen.findByRole("heading", { name: "Choose Your Programme" })).toBeInTheDocument();
+
+    cleanup();
+    hookMocks.useStudentEnrolments.mockReturnValue(query([
+      {
+        id: "enrolment-1",
+        user_id: user.id,
+        status: "active",
+        program_id: "program-1",
+        programs: { id: "program-1", title: "Graphic Design" }
+      }
+    ]));
+
+    renderPortal("/portal");
+
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Choose Your Programme" })).not.toBeInTheDocument());
+  });
+
+  it("saves the self-selected programme preference from onboarding", async () => {
+    hookMocks.useStudentProgramPreference.mockReturnValue(query(null));
+    hookMocks.useProgramCatalog.mockReturnValue(query([
+      { id: "program-1", title: "Graphic Design", short_description: "Design foundations" },
+      { id: "program-2", title: "Data Analysis", short_description: "Data reporting" }
+    ]));
+
+    renderPortal("/portal");
+
+    await screen.findByRole("heading", { name: "Choose Your Programme" });
+    fireEvent.change(screen.getByPlaceholderText("Type a programme name"), { target: { value: "Data" } });
+    fireEvent.click(screen.getByRole("option", { name: /Data Analysis/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Programme" }));
+
+    await waitFor(() => expect(saveStudentProgramPreference).toHaveBeenCalledWith(user.id, { program_id: "program-2" }));
   });
 });

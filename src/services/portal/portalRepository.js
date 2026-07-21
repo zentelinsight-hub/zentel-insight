@@ -98,6 +98,8 @@ function normalizeList(data) {
   return Array.isArray(data) ? data : [];
 }
 
+const timetableDayOrder = [0, 1, 2, 3, 4, 5, 6];
+
 async function getClient() {
   const supabase = await getSupabaseClient();
   if (!supabase) throw new Error("Student Portal data could not be reached.");
@@ -223,6 +225,49 @@ export async function getStudentEnrolments(userId) {
   return normalizeList(data);
 }
 
+export async function getProgramCatalog() {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("programs")
+    .select("id, slug, title, short_description, category, display_order")
+    .eq("active", true)
+    .order("display_order", { ascending: true })
+    .order("title", { ascending: true });
+  if (error) throw error;
+  return normalizeList(data);
+}
+
+export async function getStudentProgramPreference(userId) {
+  if (!userId) return null;
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("student_program_preferences")
+    .select("*, programs(id, slug, title, short_description), program_levels(id, level_name)")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+export async function saveStudentProgramPreference(userId, values) {
+  if (!userId) throw new Error("A signed-in learner is required.");
+  if (!values?.program_id) throw new Error("Choose a programme before saving.");
+  const supabase = await getClient();
+  const payload = {
+    user_id: userId,
+    program_id: values.program_id,
+    track_id: values.track_id || null,
+    selection_source: "self_selected"
+  };
+  const { data, error } = await supabase
+    .from("student_program_preferences")
+    .upsert(payload, { onConflict: "user_id" })
+    .select("*, programs(id, slug, title, short_description), program_levels(id, level_name)")
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 async function getActiveEnrolmentScope(userId) {
   const enrolments = await getStudentEnrolments(userId);
   const active = enrolments.filter((item) => ["active", "completed"].includes(item.status));
@@ -234,18 +279,153 @@ async function getActiveEnrolmentScope(userId) {
   };
 }
 
+function getOfficialActiveEnrolmentScope(enrolments) {
+  const active = normalizeList(enrolments).filter((item) => item.status === "active");
+  return {
+    active,
+    programIds: [...new Set(active.map((item) => item.program_id).filter(Boolean))],
+    trackIds: [...new Set(active.map((item) => item.program_level_id).filter(Boolean))]
+  };
+}
+
+async function getResolvedProgrammeScope(userId) {
+  const enrolments = await getStudentEnrolments(userId);
+  const officialScope = getOfficialActiveEnrolmentScope(enrolments);
+  if (officialScope.programIds.length) {
+    const primary = officialScope.active[0];
+    return {
+      source: "official",
+      needsProgrammeSelection: false,
+      enrolments,
+      activeEnrolments: officialScope.active,
+      programIds: officialScope.programIds,
+      trackIds: officialScope.trackIds,
+      resolvedProgramme: primary?.programs || null,
+      resolvedTrack: primary?.program_levels || null,
+      preference: null
+    };
+  }
+
+  const preference = await getStudentProgramPreference(userId);
+  if (preference?.program_id) {
+    return {
+      source: "self_selected",
+      needsProgrammeSelection: false,
+      enrolments,
+      activeEnrolments: [],
+      programIds: [preference.program_id],
+      trackIds: preference.track_id ? [preference.track_id] : [],
+      resolvedProgramme: preference.programs || null,
+      resolvedTrack: preference.program_levels || null,
+      preference
+    };
+  }
+
+  return {
+    source: "none",
+    needsProgrammeSelection: true,
+    enrolments,
+    activeEnrolments: [],
+    programIds: [],
+    trackIds: [],
+    resolvedProgramme: null,
+    resolvedTrack: null,
+    preference: null
+  };
+}
+
+function parseTimeMinutes(value) {
+  const [hours, minutes] = String(value || "00:00").split(":").map((part) => Number(part));
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return 0;
+  return (hours * 60) + minutes;
+}
+
+function getLagosClockParts() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Africa/Lagos",
+    weekday: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(new Date());
+  const weekday = parts.find((part) => part.type === "weekday")?.value || "Sunday";
+  const hour = Number(parts.find((part) => part.type === "hour")?.value || 0);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value || 0);
+  const dayIndex = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].indexOf(weekday);
+  return {
+    day: dayIndex >= 0 ? dayIndex : 0,
+    minutes: (hour * 60) + minute
+  };
+}
+
+function getNextWeeklyClass(records) {
+  const publishedRecords = normalizeList(records).filter((item) => isPublished(item));
+  if (!publishedRecords.length) return null;
+  const now = getLagosClockParts();
+  return [...publishedRecords]
+    .map((item) => {
+      const day = Number(item.day_of_week);
+      const startMinutes = parseTimeMinutes(item.start_time);
+      const dayDelta = ((day - now.day) + 7) % 7;
+      const minuteDelta = (dayDelta * 1440) + startMinutes - now.minutes;
+      return {
+        item,
+        delta: minuteDelta >= 0 ? minuteDelta : minuteDelta + (7 * 1440)
+      };
+    })
+    .sort((a, b) => a.delta - b.delta || parseTimeMinutes(a.item.start_time) - parseTimeMinutes(b.item.start_time))[0]?.item || null;
+}
+
+function getTodayWeeklyClass(records) {
+  const now = getLagosClockParts();
+  return normalizeList(records)
+    .filter((item) => isPublished(item) && Number(item.day_of_week) === now.day)
+    .sort((a, b) => parseTimeMinutes(a.start_time) - parseTimeMinutes(b.start_time))[0] || null;
+}
+
+function sortTimetableRecords(records) {
+  return normalizeList(records).sort((a, b) => {
+    const dayA = Number.isInteger(Number(a.day_of_week)) ? Number(a.day_of_week) : timetableDayOrder.length;
+    const dayB = Number.isInteger(Number(b.day_of_week)) ? Number(b.day_of_week) : timetableDayOrder.length;
+    return dayA - dayB || parseTimeMinutes(a.start_time) - parseTimeMinutes(b.start_time);
+  });
+}
+
 export async function getStudentTimetable(userId) {
   const supabase = await getClient();
-  const scope = await getActiveEnrolmentScope(userId);
-  if (!scope.programIds.length) return [];
+  const scope = await getResolvedProgrammeScope(userId);
+  if (!scope.programIds.length) {
+    return {
+      records: [],
+      resolvedProgramme: null,
+      resolvedTrack: null,
+      source: scope.source,
+      needsProgrammeSelection: true,
+      todayClass: null,
+      nextClass: null
+    };
+  }
   const { data, error } = await supabase
     .from("timetable_entries")
     .select("*, programs(id, slug, title), program_levels(id, level_name)")
     .in("program_id", scope.programIds)
-    .order("class_date", { ascending: true, nullsFirst: false })
+    .order("day_of_week", { ascending: true })
     .order("start_time", { ascending: true });
   if (error) throw error;
-  return normalizeList(data).filter((item) => isPublished(item));
+  const records = sortTimetableRecords(normalizeList(data).filter((item) => {
+    if (!isPublished(item)) return false;
+    const entryTrackId = item.track_id || item.program_level_id;
+    return !entryTrackId || !scope.trackIds.length || scope.trackIds.includes(entryTrackId);
+  }));
+  return {
+    records,
+    resolvedProgramme: scope.resolvedProgramme,
+    resolvedTrack: scope.resolvedTrack,
+    source: scope.source,
+    needsProgrammeSelection: false,
+    todayClass: getTodayWeeklyClass(records),
+    nextClass: getNextWeeklyClass(records)
+  };
 }
 
 export async function getStudentAnnouncements(userId) {
@@ -419,7 +599,7 @@ export async function createSupportTicket(userId, values) {
 }
 
 export async function getStudentDashboard(userId) {
-  const [enrolments, timetable, announcements, assignments, resources, payments, certificates, notifications] = await Promise.all([
+  const [enrolments, timetableResult, announcements, assignments, resources, payments, certificates, notifications] = await Promise.all([
     getStudentEnrolments(userId),
     getStudentTimetable(userId),
     getStudentAnnouncements(userId),
@@ -431,16 +611,18 @@ export async function getStudentDashboard(userId) {
   ]);
 
   const activeEnrolments = enrolments.filter((item) => item.status === "active");
-  const upcomingClass = timetable.find((item) => {
-    if (!item.class_date) return true;
-    return new Date(`${item.class_date}T${item.start_time || "00:00"}`) >= new Date();
-  }) || null;
+  const timetable = timetableResult.records || [];
 
   return {
     enrolments,
     activeEnrolments,
     timetable,
-    upcomingClass,
+    resolvedProgramme: timetableResult.resolvedProgramme,
+    resolvedTrack: timetableResult.resolvedTrack,
+    programmeSource: timetableResult.source,
+    needsProgrammeSelection: timetableResult.needsProgrammeSelection,
+    upcomingClass: timetableResult.nextClass,
+    todayClass: timetableResult.todayClass,
     announcements: announcements.slice(0, 3),
     resources: resources.slice(0, 4),
     pendingAssignments: assignments.filter((item) => {

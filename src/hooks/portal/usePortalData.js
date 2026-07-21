@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  getProgramCatalog,
   getPortalPageContent,
   getStudentAnnouncements,
   getStudentAssignments,
@@ -10,6 +11,7 @@ import {
   getStudentPayments,
   getPortalArticles,
   getStudentPreferences,
+  getStudentProgramPreference,
   getStudentProfile,
   getStudentResources,
   getStudentSupportTickets,
@@ -51,7 +53,17 @@ function usePortalQuery(queryFn, deps) {
     return () => window.removeEventListener("zentel:portal-cache-clear", clear);
   }, []);
 
+  useEffect(() => {
+    const refresh = () => setVersion((current) => current + 1);
+    window.addEventListener("zentel:portal-data-refresh", refresh);
+    return () => window.removeEventListener("zentel:portal-data-refresh", refresh);
+  }, []);
+
   return { ...state, refetch };
+}
+
+export function useProgramCatalog() {
+  return usePortalQuery(() => getProgramCatalog(), []);
 }
 
 export function usePortalPageContent(pageSlug) {
@@ -108,4 +120,8 @@ export function useStudentSupportTickets(userId) {
 
 export function useStudentPreferences(userId) {
   return usePortalQuery(() => getStudentPreferences(userId), [userId]);
+}
+
+export function useStudentProgramPreference(userId) {
+  return usePortalQuery(() => getStudentProgramPreference(userId), [userId]);
 }

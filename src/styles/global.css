@@ -886,6 +886,14 @@ h3 {
   font-weight: 800;
 }
 
+button.text-link {
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
 .hero-visual {
   min-height: 430px;
   display: grid;
@@ -2358,6 +2366,90 @@ body.portal-route-active .route-content.page-enter {
   color: var(--color-muted);
 }
 
+.programme-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 190;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: rgba(18, 16, 14, 0.66);
+}
+
+.programme-modal {
+  width: min(100%, 560px);
+  max-height: calc(100dvh - 2rem);
+  display: grid;
+  gap: var(--space-4);
+  overflow-y: auto;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.programme-modal h2 {
+  font-size: clamp(1.4rem, 5vw, 2rem);
+}
+
+.programme-modal p {
+  margin-bottom: 0;
+  color: var(--color-muted);
+}
+
+.programme-selector {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.programme-selector label {
+  display: grid;
+  gap: var(--space-2);
+  color: var(--color-heading);
+  font-weight: 850;
+}
+
+.programme-option-list {
+  max-height: min(42dvh, 360px);
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+  overflow-y: auto;
+  padding-right: 0.15rem;
+}
+
+.programme-option-list button {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-alt);
+  color: var(--color-heading);
+  cursor: pointer;
+  text-align: left;
+}
+
+.programme-option-list button:hover,
+.programme-option-list button.active {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary-soft);
+}
+
+.programme-option-list span {
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.programme-option-list small,
+.programme-option-list p {
+  color: var(--color-muted);
+}
+
 .portal-page-heading {
   display: flex;
   align-items: flex-start;
@@ -2379,6 +2471,52 @@ body.portal-route-active .route-content.page-enter {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-4);
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+.dashboard-card {
+  min-width: 0;
+  min-height: 100%;
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  padding: clamp(1rem, 2vw, 1.5rem);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  overflow-wrap: anywhere;
+}
+
+.dashboard-card > svg {
+  color: var(--brand-primary-dark);
+}
+
+.dashboard-card span {
+  color: var(--color-muted);
+  font-weight: 850;
+}
+
+.dashboard-card strong {
+  color: var(--color-heading);
+  font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+  line-height: 1.2;
+}
+
+.dashboard-card small {
+  color: var(--color-muted);
+  font-weight: 700;
+}
+
+.dashboard-card a {
+  width: fit-content;
+  color: var(--brand-primary-dark);
+  font-weight: 850;
 }
 
 .portal-metric-card,
@@ -2496,6 +2634,26 @@ body.portal-route-active .route-content.page-enter {
 
 .portal-state-card {
   padding: var(--space-6);
+}
+
+.timetable-summary-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.timetable-summary-card p {
+  margin-bottom: 0;
+  color: var(--color-muted);
+}
+
+.timetable-card-list {
+  align-items: stretch;
+}
+
+.timetable-card {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .portal-skeleton {
@@ -2687,6 +2845,12 @@ body.portal-route-active .route-content.page-enter {
   }
 }
 
+@media (max-width: 1100px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 920px) {
   h1 {
     font-size: 3rem;
@@ -2811,6 +2975,10 @@ body.portal-route-active .route-content.page-enter {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .timetable-summary-card {
+    flex-direction: column;
+  }
+
   .portal-two-column,
   .portal-mini-details,
   .portal-profile-summary {
@@ -2907,8 +3075,22 @@ body.portal-route-active .route-content.page-enter {
     grid-template-columns: 1fr;
   }
 
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .programme-modal-backdrop {
+    padding: var(--space-3);
+  }
+
+  .programme-option-list {
+    max-height: min(38dvh, 300px);
+  }
+
   .portal-record-card,
   .portal-metric-card,
+  .dashboard-card,
   .portal-state-card,
   .portal-skeleton {
     padding: var(--space-4);

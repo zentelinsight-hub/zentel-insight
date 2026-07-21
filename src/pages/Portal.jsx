@@ -30,6 +30,7 @@ import { useAuth } from "../context/authHooks";
 import { useTheme } from "../context/themeHooks";
 import { siteConfig } from "../data/site";
 import {
+  useProgramCatalog,
   usePortalPageContent,
   usePortalArticles,
   useStudentAnnouncements,
@@ -40,6 +41,7 @@ import {
   useStudentNotifications,
   useStudentPayments,
   useStudentPreferences,
+  useStudentProgramPreference,
   useStudentProfile,
   useStudentResources,
   useStudentSupportTickets,
@@ -51,6 +53,7 @@ import {
   hasReliablePaymentStatus,
   markAllNotificationsRead,
   markNotificationRead,
+  saveStudentProgramPreference,
   updateStudentPreferences,
   updateStudentProfile
 } from "../services/portal/portalRepository";
@@ -144,11 +147,141 @@ function isValidMeetingUrl(value) {
   }
 }
 
-function getProgrammeSummary(enrolments = []) {
+function getProgrammeSummary(enrolments = [], programmePreference = null) {
   const active = enrolments.filter((item) => item.status === "active");
   if (active.length) return `${active.length} active programme${active.length === 1 ? "" : "s"}`;
+  if (programmePreference?.programs?.title) return programmePreference.programs.title;
   if (enrolments.length) return "Programme records pending activation";
   return "No programme linked yet";
+}
+
+function getProgrammeSourceLabel(source) {
+  if (source === "official") return "Official enrolment";
+  if (source === "self_selected") return "Self-selected preference";
+  return "Not selected";
+}
+
+function formatClassSummary(item) {
+  if (!item) return "No class";
+  return `${formatScheduleDay(item)} ${formatTime(item.start_time)} - ${formatTime(item.end_time)}`;
+}
+
+function dispatchPortalDataRefresh() {
+  window.dispatchEvent(new Event("zentel:portal-data-refresh"));
+}
+
+function openProgrammeSelector() {
+  window.dispatchEvent(new Event("zentel:portal-open-programme-selector"));
+}
+
+function ProgrammeSelector({ programs = [], value, onChange, disabled = false }) {
+  const [search, setSearch] = useState("");
+  const filteredPrograms = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return programs;
+    return programs.filter((program) => {
+      const haystack = `${program.title || ""} ${program.short_description || ""} ${program.category || ""}`.toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [programs, search]);
+
+  return (
+    <div className="programme-selector">
+      <label>
+        <span>Search programmes</span>
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Type a programme name"
+          disabled={disabled}
+        />
+      </label>
+      <div className="programme-option-list" role="listbox" aria-label="Available programmes">
+        {filteredPrograms.map((program) => {
+          const active = value === program.id;
+          return (
+            <button
+              key={program.id}
+              className={active ? "active" : ""}
+              type="button"
+              role="option"
+              aria-selected={active}
+              disabled={disabled}
+              onClick={() => onChange(program.id)}
+            >
+              <span>{program.title}</span>
+              {program.short_description ? <small>{program.short_description}</small> : null}
+            </button>
+          );
+        })}
+        {!filteredPrograms.length ? <p>No programme matches your search.</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function ProgrammeSelectionModal({ programs, programsLoading, programsError, onRetryPrograms, onSave }) {
+  const [selectedProgramId, setSelectedProgramId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState({ type: "", message: "" });
+  const saveButtonRef = useRef(null);
+
+  useEffect(() => {
+    saveButtonRef.current?.focus();
+  }, []);
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!selectedProgramId) {
+      setStatus({ type: "warning", message: "Select your programme before saving." });
+      return;
+    }
+    setSaving(true);
+    setStatus({ type: "", message: "" });
+    try {
+      await onSave(selectedProgramId);
+      setStatus({ type: "success", message: "Programme saved." });
+    } catch (error) {
+      setStatus({ type: "warning", message: error.message || "Programme could not be saved." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return createPortal(
+    <div className="programme-modal-backdrop" role="presentation">
+      <form className="programme-modal" role="dialog" aria-modal="true" aria-labelledby="programme-modal-title" onSubmit={submit}>
+        <div>
+          <p className="eyebrow">Student Portal</p>
+          <h2 id="programme-modal-title">Choose Your Programme</h2>
+          <p>Select the Zentel Insight programme you are currently studying so your timetable, announcements and learning information can be personalised.</p>
+        </div>
+        {programsLoading ? <PortalLoading label="Loading programmes" /> : null}
+        {programsError ? (
+          <div className="form-status warning" role="alert">
+            Programme list could not be loaded.
+            <button className="text-link" type="button" onClick={onRetryPrograms}>Try again</button>
+          </div>
+        ) : null}
+        {!programsLoading && !programsError ? (
+          <ProgrammeSelector
+            programs={programs}
+            value={selectedProgramId}
+            onChange={(programId) => {
+              setSelectedProgramId(programId);
+              setStatus({ type: "", message: "" });
+            }}
+            disabled={saving}
+          />
+        ) : null}
+        {status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}
+        <button ref={saveButtonRef} className="button button-primary" type="submit" disabled={saving || programsLoading || Boolean(programsError)}>
+          {saving ? "Saving Programme" : "Save Programme"}
+        </button>
+      </form>
+    </div>,
+    document.body
+  );
 }
 
 function PortalAvatar({ profile, user, size = "md" }) {
@@ -160,7 +293,7 @@ function PortalAvatar({ profile, user, size = "md" }) {
   );
 }
 
-function PortalSidebarContent({ profile, user, enrolments, onNavigate, onSignOut }) {
+function PortalSidebarContent({ profile, user, enrolments, programmePreference, onNavigate, onSignOut }) {
   const displayName = profile?.full_name || user?.email || "Learner";
   return (
     <>
@@ -175,7 +308,7 @@ function PortalSidebarContent({ profile, user, enrolments, onNavigate, onSignOut
         <PortalAvatar profile={profile} user={user} />
         <div>
           <strong>{displayName}</strong>
-          <span>{getProgrammeSummary(enrolments)}</span>
+          <span>{getProgrammeSummary(enrolments, programmePreference)}</span>
         </div>
       </div>
       <nav aria-label="Student portal">
@@ -433,15 +566,26 @@ function usePortalIdleSession({ enabled, signOut, onBeforeSignOut }) {
 }
 
 export function PortalLayout() {
-  const { profile, user, signOut } = useAuth();
+  const { authReady, authLoading, loading, profile, user, signOut } = useAuth();
   const location = useLocation();
   const drawerId = useId().replace(/:/g, "");
   const menuButtonRef = useRef(null);
   const scrollYRef = useRef(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [canUsePortal, setCanUsePortal] = useState(false);
+  const [claimingEnrolments, setClaimingEnrolments] = useState(true);
+  const [manualProgrammeModalOpen, setManualProgrammeModalOpen] = useState(false);
   const enrolmentsQuery = useStudentEnrolments(user?.id);
+  const programCatalogQuery = useProgramCatalog();
+  const programPreferenceQuery = useStudentProgramPreference(user?.id);
   const enrolments = enrolmentsQuery.data || [];
+  const refetchEnrolments = enrolmentsQuery.refetch;
+  const programmePreference = programPreferenceQuery.data;
+  const hasActiveOfficialProgramme = enrolments.some((item) => item.status === "active");
+  const authFinished = Boolean(user?.id) && authReady !== false && !authLoading && !loading;
+  const programmeCheckFinished = authFinished && !claimingEnrolments && !enrolmentsQuery.loading && !programPreferenceQuery.loading;
+  const needsProgrammeOnboarding = programmeCheckFinished && !hasActiveOfficialProgramme && !programmePreference?.program_id;
+  const showProgrammeModal = needsProgrammeOnboarding || manualProgrammeModalOpen;
   const displayName = profile?.full_name || user?.email || "Learner";
   const { warningOpen, remainingMs, staySignedIn, signOutNow } = usePortalIdleSession({
     enabled: Boolean(user?.id),
@@ -450,8 +594,41 @@ export function PortalLayout() {
   });
 
   useEffect(() => {
-    void claimMyEnrolments();
+    let active = true;
+    setClaimingEnrolments(true);
+    claimMyEnrolments()
+      .then(() => {
+        refetchEnrolments();
+        dispatchPortalDataRefresh();
+      })
+      .catch((error) => {
+        if (import.meta.env.DEV) console.info("Portal enrolment claim failed", error);
+      })
+      .finally(() => {
+        if (active) setClaimingEnrolments(false);
+      });
+    return () => {
+      active = false;
+    };
+  // Refetch functions are stable in the real hook; user id is the intended claim boundary.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  useEffect(() => {
+    function handleOpenProgrammeSelector() {
+      setManualProgrammeModalOpen(true);
+    }
+    window.addEventListener("zentel:portal-open-programme-selector", handleOpenProgrammeSelector);
+    return () => window.removeEventListener("zentel:portal-open-programme-selector", handleOpenProgrammeSelector);
   }, []);
+
+  async function saveProgrammePreference(programId) {
+    await saveStudentProgramPreference(user.id, { program_id: programId });
+    setManualProgrammeModalOpen(false);
+    programPreferenceQuery.refetch();
+    refetchEnrolments();
+    dispatchPortalDataRefresh();
+  }
 
   useEffect(() => {
     setCanUsePortal(true);
@@ -520,6 +697,7 @@ export function PortalLayout() {
         profile={profile}
         user={user}
         enrolments={enrolments}
+        programmePreference={programmePreference}
         onNavigate={closeMenu}
         onSignOut={handleSignOut}
       />
@@ -540,6 +718,7 @@ export function PortalLayout() {
             profile={profile}
             user={user}
             enrolments={enrolments}
+            programmePreference={programmePreference}
             onNavigate={closeMenu}
             onSignOut={handleSignOut}
           />
@@ -574,6 +753,15 @@ export function PortalLayout() {
         </header>
         <Outlet />
       </main>
+      {showProgrammeModal ? (
+        <ProgrammeSelectionModal
+          programs={programCatalogQuery.data || []}
+          programsLoading={programCatalogQuery.loading}
+          programsError={programCatalogQuery.error}
+          onRetryPrograms={programCatalogQuery.refetch}
+          onSave={saveProgrammePreference}
+        />
+      ) : null}
       {warningOpen ? <IdleWarningModal remainingMs={remainingMs} onStaySignedIn={staySignedIn} onSignOutNow={signOutNow} /> : null}
     </section>
   );
@@ -591,6 +779,15 @@ export function PortalOverview() {
         if (dashboard.error) return <PortalError message={dashboard.error} onRetry={dashboard.refetch} />;
         const data = dashboard.data;
         if (!data) return <PortalEmpty content={content} />;
+        const activeEnrolments = data.activeEnrolments || [];
+        const announcements = data.announcements || [];
+        const certificates = data.certificates || [];
+        const payments = data.payments || [];
+        const pendingAssignments = data.pendingAssignments || [];
+        const resources = data.resources || [];
+        const timetable = data.timetable || [];
+        const unreadNotifications = data.unreadNotifications || [];
+        const resolvedProgrammeName = data.resolvedProgramme?.title || activeEnrolments[0]?.programs?.title || "Choose programme";
         return (
           <>
             <section className="portal-welcome-card">
@@ -601,41 +798,31 @@ export function PortalOverview() {
                 <p>Review your active programmes, published class information, account notices and support records from one secure portal.</p>
               </div>
             </section>
-            <div className="portal-metric-grid">
-              <article className="portal-metric-card">
-                <span>Profile Completion</span>
-                <strong>{completion}%</strong>
-                <Link to="/portal/profile">Review profile</Link>
+            <div className="dashboard-grid">
+              <article className="dashboard-card">
+                <GraduationCap size={22} aria-hidden="true" />
+                <span>My Programme</span>
+                <strong>{resolvedProgrammeName}</strong>
+                <small>{getProgrammeSourceLabel(data.programmeSource)}</small>
               </article>
-              <article className="portal-metric-card">
-                <span>Active Courses</span>
-                <strong>{data.activeEnrolments.length}</strong>
-                <small>{data.activeEnrolments.length ? "Programmes linked to your account." : "No active course has been linked to your account yet."}</small>
-                <Link to="/portal/my-courses">Open My Courses</Link>
+              <article className="dashboard-card">
+                <Clock3 size={22} aria-hidden="true" />
+                <span>Next Class</span>
+                <strong>{data.upcomingClass ? formatTime(data.upcomingClass.start_time) : "Not published"}</strong>
+                <small>{data.upcomingClass ? `${formatScheduleDay(data.upcomingClass)} - ${getCourseName(data.upcomingClass)}` : data.needsProgrammeSelection ? "Choose your programme first." : "No timetable yet."}</small>
               </article>
-              <article className="portal-metric-card">
-                <span>Pending Assignments</span>
-                <strong>{data.pendingAssignments.length}</strong>
-                <small>{data.pendingAssignments.length ? "Tasks waiting for your attention." : "No pending assignment is currently published for your account."}</small>
-                <Link to="/portal/assignments">View assignments</Link>
+              <article className="dashboard-card">
+                <CalendarDays size={22} aria-hidden="true" />
+                <span>Today&apos;s Class</span>
+                <strong>{data.todayClass ? formatTime(data.todayClass.start_time) : "No class today"}</strong>
+                <small>{data.todayClass ? `${getCourseName(data.todayClass)} ends ${formatTime(data.todayClass.end_time)}` : "Check the weekly timetable."}</small>
               </article>
-              <article className="portal-metric-card">
-                <span>Certificates</span>
-                <strong>{data.certificates.length}</strong>
-                <small>{data.certificates.length ? "Issued certificates are available." : "Certificates appear after eligible programme completion."}</small>
-                <Link to="/portal/certificates">View certificates</Link>
-              </article>
-              <article className="portal-metric-card">
-                <span>Available Resources</span>
-                <strong>{data.resources.length}</strong>
-                <small>{data.resources.length ? "Published learning materials are ready." : "Resources appear after publication for an active programme."}</small>
-                <Link to="/portal/resources">Browse Resources</Link>
-              </article>
-              <article className="portal-metric-card">
-                <span>Unread Notifications</span>
-                <strong>{data.unreadNotifications.length}</strong>
-                <small>{data.unreadNotifications.length ? "New portal updates need attention." : "Your private portal notifications are all caught up."}</small>
-                <Link to="/portal/notifications">Open notifications</Link>
+              <article className="dashboard-card">
+                <LayoutDashboard size={22} aria-hidden="true" />
+                <span>Timetable</span>
+                <strong>View Full Timetable</strong>
+                <small>{timetable.length ? `${timetable.length} weekly class ${timetable.length === 1 ? "entry" : "entries"}.` : "Open your class schedule."}</small>
+                <Link to="/portal/timetable">Open Timetable</Link>
               </article>
             </div>
             <div className="portal-grid">
@@ -648,15 +835,26 @@ export function PortalOverview() {
                     {isValidMeetingUrl(data.upcomingClass.meeting_url) ? <a className="button button-secondary" href={data.upcomingClass.meeting_url} target="_blank" rel="noreferrer">Join Class</a> : null}
                   </>
                 ) : (
-                  <p>Your next class appears after an approved timetable entry is published for an active programme.</p>
+                  <p>Your next class appears after an approved timetable entry is published for your programme.</p>
                 )}
                 <Link className="text-link" to="/portal/timetable">View Timetable</Link>
               </article>
               <article className="notice-card">
+                <h3>Learning status</h3>
+                <dl className="portal-mini-details">
+                  <div><dt>Profile</dt><dd>{completion}%</dd></div>
+                  <div><dt>Active courses</dt><dd>{activeEnrolments.length}</dd></div>
+                  <div><dt>Assignments</dt><dd>{pendingAssignments.length}</dd></div>
+                  <div><dt>Resources</dt><dd>{resources.length}</dd></div>
+                  <div><dt>Certificates</dt><dd>{certificates.length}</dd></div>
+                  <div><dt>Unread notices</dt><dd>{unreadNotifications.length}</dd></div>
+                </dl>
+              </article>
+              <article className="notice-card">
                 <h3>Recent announcements</h3>
-                {data.announcements.length ? (
+                {announcements.length ? (
                   <ul className="portal-clean-list">
-                    {data.announcements.map((item) => <li key={item.id}>{item.title}</li>)}
+                    {announcements.map((item) => <li key={item.id}>{item.title}</li>)}
                   </ul>
                 ) : (
                   <p>Official notices for your account are listed after publication.</p>
@@ -665,8 +863,8 @@ export function PortalOverview() {
               </article>
               <article className="notice-card">
                 <h3>Payment summary</h3>
-                {data.payments.length ? (
-                  <p>{data.payments.filter(hasReliablePaymentStatus).length} trusted payment record{data.payments.filter(hasReliablePaymentStatus).length === 1 ? "" : "s"} linked to your student account.</p>
+                {payments.length ? (
+                  <p>{payments.filter(hasReliablePaymentStatus).length} trusted payment record{payments.filter(hasReliablePaymentStatus).length === 1 ? "" : "s"} linked to your student account.</p>
                 ) : (
                   <p>Verified payment records linked to your account will appear after confirmation.</p>
                 )}
@@ -713,7 +911,7 @@ function MyCoursesPage() {
           <div className="portal-list">
             {records.map((item) => {
               const programId = item.program_id || item.programs?.id;
-              const nextClass = (timetable.data || []).find((entry) => entry.program_id === programId);
+              const nextClass = (timetable.data?.records || []).find((entry) => entry.program_id === programId);
               const assignmentCount = (assignments.data || []).filter((entry) => entry.program_id === programId).length;
               const resourceCount = (resources.data || []).filter((entry) => entry.program_id === programId).length;
               return (
@@ -749,27 +947,63 @@ function TimetablePage() {
       {(content) => {
         if (query.loading) return <PortalLoading label="Loading timetable" />;
         if (query.error) return <PortalError message={query.error} onRetry={query.refetch} />;
-        const records = query.data || [];
-        if (!records.length) return <PortalEmpty content={content} />;
+        const timetableData = Array.isArray(query.data) ? { records: query.data } : query.data || {};
+        const records = timetableData.records || [];
+        const programmeName = timetableData.resolvedProgramme?.title || "Programme not selected";
+        if (timetableData.needsProgrammeSelection) {
+          return (
+            <PortalEmpty
+              content={{
+                ...content,
+                empty_title: "Choose your programme",
+                empty_message: "Select your current programme so your timetable can be personalised."
+              }}
+              action={<button className="button button-primary" type="button" onClick={openProgrammeSelector}>Choose Programme</button>}
+            />
+          );
+        }
+        if (!records.length) {
+          return (
+            <div className="notice-card portal-state-card">
+              <p className="eyebrow">{programmeName}</p>
+              <h2>No timetable has been published for your programme yet.</h2>
+              <p>Published online class times will appear here as soon as they are available.</p>
+            </div>
+          );
+        }
         return (
-          <div className="portal-list">
-            {records.map((item) => (
-              <article className="portal-record-card" key={item.id}>
-                <div>
-                  <p className="eyebrow">{formatScheduleDay(item)} | {item.timezone || "Africa/Lagos"}</p>
-                  <h3>{item.title}</h3>
-                  <p>{getCourseName(item)} - {getTrackName(item)}</p>
-                  {item.description ? <p>{item.description}</p> : null}
-                </div>
-                <dl className="portal-mini-details">
-                  <div><dt>Time</dt><dd>{formatTime(item.start_time)} - {formatTime(item.end_time)}</dd></div>
-                  {item.instructor_name || item.tutor_name ? <div><dt>Tutor</dt><dd>{item.instructor_name || item.tutor_name}</dd></div> : null}
-                  <div><dt>Delivery</dt><dd>{item.meeting_provider || item.delivery_mode || item.delivery_method || "Online"}</dd></div>
-                </dl>
-                {isValidMeetingUrl(item.meeting_url) ? <a className="button button-primary" href={item.meeting_url} target="_blank" rel="noreferrer">Join Class</a> : null}
-              </article>
-            ))}
-          </div>
+          <>
+            <article className="notice-card timetable-summary-card">
+              <div>
+                <p className="eyebrow">{getProgrammeSourceLabel(timetableData.source)}</p>
+                <h3>{programmeName}</h3>
+                <p>{records.length} published weekly class {records.length === 1 ? "entry" : "entries"} in Africa/Lagos time.</p>
+              </div>
+              {timetableData.nextClass ? (
+                <span className="portal-tag success"><Clock3 size={14} aria-hidden="true" /> Next: {formatClassSummary(timetableData.nextClass)}</span>
+              ) : null}
+            </article>
+            <div className="portal-list timetable-card-list">
+              {records.map((item) => (
+                <article className="portal-record-card timetable-card" key={item.id}>
+                  <div>
+                    <p className="eyebrow">{formatScheduleDay(item)} | {item.timezone || "Africa/Lagos"}</p>
+                    <h3>{item.title}</h3>
+                    <p>{getCourseName(item)}{(item.program_levels?.level_name || timetableData.resolvedTrack?.level_name) ? ` - ${item.program_levels?.level_name || timetableData.resolvedTrack.level_name}` : ""}</p>
+                    {item.description ? <p>{item.description}</p> : null}
+                  </div>
+                  <dl className="portal-mini-details">
+                    <div><dt>Start</dt><dd>{formatTime(item.start_time)}</dd></div>
+                    <div><dt>End</dt><dd>{formatTime(item.end_time)}</dd></div>
+                    <div><dt>Delivery</dt><dd>{item.delivery_mode || item.delivery_method || "online"}</dd></div>
+                    {item.tutor_name || item.instructor_name ? <div><dt>Tutor</dt><dd>{item.tutor_name || item.instructor_name}</dd></div> : null}
+                    {item.meeting_provider ? <div><dt>Provider</dt><dd>{item.meeting_provider}</dd></div> : null}
+                  </dl>
+                  {isValidMeetingUrl(item.meeting_url) ? <a className="button button-primary" href={item.meeting_url} target="_blank" rel="noreferrer">Join Class</a> : null}
+                </article>
+              ))}
+            </div>
+          </>
         );
       }}
     </PortalPage>
@@ -1106,13 +1340,19 @@ function SettingsPage() {
   const { user, signOut } = useAuth();
   const { theme, setTheme } = useTheme();
   const preferencesQuery = useStudentPreferences(user?.id);
+  const programCatalogQuery = useProgramCatalog();
+  const programPreferenceQuery = useStudentProgramPreference(user?.id);
+  const enrolmentsQuery = useStudentEnrolments(user?.id);
   const [preferences, setPreferences] = useState({
     email_notifications: true,
     portal_reminders: true,
     session_security_warnings: true
   });
+  const [selectedProgramId, setSelectedProgramId] = useState("");
   const [status, setStatus] = useState({ type: "", message: "" });
   const [loading, setLoading] = useState(false);
+  const [programmeSaving, setProgrammeSaving] = useState(false);
+  const activeOfficialProgramme = (enrolmentsQuery.data || []).find((item) => item.status === "active");
 
   useEffect(() => {
     if (!preferencesQuery.data) return;
@@ -1122,6 +1362,10 @@ function SettingsPage() {
       session_security_warnings: preferencesQuery.data.session_security_warnings !== false
     });
   }, [preferencesQuery.data]);
+
+  useEffect(() => {
+    setSelectedProgramId(programPreferenceQuery.data?.program_id || "");
+  }, [programPreferenceQuery.data]);
 
   async function sendPasswordReset() {
     setLoading(true);
@@ -1148,6 +1392,25 @@ function SettingsPage() {
     }
   }
 
+  async function saveProgrammePreferenceSetting() {
+    if (!selectedProgramId) {
+      setStatus({ type: "warning", message: "Select your programme before saving." });
+      return;
+    }
+    setProgrammeSaving(true);
+    setStatus({ type: "", message: "" });
+    try {
+      await saveStudentProgramPreference(user.id, { program_id: selectedProgramId });
+      programPreferenceQuery.refetch();
+      dispatchPortalDataRefresh();
+      setStatus({ type: "success", message: "Programme preference saved." });
+    } catch (error) {
+      setStatus({ type: "warning", message: error.message || "Programme preference could not be saved." });
+    } finally {
+      setProgrammeSaving(false);
+    }
+  }
+
   return (
     <PortalPage slug="settings">
       {() => (
@@ -1169,6 +1432,38 @@ function SettingsPage() {
               <button type="button" className={theme === "light" ? "active" : ""} onClick={() => setTheme("light")}><Sun size={16} aria-hidden="true" /> Light</button>
               <button type="button" className={theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")}><Moon size={16} aria-hidden="true" /> Dark</button>
             </div>
+          </article>
+          <article className="portal-record-card">
+            <h3>Programme preference</h3>
+            <p>Select the programme used for timetable personalisation when no active enrolment is assigned.</p>
+            {activeOfficialProgramme ? (
+              <span className="portal-tag success"><CheckCircle2 size={14} aria-hidden="true" /> Official enrolment takes priority</span>
+            ) : null}
+            {programCatalogQuery.loading ? <PortalLoading label="Loading programmes" /> : null}
+            {programCatalogQuery.error ? (
+              <div className="form-status warning" role="alert">
+                Programme list could not be loaded.
+                <button className="text-link" type="button" onClick={programCatalogQuery.refetch}>Try again</button>
+              </div>
+            ) : null}
+            {!programCatalogQuery.loading && !programCatalogQuery.error ? (
+              <>
+                <ProgrammeSelector
+                  programs={programCatalogQuery.data || []}
+                  value={selectedProgramId}
+                  onChange={setSelectedProgramId}
+                  disabled={programmeSaving}
+                />
+                <button
+                  className="button button-secondary"
+                  type="button"
+                  onClick={saveProgrammePreferenceSetting}
+                  disabled={programmeSaving}
+                >
+                  {programmeSaving ? "Saving Programme" : "Save Programme"}
+                </button>
+              </>
+            ) : null}
           </article>
           <article className="portal-record-card">
             <h3>Portal preferences</h3>
