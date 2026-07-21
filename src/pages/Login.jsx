@@ -1,8 +1,12 @@
+import { useLocation } from "react-router-dom";
 import AuthForm from "../components/forms/AuthForm";
 import BrandLogo from "../components/BrandLogo";
 import { usePageMeta } from "../utils/usePageMeta";
 
 export default function Login() {
+  const location = useLocation();
+  const reason = new URLSearchParams(location.search).get("reason");
+
   usePageMeta({
     path: "/login",
     title: "Log In",
@@ -21,7 +25,14 @@ export default function Login() {
           <h1>Log in to continue.</h1>
           <p>Sign in to continue to your Zentel Insight student portal.</p>
         </div>
-        <AuthForm mode="login" />
+        <div className="auth-form-stack">
+          {reason === "idle" ? (
+            <div className="form-status warning" role="status">
+              You were signed out because your Student Portal was inactive for a while. Sign in again to continue.
+            </div>
+          ) : null}
+          <AuthForm mode="login" />
+        </div>
       </div>
     </section>
   );

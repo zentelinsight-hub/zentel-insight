@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuthContext } from "./authContextCore";
 import { getSupabaseClient, getSupabaseSafeStatus, hasSupabaseConfig } from "../services/supabaseClient";
+import { attachProfileAvatarUrl, calculateProfileCompletion } from "../services/portal/portalRepository";
 
 function withTimeout(promise, message, timeoutMs = 15000) {
   let timeoutId;
@@ -22,7 +23,14 @@ async function repairMissingProfile(supabase, currentUser) {
     address: metadata.address || "",
     email: currentUser.email || "",
     profile_completed: Boolean(metadata.full_name),
-    profile_completion: metadata.full_name ? 70 : 20
+    profile_completion: calculateProfileCompletion({
+      full_name: metadata.full_name || "",
+      phone: metadata.phone || "",
+      date_of_birth: metadata.date_of_birth || "",
+      education_level: metadata.education_level || "",
+      address: metadata.address || "",
+      avatar_path: ""
+    })
   };
 
   const { data, error } = await withTimeout(
@@ -79,8 +87,9 @@ export function AuthProvider({ children }) {
       if (!profileData) {
         profileData = await repairMissingProfile(supabase, currentUser);
       }
-      setProfile(profileData || null);
-      return profileData || null;
+      const profileWithAvatar = profileData ? await attachProfileAvatarUrl(profileData) : null;
+      setProfile(profileWithAvatar || null);
+      return profileWithAvatar || null;
     } catch (error) {
       setProfile(null);
       setProfileError(error.message || "Profile information could not be loaded.");
@@ -90,13 +99,13 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const signOut = useCallback(async () => {
+  const signOut = useCallback(async (options = {}) => {
     const supabase = await getSupabaseClient();
     window.dispatchEvent(new CustomEvent("zentel:portal-cache-clear"));
     setProfile(null);
     setSession(null);
     setUser(null);
-    await supabase?.auth.signOut();
+    await supabase?.auth.signOut({ scope: options.scope || "global" });
   }, []);
 
   useEffect(() => {

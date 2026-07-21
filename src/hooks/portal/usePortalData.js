@@ -8,6 +8,8 @@ import {
   getStudentEnrolments,
   getStudentNotifications,
   getStudentPayments,
+  getPortalArticles,
+  getStudentPreferences,
   getStudentProfile,
   getStudentResources,
   getStudentSupportTickets,
@@ -84,6 +86,10 @@ export function useStudentResources(userId) {
   return usePortalQuery(() => getStudentResources(userId), [userId]);
 }
 
+export function usePortalArticles(userId) {
+  return usePortalQuery(() => getPortalArticles(userId), [userId]);
+}
+
 export function useStudentPayments(userId) {
   return usePortalQuery(() => getStudentPayments(userId), [userId]);
 }
@@ -98,4 +104,8 @@ export function useStudentNotifications(userId) {
 
 export function useStudentSupportTickets(userId) {
   return usePortalQuery(() => getStudentSupportTickets(userId), [userId]);
+}
+
+export function useStudentPreferences(userId) {
+  return usePortalQuery(() => getStudentPreferences(userId), [userId]);
 }

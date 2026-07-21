@@ -16,9 +16,11 @@ const hookMocks = vi.hoisted(() => ({
   useStudentAnnouncements: vi.fn(),
   useStudentAssignments: vi.fn(),
   useStudentResources: vi.fn(),
+  usePortalArticles: vi.fn(),
   useStudentPayments: vi.fn(),
   useStudentCertificates: vi.fn(),
   useStudentNotifications: vi.fn(),
+  useStudentPreferences: vi.fn(),
   useStudentSupportTickets: vi.fn()
 }));
 
@@ -94,6 +96,7 @@ function renderPortal(path) {
               <Route path="payments" element={<PortalSection page="payments" />} />
               <Route path="certificates" element={<PortalSection page="certificates" />} />
               <Route path="notifications" element={<PortalSection page="notifications" />} />
+              <Route path="articles" element={<PortalSection page="articles" />} />
               <Route path="support" element={<PortalSection page="support" />} />
               <Route path="settings" element={<PortalSection page="settings" />} />
             </Route>
@@ -123,6 +126,7 @@ beforeEach(() => {
       payments: "Payments",
       certificates: "Certificates",
       notifications: "Notifications",
+      articles: "Learning Articles",
       support: "Support Tickets",
       settings: "Account Settings"
     }[slug],
@@ -144,9 +148,15 @@ beforeEach(() => {
   hookMocks.useStudentAnnouncements.mockReturnValue(query([]));
   hookMocks.useStudentAssignments.mockReturnValue(query([]));
   hookMocks.useStudentResources.mockReturnValue(query([]));
+  hookMocks.usePortalArticles.mockReturnValue(query([]));
   hookMocks.useStudentPayments.mockReturnValue(query([]));
   hookMocks.useStudentCertificates.mockReturnValue(query([]));
   hookMocks.useStudentNotifications.mockReturnValue(query([]));
+  hookMocks.useStudentPreferences.mockReturnValue(query({
+    email_notifications: true,
+    portal_reminders: true,
+    session_security_warnings: true
+  }));
   hookMocks.useStudentSupportTickets.mockReturnValue(query([]));
 });
 
@@ -160,23 +170,23 @@ describe("Portal routes", () => {
     renderPortal("/portal");
 
     const menuButton = screen.getByRole("button", { name: "Open portal menu" });
-    const sidebar = document.querySelector(".portal-sidebar");
 
     fireEvent.click(menuButton);
 
-    expect(sidebar).toHaveClass("open");
+    const drawer = document.querySelector(".portal-mobile-drawer");
+    expect(drawer).toHaveClass("open");
     expect(document.body).toHaveClass("portal-menu-open");
     expect(document.querySelector(".portal-drawer-backdrop")).toBeInTheDocument();
 
     fireEvent.click(document.querySelector(".portal-drawer-backdrop"));
 
-    expect(sidebar).not.toHaveClass("open");
+    expect(document.querySelector(".portal-mobile-drawer")).not.toBeInTheDocument();
     expect(document.body).not.toHaveClass("portal-menu-open");
 
     fireEvent.click(screen.getByRole("button", { name: "Open portal menu" }));
     fireEvent.keyDown(document, { key: "Escape" });
 
-    expect(sidebar).not.toHaveClass("open");
+    expect(document.querySelector(".portal-mobile-drawer")).not.toBeInTheDocument();
     expect(document.body).not.toHaveClass("portal-menu-open");
   });
 
@@ -191,6 +201,7 @@ describe("Portal routes", () => {
     ["/portal/payments", "Payments", "useStudentPayments"],
     ["/portal/certificates", "Certificates", "useStudentCertificates"],
     ["/portal/notifications", "Notifications", "useStudentNotifications"],
+    ["/portal/articles", "Learning Articles", "usePortalArticles"],
     ["/portal/support", "Support Tickets", "useStudentSupportTickets"],
     ["/portal/settings", "Account Settings", null]
   ])("renders %s from the portal data layer", (path, heading, hookName) => {

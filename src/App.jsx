@@ -159,6 +159,7 @@ export default function App() {
               <Route path="payments" element={<PortalSection page="payments" />} />
               <Route path="certificates" element={<PortalSection page="certificates" />} />
               <Route path="notifications" element={<PortalSection page="notifications" />} />
+              <Route path="articles" element={<PortalSection page="articles" />} />
               <Route path="support" element={<PortalSection page="support" />} />
               <Route path="settings" element={<PortalSection page="settings" />} />
               <Route path="profile" element={<PortalProfile />} />
