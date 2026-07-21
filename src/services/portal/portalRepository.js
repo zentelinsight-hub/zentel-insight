@@ -242,7 +242,7 @@ export async function getStudentProgramPreference(userId) {
   const supabase = await getClient();
   const { data, error } = await supabase
     .from("student_program_preferences")
-    .select("*, programs(id, slug, title, short_description), program_levels(id, level_name)")
+    .select("*, programs(id, slug, title, short_description)")
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw error;
@@ -262,7 +262,7 @@ export async function saveStudentProgramPreference(userId, values) {
   const { data, error } = await supabase
     .from("student_program_preferences")
     .upsert(payload, { onConflict: "user_id" })
-    .select("*, programs(id, slug, title, short_description), program_levels(id, level_name)")
+    .select("*, programs(id, slug, title, short_description)")
     .maybeSingle();
   if (error) throw error;
   return data;
@@ -407,7 +407,7 @@ export async function getStudentTimetable(userId) {
   }
   const { data, error } = await supabase
     .from("timetable_entries")
-    .select("*, programs(id, slug, title), program_levels(id, level_name)")
+    .select("*, programs(id, slug, title)")
     .in("program_id", scope.programIds)
     .order("day_of_week", { ascending: true })
     .order("start_time", { ascending: true });
