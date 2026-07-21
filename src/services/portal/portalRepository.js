@@ -100,6 +100,35 @@ function normalizeList(data) {
 
 const timetableDayOrder = [0, 1, 2, 3, 4, 5, 6];
 
+function logPortalDataIssue(label, error) {
+  if (import.meta.env.DEV) console.info(`Portal ${label} query failed`, error);
+}
+
+function getDefaultPortalPageContent(pageSlug) {
+  return { page_slug: pageSlug, ...(defaultPageContent[pageSlug] || defaultPageContent.dashboard) };
+}
+
+function getEmptyTimetableResult(scope = {}) {
+  return {
+    records: [],
+    resolvedProgramme: scope.resolvedProgramme || null,
+    resolvedTrack: scope.resolvedTrack || null,
+    source: scope.source || "none",
+    needsProgrammeSelection: scope.needsProgrammeSelection !== false,
+    todayClass: null,
+    nextClass: null
+  };
+}
+
+async function withPortalFallback(label, queryFn, fallback) {
+  try {
+    return await queryFn();
+  } catch (error) {
+    logPortalDataIssue(label, error);
+    return typeof fallback === "function" ? fallback(error) : fallback;
+  }
+}
+
 async function getClient() {
   const supabase = await getSupabaseClient();
   if (!supabase) throw new Error("Student Portal data could not be reached.");
@@ -114,8 +143,11 @@ export async function getPortalPageContent(pageSlug) {
     .eq("page_slug", pageSlug)
     .eq("status", "published")
     .maybeSingle();
-  if (error) throw error;
-  return data || { page_slug: pageSlug, ...defaultPageContent[pageSlug] };
+  if (error) {
+    logPortalDataIssue(`page content:${pageSlug}`, error);
+    return getDefaultPortalPageContent(pageSlug);
+  }
+  return data || getDefaultPortalPageContent(pageSlug);
 }
 
 async function withProfileAvatarUrl(profile, supabase) {
@@ -269,7 +301,7 @@ export async function saveStudentProgramPreference(userId, values) {
 }
 
 async function getActiveEnrolmentScope(userId) {
-  const enrolments = await getStudentEnrolments(userId);
+  const enrolments = await withPortalFallback("active enrolment scope", () => getStudentEnrolments(userId), []);
   const active = enrolments.filter((item) => ["active", "completed"].includes(item.status));
   return {
     enrolments,
@@ -289,7 +321,7 @@ function getOfficialActiveEnrolmentScope(enrolments) {
 }
 
 async function getResolvedProgrammeScope(userId) {
-  const enrolments = await getStudentEnrolments(userId);
+  const enrolments = await withPortalFallback("programme enrolments", () => getStudentEnrolments(userId), []);
   const officialScope = getOfficialActiveEnrolmentScope(enrolments);
   if (officialScope.programIds.length) {
     const primary = officialScope.active[0];
@@ -306,7 +338,7 @@ async function getResolvedProgrammeScope(userId) {
     };
   }
 
-  const preference = await getStudentProgramPreference(userId);
+  const preference = await withPortalFallback("programme preference", () => getStudentProgramPreference(userId), null);
   if (preference?.program_id) {
     return {
       source: "self_selected",
@@ -395,15 +427,7 @@ export async function getStudentTimetable(userId) {
   const supabase = await getClient();
   const scope = await getResolvedProgrammeScope(userId);
   if (!scope.programIds.length) {
-    return {
-      records: [],
-      resolvedProgramme: null,
-      resolvedTrack: null,
-      source: scope.source,
-      needsProgrammeSelection: true,
-      todayClass: null,
-      nextClass: null
-    };
+    return getEmptyTimetableResult(scope);
   }
   const { data, error } = await supabase
     .from("timetable_entries")
@@ -411,7 +435,10 @@ export async function getStudentTimetable(userId) {
     .in("program_id", scope.programIds)
     .order("day_of_week", { ascending: true })
     .order("start_time", { ascending: true });
-  if (error) throw error;
+  if (error) {
+    logPortalDataIssue("student timetable", error);
+    return getEmptyTimetableResult(scope);
+  }
   const records = sortTimetableRecords(normalizeList(data).filter((item) => {
     if (!isPublished(item)) return false;
     const entryTrackId = item.track_id || item.program_level_id;
@@ -600,14 +627,14 @@ export async function createSupportTicket(userId, values) {
 
 export async function getStudentDashboard(userId) {
   const [enrolments, timetableResult, announcements, assignments, resources, payments, certificates, notifications] = await Promise.all([
-    getStudentEnrolments(userId),
-    getStudentTimetable(userId),
-    getStudentAnnouncements(userId),
-    getStudentAssignments(userId),
-    getStudentResources(userId),
-    getStudentPayments(userId),
-    getStudentCertificates(userId),
-    getStudentNotifications(userId)
+    withPortalFallback("dashboard enrolments", () => getStudentEnrolments(userId), []),
+    withPortalFallback("dashboard timetable", () => getStudentTimetable(userId), getEmptyTimetableResult()),
+    withPortalFallback("dashboard announcements", () => getStudentAnnouncements(userId), []),
+    withPortalFallback("dashboard assignments", () => getStudentAssignments(userId), []),
+    withPortalFallback("dashboard resources", () => getStudentResources(userId), []),
+    withPortalFallback("dashboard payments", () => getStudentPayments(userId), []),
+    withPortalFallback("dashboard certificates", () => getStudentCertificates(userId), []),
+    withPortalFallback("dashboard notifications", () => getStudentNotifications(userId), [])
   ]);
 
   const activeEnrolments = enrolments.filter((item) => item.status === "active");
