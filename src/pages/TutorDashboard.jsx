@@ -240,7 +240,7 @@ function TutorFrame({ data, children }) {
   );
 }
 
-function DashboardSection({ data }) {
+function DashboardSection({ data, onSaved }) {
   return (
     <div className="portal-page">
       <PageHeading
@@ -273,7 +273,7 @@ function DashboardSection({ data }) {
           <small>Unread notices</small>
         </article>
       </div>
-      <LiveClassCards sessions={data.liveClasses.slice(0, 3)} emptyMessage="No upcoming tutor classes have been assigned yet." />
+      <LiveClassCards audience="tutor" sessions={data.liveClasses.slice(0, 3)} emptyMessage="No upcoming tutor classes have been assigned yet." onChanged={onSaved} />
     </div>
   );
 }
@@ -402,7 +402,7 @@ function StudentsSection({ data }) {
   );
 }
 
-function TutorClassroomSection({ data }) {
+function TutorClassroomSection({ data, onSaved }) {
   const officialCount = data.officialStudents.length;
   const preferenceCount = data.preferenceStudents.length;
   const primaryAssignment = data.assignments[0] || null;
@@ -462,10 +462,14 @@ function TutorClassroomSection({ data }) {
         </article>
         <article className="notice-card">
           <h3>Upcoming live classes</h3>
-          <LiveClassCards sessions={data.liveClasses.slice(0, 3)} emptyMessage="No classroom live classes have been scheduled yet." />
+          <LiveClassCards audience="tutor" sessions={data.liveClasses.slice(0, 3)} emptyMessage="No classroom live classes have been scheduled yet." onChanged={onSaved} />
         </article>
       </div>
-      <ProgramChatPanel />
+      {primaryAssignment?.program_id ? (
+        <ProgramChatPanel programId={primaryAssignment.program_id} trackId={primaryAssignment.track_id} />
+      ) : (
+        <EmptyState message="A programme must be assigned before a Tutor classroom can open." />
+      )}
     </div>
   );
 }
@@ -560,11 +564,11 @@ export default function TutorDashboard() {
   };
   return (
     <TutorFrame data={data} activeSection={activeSection}>
-      {activeSection === "dashboard" ? <DashboardSection data={data} /> : null}
+      {activeSection === "dashboard" ? <DashboardSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "profile" ? <ProfileSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "programme" ? <ProgrammeSection data={data} /> : null}
       {activeSection === "students" ? <StudentsSection data={data} /> : null}
-      {activeSection === "classroom" ? <TutorClassroomSection data={data} /> : null}
+      {activeSection === "classroom" ? <TutorClassroomSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "timetable" ? (
         <RecordsSection
           title="Timetable."
@@ -577,7 +581,7 @@ export default function TutorDashboard() {
       {activeSection === "live-classes" ? (
         <div className="portal-page">
           <PageHeading title="Live classes." description="Host only approved sessions for assigned programmes." />
-          <LiveClassCards sessions={data.liveClasses} emptyMessage="No live classes have been scheduled yet." />
+          <LiveClassCards audience="tutor" sessions={data.liveClasses} emptyMessage="No live classes have been scheduled yet." onChanged={dataQuery.refetch} />
         </div>
       ) : null}
       {activeSection === "announcements" ? (

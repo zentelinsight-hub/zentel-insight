@@ -639,10 +639,17 @@ h3 {
   }
 }
 
-.auth-progress-overlay {
+.auth-progress-open {
+  overflow: hidden;
+}
+
+.auth-progress-overlay,
+.auth-security-overlay {
   position: fixed;
   inset: 0;
-  z-index: 140;
+  width: 100vw;
+  height: 100dvh;
+  z-index: 2147483000;
   display: grid;
   place-items: center;
   padding: var(--space-5);

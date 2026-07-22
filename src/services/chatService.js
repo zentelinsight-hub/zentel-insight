@@ -30,22 +30,37 @@ export async function getProgramChatRooms() {
   return normalizeList(data);
 }
 
-export async function getProgramChatMessages(roomId, limit = 40) {
+export async function ensureProgramClassroom({ programId, trackId }) {
   const supabase = await getClient();
-  const { data, error } = await supabase
+  if (!programId) return null;
+  const { data, error } = await supabase.rpc("ensure_programme_classroom", {
+    target_program_id: programId,
+    target_track_id: trackId || null
+  });
+  if (error) throw error;
+  return normalizeList(data)[0] || null;
+}
+
+async function withMessageImageUrl(message, supabase) {
+  if (!message?.image_path) return message;
+  const { data: signed } = await supabase.storage.from(CHAT_IMAGE_BUCKET).createSignedUrl(message.image_path, 60 * 30);
+  return { ...message, image_url: signed?.signedUrl || "" };
+}
+
+export async function getProgramChatMessages(roomId, { limit = 40, before } = {}) {
+  const supabase = await getClient();
+  let query = supabase
     .from("program_chat_messages")
     .select("*, profiles!program_chat_messages_sender_id_fkey(id, full_name, title, avatar_path)")
     .eq("room_id", roomId)
     .order("created_at", { ascending: false })
     .limit(limit);
+  if (before) query = query.lt("created_at", before);
+  const { data, error } = await query;
   if (error) throw error;
 
   const messages = normalizeList(data).reverse();
-  return Promise.all(messages.map(async (message) => {
-    if (!message.image_path) return message;
-    const { data: signed } = await supabase.storage.from(CHAT_IMAGE_BUCKET).createSignedUrl(message.image_path, 60 * 30);
-    return { ...message, image_url: signed?.signedUrl || "" };
-  }));
+  return Promise.all(messages.map((message) => withMessageImageUrl(message, supabase)));
 }
 
 function validateChatImage(file) {
@@ -108,6 +123,30 @@ export async function sendProgramChatMessage({ roomId, senderId, body, imageFile
   return data;
 }
 
+export async function markProgramChatRead(roomId, userId) {
+  if (!roomId || !userId) return false;
+  const supabase = await getClient();
+  const { data: messages, error: messageError } = await supabase
+    .from("program_chat_messages")
+    .select("id")
+    .eq("room_id", roomId)
+    .neq("sender_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (messageError) throw messageError;
+  const rows = normalizeList(messages).map((message) => ({
+    message_id: message.id,
+    user_id: userId,
+    read_at: new Date().toISOString()
+  }));
+  if (!rows.length) return true;
+  const { error } = await supabase
+    .from("message_read_receipts")
+    .upsert(rows, { onConflict: "message_id,user_id" });
+  if (error) throw error;
+  return true;
+}
+
 export async function moderateProgramChatMessage(messageId, reason = "Moderated by administrator") {
   const supabase = await getClient();
   const { data, error } = await supabase
@@ -130,7 +169,11 @@ export async function subscribeToProgramChat(roomId, onMessage) {
     .on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "program_chat_messages", filter: `room_id=eq.${roomId}` },
-      (payload) => onMessage?.(payload.new)
+      (payload) => {
+        withMessageImageUrl(payload.new, supabase)
+          .then((message) => onMessage?.(message))
+          .catch(() => onMessage?.(payload.new));
+      }
     )
     .subscribe();
 

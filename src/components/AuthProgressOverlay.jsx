@@ -1,12 +1,26 @@
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
 
 export default function AuthProgressOverlay({ progress }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!progress || !mounted) return undefined;
+    document.body.classList.add("auth-progress-open");
+    return () => document.body.classList.remove("auth-progress-open");
+  }, [mounted, progress]);
+
   if (!progress) return null;
   const steps = getProgressSteps(progress.variant);
   const completed = new Set(progress.completed || []);
 
-  return (
-    <div className="auth-progress-overlay" role="status" aria-live="polite" aria-label="Secure sign-in progress">
+  const overlay = (
+    <div className="auth-security-overlay auth-progress-overlay" role="status" aria-live="polite" aria-label="Secure sign-in progress">
       <div className="auth-progress-panel">
         <ShieldCheck size={32} aria-hidden="true" />
         <div>
@@ -30,6 +44,8 @@ export default function AuthProgressOverlay({ progress }) {
       </div>
     </div>
   );
+
+  return mounted ? createPortal(overlay, document.body) : null;
 }
 
 function getProgressSteps(variant = "initial") {

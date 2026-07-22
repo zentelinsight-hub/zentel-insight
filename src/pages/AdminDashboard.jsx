@@ -1,17 +1,25 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  Award,
+  Bell,
   BookOpen,
+  CalendarDays,
   CheckCircle2,
   CreditCard,
+  FileCheck2,
   GraduationCap,
+  ImageUp,
   LayoutDashboard,
   LifeBuoy,
   LogOut,
   Megaphone,
   Menu,
   MessageSquare,
+  Newspaper,
+  Settings,
   ShieldCheck,
+  UserRound,
   Users,
   Video,
   X
@@ -40,6 +48,7 @@ import {
   searchAdminStudents,
   searchAdminTutors,
   setAccountStatus,
+  updateAdminProfile,
   updateProgramLevelPrice,
   updateStudentProfile,
   updateTutorProfile
@@ -48,15 +57,25 @@ import { formatCurrency, formatDateTime } from "../utils/format";
 import { usePageMeta } from "../utils/usePageMeta";
 
 const sections = [
-  ["overview", "Dashboard", LayoutDashboard],
-  ["people", "Students and Tutors", Users],
+  ["overview", "Overview", LayoutDashboard],
+  ["people", "People", Users],
+  ["students", "Students", GraduationCap],
+  ["tutors", "Tutors", UserRound],
   ["programmes", "Programmes", GraduationCap],
-  ["content", "Content", Megaphone],
   ["classrooms", "Classrooms", MessageSquare],
   ["live-classes", "Live Classes", Video],
+  ["timetable", "Timetable", CalendarDays],
+  ["announcements", "Announcements", Megaphone],
+  ["assignments", "Assignments", FileCheck2],
+  ["resources", "Resources", BookOpen],
+  ["articles", "Articles", Newspaper],
   ["payments", "Payments", CreditCard],
+  ["certificates", "Certificates", Award],
+  ["notifications", "Notifications", Bell],
   ["support", "Support", LifeBuoy],
-  ["audit", "Audit Logs", ShieldCheck]
+  ["audit", "Audit Log", ShieldCheck],
+  ["profile", "Profile", UserRound],
+  ["settings", "Settings", Settings]
 ];
 
 const emptyProgramForm = {
@@ -79,7 +98,15 @@ function getTrackOptions(programs = [], programId) {
   return programs.find((program) => program.id === programId)?.program_levels || [];
 }
 
-function AdminSidebarContent({ displayName, onNavigate, onSignOut }) {
+function AdminAvatar({ profile, displayName, size = "md" }) {
+  return (
+    <span className={`portal-avatar ${size}`}>
+      {profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : <span>{displayName.slice(0, 1).toUpperCase()}</span>}
+    </span>
+  );
+}
+
+function AdminSidebarContent({ profile, displayName, onNavigate, onSignOut }) {
   return (
     <>
       <NavLink className="brand" to="/admin" onClick={onNavigate}>
@@ -90,7 +117,7 @@ function AdminSidebarContent({ displayName, onNavigate, onSignOut }) {
         </span>
       </NavLink>
       <div className="portal-sidebar-profile">
-        <span className="portal-avatar md"><span>{displayName.slice(0, 1).toUpperCase()}</span></span>
+        <AdminAvatar profile={profile} displayName={displayName} />
         <div>
           <strong>{displayName}</strong>
           <span>Verified admin session</span>
@@ -119,10 +146,10 @@ function AdminSidebarContent({ displayName, onNavigate, onSignOut }) {
 }
 
 function AdminFrame({ data, children }) {
-  const { profile, user, signOut } = useAuth();
+  const { profile, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const displayName = profile?.full_name || user?.email || "Admin";
+  const displayName = "Admin";
   const drawerId = useId();
   const menuButtonRef = useRef(null);
   const scrollYRef = useRef(0);
@@ -186,7 +213,7 @@ function AdminFrame({ data, children }) {
 
   const desktopSidebar = (
     <aside className="portal-sidebar portal-sidebar-desktop">
-      <AdminSidebarContent displayName={displayName} onNavigate={closeMenu} onSignOut={handleSignOut} />
+      <AdminSidebarContent profile={profile} displayName={displayName} onNavigate={closeMenu} onSignOut={handleSignOut} />
     </aside>
   );
 
@@ -200,7 +227,7 @@ function AdminFrame({ data, children }) {
           onClick={closeMenu}
         />
         <aside id={drawerId} className="portal-sidebar portal-mobile-drawer open" aria-label="Admin dashboard menu">
-          <AdminSidebarContent displayName={displayName} onNavigate={closeMenu} onSignOut={handleSignOut} />
+          <AdminSidebarContent profile={profile} displayName={displayName} onNavigate={closeMenu} onSignOut={handleSignOut} />
         </aside>
       </>,
       document.body
@@ -226,7 +253,7 @@ function AdminFrame({ data, children }) {
           </button>
           <div>
             <p className="eyebrow">Admin</p>
-            <h1>{displayName}</h1>
+            <h1>Zentel Insight Admin</h1>
           </div>
           <span className="portal-tag success">
             <ShieldCheck size={14} aria-hidden="true" />
@@ -343,6 +370,7 @@ function AccountStatusControls({ profile, profiles, onSaved }) {
 
 function OverviewSection({ data }) {
   const verifiedPayments = data.payments.filter((payment) => payment.verified_at || ["success", "successful", "paid"].includes(String(payment.status || "").toLowerCase()));
+  const tutorMetrics = data.peopleMetrics || {};
   return (
     <div className="portal-page">
       <PageHeading
@@ -352,7 +380,12 @@ function OverviewSection({ data }) {
       <div className="dashboard-grid">
         {[
           [Users, "Students", data.students.length, "Registered learner profiles"],
-          [GraduationCap, "Tutors", data.tutors.length, "Tutor profiles"],
+          [GraduationCap, "Total Tutors", tutorMetrics.totalTutors ?? data.tutors.length, "Canonical Tutor accounts"],
+          [CheckCircle2, "Active Tutors", tutorMetrics.activeTutors ?? data.tutors.filter((item) => item.profiles?.account_status === "active").length, "Tutor accounts with portal access"],
+          [ShieldCheck, "Inactive Tutors", tutorMetrics.inactiveTutors ?? data.tutors.filter((item) => item.profiles?.account_status !== "active").length, "Tutor accounts awaiting activation"],
+          [UserRound, "Assigned Tutors", tutorMetrics.assignedTutors ?? new Set(data.tutorAssignments.filter((item) => item.active !== false).map((item) => item.tutor_id)).size, "Distinct Tutors with current assignments"],
+          [Users, "Unassigned Tutors", tutorMetrics.unassignedTutors ?? 0, "Tutor accounts without current assignments"],
+          [ShieldCheck, "Programmes Without Tutors", tutorMetrics.programmesWithoutTutors ?? 0, "Active programmes missing Tutor coverage"],
           [BookOpen, "Programmes", data.programs.length, "Programme records"],
           [CreditCard, "Verified payments", verifiedPayments.length, "Server-confirmed payments"],
           [Video, "Live classes", data.liveClasses.length, "Scheduled or completed sessions"],
@@ -1252,7 +1285,7 @@ function LiveClassesSection({ data, onSaved }) {
         <button className="button button-primary" type="submit">Save Live Class</button>
       </form>
       <StatusMessage status={status} />
-      <LiveClassCards sessions={data.liveClasses} />
+      <LiveClassCards audience="admin" sessions={data.liveClasses} onChanged={onSaved} />
     </div>
   );
 }
@@ -1359,6 +1392,175 @@ function AuditSection({ data }) {
   );
 }
 
+function AdminRecordsSection({ title, description, records, emptyMessage, render }) {
+  return (
+    <div className="portal-page">
+      <PageHeading title={title} description={description} />
+      <div className="portal-list">
+        {records.map(render)}
+        {!records.length ? <div className="notice-card portal-state-card"><p>{emptyMessage}</p></div> : null}
+      </div>
+    </div>
+  );
+}
+
+function renderAdminRecord(kind, item) {
+  return (
+    <article className="portal-record-card" key={item.id}>
+      <div>
+        <p className="eyebrow">{kind} | {formatDateTime(item.created_at || item.published_at || item.scheduled_start)}</p>
+        <h3>{item.title || item.subject || item.reference || item.name || "Record"}</h3>
+        <p>{item.summary || item.description || item.message || item.status || item.category || "Supabase-backed record."}</p>
+      </div>
+      <dl className="portal-mini-details">
+        {item.programs?.title ? <div><dt>Programme</dt><dd>{item.programs.title}</dd></div> : null}
+        {item.program_levels?.level_name ? <div><dt>Track</dt><dd>{item.program_levels.level_name}</dd></div> : null}
+        {item.status ? <div><dt>Status</dt><dd>{item.status}</dd></div> : null}
+      </dl>
+    </article>
+  );
+}
+
+function AdminProfileSection() {
+  const { profile, user, refreshProfile } = useAuth();
+  const [form, setForm] = useState({
+    full_name: profile?.full_name || "",
+    phone: profile?.phone || "",
+    address: profile?.address || "",
+    education_level: profile?.education_level || "",
+    title: profile?.title || ""
+  });
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(profile?.avatar_url || "");
+  const [removeAvatar, setRemoveAvatar] = useState(false);
+  const [status, setStatus] = useState({ type: "", message: "" });
+  const [loading, setLoading] = useState(false);
+  const avatarObjectUrlRef = useRef("");
+
+  useEffect(() => {
+    setForm({
+      full_name: profile?.full_name || "",
+      phone: profile?.phone || "",
+      address: profile?.address || "",
+      education_level: profile?.education_level || "",
+      title: profile?.title || ""
+    });
+    setAvatarPreview(profile?.avatar_url || "");
+    setRemoveAvatar(false);
+    setAvatarFile(null);
+    if (avatarObjectUrlRef.current) URL.revokeObjectURL(avatarObjectUrlRef.current);
+    avatarObjectUrlRef.current = "";
+  }, [profile]);
+
+  useEffect(() => () => {
+    if (avatarObjectUrlRef.current) URL.revokeObjectURL(avatarObjectUrlRef.current);
+  }, []);
+
+  function selectAvatar(event) {
+    const file = event.target.files?.[0] || null;
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setStatus({ type: "warning", message: "Upload a JPEG, PNG or WebP image." });
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      setStatus({ type: "warning", message: "Profile picture must be 3 MB or smaller." });
+      return;
+    }
+    if (avatarObjectUrlRef.current) URL.revokeObjectURL(avatarObjectUrlRef.current);
+    avatarObjectUrlRef.current = URL.createObjectURL(file);
+    setAvatarFile(file);
+    setAvatarPreview(avatarObjectUrlRef.current);
+    setRemoveAvatar(false);
+    setStatus({ type: "", message: "" });
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    setLoading(true);
+    setStatus({ type: "", message: "" });
+    try {
+      await updateAdminProfile(user.id, {
+        ...form,
+        avatarFile,
+        removeAvatar,
+        avatar_path: profile?.avatar_path || "",
+        previous_avatar_path: profile?.avatar_path || ""
+      });
+      await refreshProfile();
+      setStatus({ type: "success", message: "Admin profile saved." });
+      setAvatarFile(null);
+      setRemoveAvatar(false);
+    } catch (error) {
+      setStatus({ type: "warning", message: error.message || "Admin profile could not be saved." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="portal-page">
+      <PageHeading title="Admin profile." description="Manage the Admin account picture and account details shown inside protected settings." />
+      <form className="form-card management-form admin-profile-form" onSubmit={submit}>
+        <div className="portal-avatar-uploader">
+          <AdminAvatar profile={{ ...profile, avatar_url: removeAvatar ? "" : avatarPreview }} displayName="Admin" size="xl" />
+          <div>
+            <strong>Zentel Insight Admin</strong>
+            <small>{user?.email}</small>
+            <label className="button button-secondary">
+              <ImageUp size={18} aria-hidden="true" />
+              Upload profile picture
+              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={selectAvatar} />
+            </label>
+            {avatarPreview && !removeAvatar ? (
+              <button className="text-link danger" type="button" onClick={() => { setRemoveAvatar(true); setAvatarPreview(""); setAvatarFile(null); }}>
+                Remove picture
+              </button>
+            ) : null}
+          </div>
+        </div>
+        <div className="form-grid">
+          <label><span>Display name</span><input value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} /></label>
+          <label><span>Phone</span><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
+          <label><span>Education level</span><input value={form.education_level} onChange={(event) => setForm({ ...form, education_level: event.target.value })} /></label>
+          <label><span>Title</span><select value={form.title || ""} onChange={(event) => setForm({ ...form, title: event.target.value })}><option value="">No title</option><option value="Mr">Mr</option><option value="Mrs">Mrs</option></select></label>
+        </div>
+        <label><span>Address</span><input value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} /></label>
+        <StatusMessage status={status} />
+        <button className="button button-primary" type="submit" disabled={loading}>{loading ? "Saving Profile" : "Save Profile"}</button>
+      </form>
+    </div>
+  );
+}
+
+function AdminSettingsSection() {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+
+  async function handleSignOut() {
+    await signOut({ scope: "local" });
+    navigate("/login", { replace: true });
+  }
+
+  return (
+    <div className="portal-page">
+      <PageHeading title="Admin settings." description="Review protected session controls for the current browser." />
+      <div className="portal-grid">
+        <article className="notice-card">
+          <h3>Session</h3>
+          <p>The current Admin session requires both Supabase authentication and the Admin security-code verification before protected management actions run.</p>
+          <span className="portal-tag success">Verified session required</span>
+        </article>
+        <article className="notice-card">
+          <h3>Sign out</h3>
+          <p>Clear this browser session and remove the current Admin verification token.</p>
+          <button className="button button-secondary" type="button" onClick={handleSignOut}>Sign Out</button>
+        </article>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const { section = "overview" } = useParams();
   const dataQuery = useAsyncData(() => getAdminDashboardData(), []);
@@ -1390,9 +1592,8 @@ export default function AdminDashboard() {
   return (
     <AdminFrame data={data}>
       {activeSection === "overview" ? <OverviewSection data={data} /> : null}
-      {activeSection === "people" ? <PeopleSection data={data} onSaved={dataQuery.refetch} /> : null}
+      {["people", "students", "tutors"].includes(activeSection) ? <PeopleSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "programmes" ? <ProgrammesSection data={data} onSaved={dataQuery.refetch} /> : null}
-      {activeSection === "content" ? <ContentSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "live-classes" ? <LiveClassesSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "classrooms" ? (
         <div className="portal-page">
@@ -1400,9 +1601,34 @@ export default function AdminDashboard() {
           <ProgramChatPanel canModerate />
         </div>
       ) : null}
+      {activeSection === "timetable" ? <ContentSection data={data} onSaved={dataQuery.refetch} /> : null}
+      {activeSection === "announcements" ? <ContentSection data={data} onSaved={dataQuery.refetch} /> : null}
+      {activeSection === "assignments" ? <ContentSection data={data} onSaved={dataQuery.refetch} /> : null}
+      {activeSection === "resources" ? <ContentSection data={data} onSaved={dataQuery.refetch} /> : null}
+      {activeSection === "articles" ? <ContentSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "payments" ? <PaymentsSection data={data} /> : null}
+      {activeSection === "certificates" ? (
+        <AdminRecordsSection
+          title="Certificates."
+          description="Review issued certificate records linked to learner profiles and programmes."
+          records={data.certificates}
+          emptyMessage="No certificates have been issued yet."
+          render={(item) => renderAdminRecord("Certificate", item)}
+        />
+      ) : null}
+      {activeSection === "notifications" ? (
+        <AdminRecordsSection
+          title="Notifications."
+          description="Review account and learning notifications stored in Supabase."
+          records={data.notifications}
+          emptyMessage="No notifications have been created yet."
+          render={(item) => renderAdminRecord("Notification", item)}
+        />
+      ) : null}
       {activeSection === "support" ? <SupportSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "audit" ? <AuditSection data={data} /> : null}
+      {activeSection === "profile" ? <AdminProfileSection /> : null}
+      {activeSection === "settings" ? <AdminSettingsSection /> : null}
     </AdminFrame>
   );
 }

@@ -4,8 +4,10 @@ import { useAuth } from "../context/authHooks";
 import { useAsyncData } from "../hooks/useAsyncData";
 import {
   CHAT_IMAGE_MAX_BYTES,
+  ensureProgramClassroom,
   getProgramChatMessages,
   getProgramChatRooms,
+  markProgramChatRead,
   moderateProgramChatMessage,
   sendProgramChatMessage,
   subscribeToProgramChat
@@ -19,9 +21,14 @@ function senderName(message) {
   return profile.title ? `${profile.title} ${firstName}` : profile.full_name || firstName;
 }
 
-export default function ProgramChatPanel({ canModerate = false }) {
+export default function ProgramChatPanel({ canModerate = false, programId = "", trackId = "" }) {
   const { user } = useAuth();
-  const roomsQuery = useAsyncData(() => getProgramChatRooms(), []);
+  const roomsQuery = useAsyncData(
+    () => programId
+      ? ensureProgramClassroom({ programId, trackId }).then((room) => room ? [room] : [])
+      : getProgramChatRooms(),
+    [programId, trackId]
+  );
   const rooms = useMemo(() => roomsQuery.data || [], [roomsQuery.data]);
   const [roomId, setRoomId] = useState("");
   const selectedRoom = useMemo(() => rooms.find((room) => room.id === roomId) || rooms[0] || null, [roomId, rooms]);
@@ -34,10 +41,23 @@ export default function ProgramChatPanel({ canModerate = false }) {
   const [imageFile, setImageFile] = useState(null);
   const [status, setStatus] = useState({ type: "", message: "" });
   const [sending, setSending] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [failedSend, setFailedSend] = useState(null);
 
   useEffect(() => {
     setMessages(messagesQuery.data || []);
   }, [messagesQuery.data]);
+
+  useEffect(() => {
+    if (!selectedRoom?.id || !user?.id || messagesQuery.loading || messagesQuery.error) return undefined;
+    let active = true;
+    markProgramChatRead(selectedRoom.id, user.id).catch((error) => {
+      if (active && import.meta.env.DEV) console.info("Chat read receipts could not be updated", error);
+    });
+    return () => {
+      active = false;
+    };
+  }, [selectedRoom?.id, user?.id, messages.length, messagesQuery.loading, messagesQuery.error]);
 
   useEffect(() => {
     if (!selectedRoom?.id) return undefined;
@@ -67,28 +87,52 @@ export default function ProgramChatPanel({ canModerate = false }) {
 
   async function send(event) {
     event.preventDefault();
+    await submitMessage({ body, imageFile });
+  }
+
+  async function submitMessage({ body: nextBody, imageFile: nextImageFile }) {
     if (!selectedRoom || sending) return;
-    if (!body.trim() && !imageFile) {
+    if (!nextBody.trim() && !nextImageFile) {
       setStatus({ type: "warning", message: "Write a message or attach an image before sending." });
       return;
     }
     setSending(true);
     setStatus({ type: "", message: "" });
+    setFailedSend(null);
     try {
       const message = await sendProgramChatMessage({
         roomId: selectedRoom.id,
         senderId: user.id,
-        body,
-        imageFile
+        body: nextBody,
+        imageFile: nextImageFile
       });
       setMessages((current) => [...current, message]);
       setBody("");
       setImageFile(null);
       setStatus({ type: "success", message: "Message sent." });
     } catch (error) {
+      setFailedSend({ body: nextBody, imageFile: nextImageFile });
       setStatus({ type: "warning", message: error.message || "Message could not be sent." });
     } finally {
       setSending(false);
+    }
+  }
+
+  async function loadOlder() {
+    if (!selectedRoom?.id || !messages.length || loadingOlder) return;
+    setLoadingOlder(true);
+    setStatus({ type: "", message: "" });
+    try {
+      const older = await getProgramChatMessages(selectedRoom.id, { before: messages[0].created_at, limit: 30 });
+      setMessages((current) => {
+        const seen = new Set(current.map((item) => item.id));
+        return [...older.filter((item) => !seen.has(item.id)), ...current];
+      });
+      if (!older.length) setStatus({ type: "success", message: "No older messages." });
+    } catch (error) {
+      setStatus({ type: "warning", message: error.message || "Older messages could not be loaded." });
+    } finally {
+      setLoadingOlder(false);
     }
   }
 
@@ -145,7 +189,18 @@ export default function ProgramChatPanel({ canModerate = false }) {
           <span className="portal-tag">Realtime</span>
         </div>
         <div className="chat-message-list">
+          {messages.length ? (
+            <button className="text-link chat-load-older" type="button" onClick={loadOlder} disabled={loadingOlder}>
+              {loadingOlder ? "Loading older messages" : "Load older messages"}
+            </button>
+          ) : null}
           {messagesQuery.loading ? <div className="route-loader">Loading messages</div> : null}
+          {messagesQuery.error ? (
+            <div className="form-status warning" role="alert">
+              Messages could not be loaded.
+              <button className="text-link" type="button" onClick={messagesQuery.refetch}>Try again</button>
+            </div>
+          ) : null}
           {!messagesQuery.loading && !messages.length ? <p>No messages yet.</p> : null}
           {messages.map((message) => (
             <article className={message.sender_id === user?.id ? "chat-message own" : "chat-message"} key={message.id}>
@@ -185,7 +240,16 @@ export default function ProgramChatPanel({ canModerate = false }) {
           </button>
         </form>
         {imageFile ? <small className="muted-line">Attached: {imageFile.name}</small> : null}
-        {status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}
+        {status.message ? (
+          <div className={`form-status ${status.type}`} role="status">
+            {status.message}
+            {failedSend ? (
+              <button className="text-link" type="button" onClick={() => submitMessage(failedSend)} disabled={sending}>
+                Retry
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </section>
     </div>
   );

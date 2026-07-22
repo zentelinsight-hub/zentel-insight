@@ -1,6 +1,6 @@
 import { handleOptions, isAllowedOrigin, jsonResponse } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
-import { getAuthenticatedUser, getUserAccountStatus, getUserRole, writeAuditLog } from "../_shared/security.ts";
+import { getAuthenticatedUser, getUserAccountStatus, getUserRole, isVerifiedAdminSession, writeAuditLog } from "../_shared/security.ts";
 
 function clean(value: unknown) {
   return String(value || "").trim();
@@ -47,13 +47,73 @@ async function isAuthorizedForSession(supabase: any, userId: string, role: strin
   return Boolean(preference && (!session.track_id || !preference.track_id || preference.track_id === session.track_id));
 }
 
-async function createDailyToken(session: any, isHost: boolean, userId: string) {
+function getDailyApiKey() {
+  return Deno.env.get("DAILY_API_KEY") || "";
+}
+
+async function ensureDailyRoom(supabase: any, session: any) {
+  if (session.provider_room_id && session.provider_room_url) return { configured: true, session };
+
   const apiKey = Deno.env.get("DAILY_API_KEY");
   if (!apiKey) {
     return { configured: false, error: "Daily video provider credentials are not configured." };
   }
-  if (!session.provider_room_id || !session.provider_room_url) {
-    return { configured: false, error: "This live class does not have a provider room configured yet." };
+
+  const roomName = `zentel-${session.id}`.replace(/[^a-zA-Z0-9_-]/g, "-");
+  const response = await fetch("https://api.daily.co/v1/rooms", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      name: roomName,
+      privacy: "private",
+      properties: {
+        enable_chat: true,
+        enable_screenshare: true,
+        exp: Math.floor(new Date(session.scheduled_end).getTime() / 1000)
+      }
+    })
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok && response.status !== 409) {
+    throw new Error(payload?.error || payload?.info || "Daily room could not be created.");
+  }
+
+  let room = payload;
+  if (response.status === 409) {
+    const existing = await fetch(`https://api.daily.co/v1/rooms/${encodeURIComponent(roomName)}`, {
+      headers: { Authorization: `Bearer ${apiKey}` }
+    });
+    const existingPayload = await existing.json().catch(() => ({}));
+    if (!existing.ok) throw new Error(existingPayload?.error || "Daily room could not be resolved.");
+    room = existingPayload;
+  }
+
+  const roomUrl = room?.url || "";
+  if (!roomUrl) throw new Error("Daily room did not return a join URL.");
+
+  const { data: updated, error } = await supabase
+    .from("live_class_sessions")
+    .update({
+      provider_room_id: roomName,
+      provider_room_url: roomUrl,
+      status: session.status === "scheduled" ? "live" : session.status
+    })
+    .eq("id", session.id)
+    .select("*")
+    .maybeSingle();
+  if (error) throw error;
+
+  return { configured: true, session: updated || { ...session, provider_room_id: roomName, provider_room_url: roomUrl } };
+}
+
+async function createDailyToken(session: any, isHost: boolean, userId: string, expiresAt: Date) {
+  const apiKey = getDailyApiKey();
+  if (!apiKey) {
+    return { configured: false, error: "Daily video provider credentials are not configured." };
   }
 
   const response = await fetch("https://api.daily.co/v1/meeting-tokens", {
@@ -68,7 +128,8 @@ async function createDailyToken(session: any, isHost: boolean, userId: string) {
         user_id: userId,
         is_owner: isHost,
         enable_screenshare: isHost,
-        start_cloud_recording: false
+        start_cloud_recording: false,
+        exp: Math.floor(expiresAt.getTime() / 1000)
       }
     })
   });
@@ -118,6 +179,9 @@ Deno.serve(async (request) => {
     if (accountStatus !== "active") {
       return jsonResponse({ ok: false, error: "Your account is inactive. Contact Zentel Insight support for activation." }, 403, request);
     }
+    if (role === "admin" && !(await isVerifiedAdminSession(supabase, auth.user.id, auth.sessionId))) {
+      return jsonResponse({ ok: false, error: "Admin security verification is required." }, 403, request);
+    }
 
     const authorized = await isAuthorizedForSession(supabase, auth.user.id, role, session);
     if (!authorized) return jsonResponse({ ok: false, error: "You are not authorized for this live class." }, 403, request);
@@ -127,16 +191,40 @@ Deno.serve(async (request) => {
       return jsonResponse({ ok: false, error: "The configured live-class provider is not supported by this function." }, 501, request);
     }
 
-    const tokenResult = await createDailyToken(session, isHost, auth.user.id);
+    let readySession = session;
+    if (!readySession.provider_room_id || !readySession.provider_room_url) {
+      if (!isHost) {
+        return jsonResponse({ ok: false, error: "The Tutor has not started this live class yet." }, 403, request);
+      }
+      const roomResult = await ensureDailyRoom(supabase, readySession);
+      if (!roomResult.configured) {
+        return jsonResponse({ ok: false, error: roomResult.error }, 501, request);
+      }
+      readySession = roomResult.session;
+    } else if (isHost && readySession.status === "scheduled") {
+      const { data: updatedSession, error: updateStatusError } = await supabase
+        .from("live_class_sessions")
+        .update({ status: "live" })
+        .eq("id", readySession.id)
+        .select("*")
+        .maybeSingle();
+      if (updateStatusError) throw updateStatusError;
+      readySession = updatedSession || readySession;
+    }
+
+    const tokenExpiry = new Date(Math.min(closesAt.getTime(), now.getTime() + (4 * 60 * 60 * 1000)));
+    const tokenResult = await createDailyToken(readySession, isHost, auth.user.id, tokenExpiry);
     if (!tokenResult.configured) {
       return jsonResponse({ ok: false, error: tokenResult.error }, 501, request);
     }
 
-    await supabase.from("live_class_attendance").insert({
+    await supabase.from("live_class_attendance").upsert({
       class_session_id: session.id,
       user_id: auth.user.id,
+      joined_at: now.toISOString(),
+      left_at: null,
       attendance_status: "joined"
-    });
+    }, { onConflict: "class_session_id,user_id" });
 
     await writeAuditLog(supabase, {
       actorUserId: auth.user.id,
@@ -150,7 +238,8 @@ Deno.serve(async (request) => {
       provider: "daily",
       token: tokenResult.token,
       roomUrl: tokenResult.roomUrl,
-      permission: isHost ? "host" : "participant"
+      permission: isHost ? "host" : "participant",
+      sessionStatus: readySession.status
     }, 200, request);
   } catch (error) {
     console.error("create-live-class-token", (error as Error).message);

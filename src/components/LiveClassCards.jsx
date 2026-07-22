@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ExternalLink, Video } from "lucide-react";
-import { canJoinLiveClass, getLiveClassState, requestLiveClassToken } from "../services/liveClassService";
+import { canJoinLiveClass, endLiveClass, getLiveClassState, requestLiveClassToken } from "../services/liveClassService";
 import { formatDateTime } from "../utils/format";
 
 function getProgramName(item) {
@@ -14,9 +14,10 @@ function getTutorName(item) {
   return `${profile.title || ""} ${firstName}`.trim();
 }
 
-export default function LiveClassCards({ sessions = [], emptyMessage = "No live classes have been scheduled yet." }) {
+export default function LiveClassCards({ sessions = [], emptyMessage = "No live classes have been scheduled yet.", audience = "student", onChanged }) {
   const [status, setStatus] = useState({ id: "", type: "", message: "" });
   const [loadingId, setLoadingId] = useState("");
+  const hostView = audience === "tutor" || audience === "admin";
 
   async function joinClass(session) {
     setLoadingId(session.id);
@@ -30,11 +31,36 @@ export default function LiveClassCards({ sessions = [], emptyMessage = "No live 
       const separator = result.roomUrl.includes("?") ? "&" : "?";
       window.open(`${result.roomUrl}${separator}t=${encodeURIComponent(result.token)}`, "_blank", "noopener,noreferrer");
       setStatus({ id: session.id, type: "success", message: `Opening live class as ${result.permission}.` });
+      onChanged?.();
     } catch (error) {
       setStatus({ id: session.id, type: "warning", message: error.message || "Live-class access could not be prepared." });
     } finally {
       setLoadingId("");
     }
+  }
+
+  async function endClass(session) {
+    setLoadingId(`end:${session.id}`);
+    setStatus({ id: session.id, type: "", message: "" });
+    try {
+      const result = await endLiveClass(session.id);
+      if (!result.ok) {
+        setStatus({ id: session.id, type: "warning", message: result.message || "Live class could not be ended." });
+        return;
+      }
+      setStatus({ id: session.id, type: "success", message: "Live class ended." });
+      onChanged?.();
+    } catch (error) {
+      setStatus({ id: session.id, type: "warning", message: error.message || "Live class could not be ended." });
+    } finally {
+      setLoadingId("");
+    }
+  }
+
+  function getJoinLabel(session, state) {
+    if (!hostView) return "Join Class";
+    if (state === "live" || session.status === "live") return audience === "admin" ? "Join as Host" : "Join as Host";
+    return "Start Class";
   }
 
   if (!sessions.length) {
@@ -67,12 +93,17 @@ export default function LiveClassCards({ sessions = [], emptyMessage = "No live 
             </dl>
             {joinable ? (
               <button className="button button-primary" type="button" onClick={() => joinClass(session)} disabled={loadingId === session.id}>
-                {loadingId === session.id ? "Preparing Class" : "Join Class"}
+                {loadingId === session.id ? "Preparing Class" : getJoinLabel(session, state)}
                 <Video size={18} aria-hidden="true" />
               </button>
             ) : (
               <span className="portal-tag">Join opens near class time</span>
             )}
+            {hostView && (state === "live" || session.status === "live") ? (
+              <button className="button button-secondary" type="button" onClick={() => endClass(session)} disabled={loadingId === `end:${session.id}`}>
+                {loadingId === `end:${session.id}` ? "Ending Class" : "End Class"}
+              </button>
+            ) : null}
             {status.id === session.id && status.message ? (
               <div className={`form-status ${status.type || "warning"}`} role="status">{status.message}</div>
             ) : null}

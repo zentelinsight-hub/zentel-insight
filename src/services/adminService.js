@@ -1,5 +1,6 @@
 import { getSupabaseClient } from "./supabaseClient";
 import { invokeEdgeFunction } from "./edgeFunctionClient";
+import { attachProfileAvatarUrl, PROFILE_AVATAR_BUCKET, PROFILE_AVATAR_MAX_BYTES } from "./portal/portalRepository";
 
 function normalizeList(data) {
   return Array.isArray(data) ? data : [];
@@ -11,6 +12,32 @@ async function getClient() {
   return supabase;
 }
 
+const adminAvatarTypes = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp"
+};
+
+function validateAdminAvatar(file) {
+  if (!file) return "";
+  const extension = adminAvatarTypes[file.type];
+  if (!extension) throw new Error("Upload a JPEG, PNG or WebP image for the Admin profile picture.");
+  if (file.size > PROFILE_AVATAR_MAX_BYTES) throw new Error("Profile picture must be 3 MB or smaller.");
+  return extension;
+}
+
+async function uploadAdminAvatar(supabase, userId, file) {
+  const extension = validateAdminAvatar(file);
+  const path = `${userId}/admin-avatar-${Date.now()}.${extension}`;
+  const { error } = await supabase.storage.from(PROFILE_AVATAR_BUCKET).upload(path, file, {
+    cacheControl: "3600",
+    contentType: file.type,
+    upsert: false
+  });
+  if (error) throw error;
+  return path;
+}
+
 async function safeSelect(label, query, fallback = []) {
   const { data, error } = await query;
   if (error) {
@@ -18,6 +45,38 @@ async function safeSelect(label, query, fallback = []) {
     return fallback;
   }
   return data ?? fallback;
+}
+
+function normalizePeopleRecords(data) {
+  return normalizeList(data?.records);
+}
+
+function toTutorProfileShape(record) {
+  return {
+    ...record,
+    profiles: {
+      id: record.user_id || record.id,
+      full_name: record.full_name,
+      email: record.email,
+      phone: record.phone,
+      title: record.title,
+      avatar_path: record.avatar_path,
+      account_status: record.account_status,
+      status_changed_at: record.status_changed_at,
+      status_changed_by: record.status_changed_by,
+      status_reason: record.status_reason
+    }
+  };
+}
+
+async function listAdminPeople({ role = "all", query = "", status = "all", assignment = "all", programId = "", page = 1, pageSize = 25 } = {}) {
+  const data = await invokeEdgeFunction("admin-list-people", {
+    body: { role, query, status, assignment, programId, page, pageSize },
+    unavailableMessage: "People records are temporarily unavailable. Please try again.",
+    failureMessage: "People records could not be loaded. Please try again."
+  });
+  if (!data?.ok) throw new Error(data?.error || "People records could not be loaded.");
+  return data;
 }
 
 export async function getAdminDashboardData() {
@@ -38,6 +97,7 @@ export async function getAdminDashboardData() {
     liveClasses,
     supportTickets,
     payments,
+    certificates,
     auditLogs
   ] = await Promise.all([
     safeSelect("profiles", supabase.from("profiles").select("*").order("created_at", { ascending: false }).limit(200)),
@@ -55,17 +115,27 @@ export async function getAdminDashboardData() {
     safeSelect("live classes", supabase.from("live_class_sessions").select("*, programs(id, title), program_levels(id, level_name), profiles!live_class_sessions_tutor_id_fkey(id, full_name, title)").order("scheduled_start", { ascending: false }).limit(150)),
     safeSelect("support tickets", supabase.from("support_tickets").select("*, profiles(id, full_name, email)").order("created_at", { ascending: false }).limit(200)),
     safeSelect("payments", supabase.from("payments").select("*").order("created_at", { ascending: false }).limit(300)),
+    safeSelect("certificates", supabase.from("certificates").select("*, profiles(id, full_name, email), programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(200)),
     safeSelect("audit logs", supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(100))
   ]);
 
+  const [peopleSummary, studentDirectory, tutorDirectory] = await Promise.all([
+    listAdminPeople({ role: "all", pageSize: 1 }).catch((error) => ({ records: [], metrics: null, error })),
+    listAdminPeople({ role: "student", pageSize: 200 }).catch((error) => ({ records: [], error })),
+    listAdminPeople({ role: "tutor", pageSize: 200 }).catch((error) => ({ records: [], error }))
+  ]);
+
   const roleByUserId = new Map(normalizeList(roles).map((item) => [item.user_id, item.role]));
-  const students = normalizeList(profiles).filter((profile) => roleByUserId.get(profile.id) !== "tutor" && roleByUserId.get(profile.id) !== "admin");
+  const fallbackStudents = normalizeList(profiles).filter((profile) => roleByUserId.get(profile.id) !== "tutor" && roleByUserId.get(profile.id) !== "admin");
+  const canonicalStudents = normalizePeopleRecords(studentDirectory);
+  const canonicalTutors = normalizePeopleRecords(tutorDirectory).map(toTutorProfileShape);
 
   return {
     profiles: normalizeList(profiles),
     roles: normalizeList(roles),
-    students,
-    tutors: normalizeList(tutors),
+    students: canonicalStudents.length ? canonicalStudents : fallbackStudents,
+    tutors: canonicalTutors.length ? canonicalTutors : normalizeList(tutors),
+    peopleMetrics: peopleSummary.metrics || null,
     tutorAssignments: normalizeList(tutorAssignments),
     programs: normalizeList(programs),
     enrolments: normalizeList(enrolments),
@@ -78,6 +148,7 @@ export async function getAdminDashboardData() {
     liveClasses: normalizeList(liveClasses),
     supportTickets: normalizeList(supportTickets),
     payments: normalizeList(payments),
+    certificates: normalizeList(certificates),
     auditLogs: normalizeList(auditLogs)
   };
 }
@@ -94,68 +165,80 @@ export async function createTutorAccount(values) {
 
 export async function updateAdminProfile(userId, values) {
   const supabase = await getClient();
+  let uploadedAvatarPath = "";
+  const avatarFile = values.avatarFile || null;
+  const previousAvatarPath = values.previous_avatar_path || "";
+  const nextAvatarPath = avatarFile
+    ? await uploadAdminAvatar(supabase, userId, avatarFile)
+    : values.removeAvatar
+      ? null
+      : values.avatar_path || null;
+  uploadedAvatarPath = avatarFile ? nextAvatarPath : "";
+
   const payload = {
     full_name: String(values.full_name || "").trim(),
     phone: String(values.phone || "").trim(),
     address: String(values.address || "").trim(),
     education_level: String(values.education_level || "").trim(),
-    title: values.title || null
+    title: values.title || null,
+    avatar_path: nextAvatarPath
   };
-  const { data, error } = await supabase.from("profiles").update(payload).eq("id", userId).select("*").maybeSingle();
-  if (error) throw error;
-  return data;
+  try {
+    const { data, error } = await supabase.from("profiles").update(payload).eq("id", userId).select("*").maybeSingle();
+    if (error) throw error;
+    if (previousAvatarPath && previousAvatarPath !== nextAvatarPath) {
+      await supabase.storage.from(PROFILE_AVATAR_BUCKET).remove([previousAvatarPath]);
+    }
+    return data ? attachProfileAvatarUrl(data) : data;
+  } catch (error) {
+    if (uploadedAvatarPath) await supabase.storage.from(PROFILE_AVATAR_BUCKET).remove([uploadedAvatarPath]);
+    throw error;
+  }
 }
 
 export async function searchAdminStudents({ query = "", status = "all", programId = "", page = 1, pageSize = 25 } = {}) {
-  const supabase = await getClient();
   const safePage = Math.max(1, Number(page) || 1);
   const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 25));
-  const { data, error } = await supabase.rpc("admin_search_students", {
-    search_text: String(query || "").trim(),
-    status_filter: status || "all",
-    program_filter: programId || null,
-    page_limit: safePageSize,
-    page_offset: (safePage - 1) * safePageSize
+  const data = await listAdminPeople({
+    role: "student",
+    query,
+    status,
+    programId,
+    page: safePage,
+    pageSize: safePageSize
   });
-  if (error) throw error;
-  const rows = normalizeList(data);
-  const total = Number(rows[0]?.total_count || 0);
+  const rows = normalizeList(data.records);
+  const total = Number(data.total || 0);
   return {
-    records: rows.map((row) => {
-      const record = { ...row };
-      delete record.total_count;
-      return record;
-    }),
+    records: rows,
     total,
     page: safePage,
     pageSize: safePageSize,
-    pageCount: Math.max(1, Math.ceil(total / safePageSize))
+    pageCount: Number(data.pageCount || Math.max(1, Math.ceil(total / safePageSize)))
   };
 }
 
 export async function searchAdminTutors({ query = "", filter = "all", page = 1, pageSize = 25 } = {}) {
-  const supabase = await getClient();
   const safePage = Math.max(1, Number(page) || 1);
   const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 25));
-  const { data, error } = await supabase.rpc("admin_search_tutors", {
-    search_text: String(query || "").trim(),
-    tutor_filter: filter || "all",
-    page_limit: safePageSize,
-    page_offset: (safePage - 1) * safePageSize
+  const status = ["active", "inactive"].includes(filter) ? filter : "all";
+  const assignment = ["assigned", "unassigned"].includes(filter) ? filter : "all";
+  const data = await listAdminPeople({
+    role: "tutor",
+    query,
+    status,
+    assignment,
+    page: safePage,
+    pageSize: safePageSize
   });
-  if (error) throw error;
-  const rows = normalizeList(data);
-  const total = Number(rows[0]?.total_count || 0);
+  const rows = normalizeList(data.records);
+  const total = Number(data.total || 0);
   return {
-    records: rows.map((row) => {
-      const record = { ...row };
-      delete record.total_count;
-      return record;
-    }),
+    records: rows,
     total,
     page: safePage,
     pageSize: safePageSize,
-    pageCount: Math.max(1, Math.ceil(total / safePageSize))
+    pageCount: Number(data.pageCount || Math.max(1, Math.ceil(total / safePageSize)))
   };
 }
 

@@ -993,7 +993,9 @@ function StudentClassroomPage() {
             {!liveClasses.loading && !liveClasses.error ? (
               <LiveClassCards sessions={liveClasses.data || []} emptyMessage="No classroom live classes have been scheduled yet." />
             ) : null}
-            <ProgramChatPanel />
+            {classroom.data.tutor_id ? (
+              <ProgramChatPanel programId={classroom.data.program_id} trackId={classroom.data.track_id} />
+            ) : null}
           </div>
         );
       }}

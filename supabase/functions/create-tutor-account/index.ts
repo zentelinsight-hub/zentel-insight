@@ -72,11 +72,15 @@ Deno.serve(async (request) => {
         email,
         password,
         email_confirm: true,
+        app_metadata: {
+          zentel_role: "tutor",
+          zentel_provisioned_by: "admin"
+        },
         user_metadata: {
           full_name: fullName,
           phone,
           title,
-          role: "tutor",
+          zentel_role_label: "tutor",
           must_change_password: true
         }
       });
@@ -105,6 +109,22 @@ Deno.serve(async (request) => {
         if (!tutorUserId) throw new Error("Tutor account was not created.");
       }
     }
+
+    failureStep = "mark_auth_user_tutor";
+    const { error: markerError } = await admin.supabase.auth.admin.updateUserById(tutorUserId, {
+      app_metadata: {
+        zentel_role: "tutor",
+        zentel_provisioned_by: "admin"
+      },
+      user_metadata: {
+        full_name: fullName,
+        phone,
+        title,
+        zentel_role_label: "tutor",
+        must_change_password: true
+      }
+    });
+    if (markerError) throw markerError;
 
     failureStep = "upsert_profile";
     const { error: profileError } = await admin.supabase.from("profiles").upsert({

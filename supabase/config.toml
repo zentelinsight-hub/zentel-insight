@@ -23,3 +23,9 @@ verify_jwt = true
 
 [functions.create-live-class-token]
 verify_jwt = true
+
+[functions.admin-list-people]
+verify_jwt = true
+
+[functions.end-live-class]
+verify_jwt = true

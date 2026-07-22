@@ -6,11 +6,23 @@ const allowedOrigins = new Set([
   "http://localhost:5180",
   "http://localhost:5181",
   "http://localhost:5182",
+  "http://localhost:5183",
+  "http://localhost:5184",
+  "http://localhost:5185",
+  "http://localhost:5186",
+  "http://localhost:5187",
+  "http://localhost:5188",
   "http://127.0.0.1:5173",
   "http://127.0.0.1:5174",
   "http://127.0.0.1:5180",
   "http://127.0.0.1:5181",
-  "http://127.0.0.1:5182"
+  "http://127.0.0.1:5182",
+  "http://127.0.0.1:5183",
+  "http://127.0.0.1:5184",
+  "http://127.0.0.1:5185",
+  "http://127.0.0.1:5186",
+  "http://127.0.0.1:5187",
+  "http://127.0.0.1:5188"
 ]);
 
 export function getCorsHeaders(request?: Request) {

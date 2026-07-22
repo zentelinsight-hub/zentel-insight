@@ -33,3 +33,18 @@ export async function requestLiveClassToken(classSessionId) {
     return { ok: false, message: "Live-class access could not be prepared. Please try again." };
   }
 }
+
+export async function endLiveClass(classSessionId) {
+  try {
+    const data = await invokeEdgeFunction("end-live-class", {
+      body: { classSessionId },
+      unavailableMessage: "Live classes are temporarily unavailable. Please try again.",
+      failureMessage: "Live class could not be ended. Please try again."
+    });
+    if (!data?.ok) return { ok: false, message: data?.error || "Live class could not be ended. Please try again." };
+    return data;
+  } catch (error) {
+    if (error instanceof EdgeFunctionError) return { ok: false, message: error.message };
+    return { ok: false, message: "Live class could not be ended. Please try again." };
+  }
+}
