@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Bell,
   BookOpen,
@@ -8,15 +9,17 @@ import {
   LayoutDashboard,
   LifeBuoy,
   LogOut,
+  Menu,
   Megaphone,
   MessageSquare,
   Newspaper,
   Settings,
   UserRound,
   Users,
-  Video
+  Video,
+  X
 } from "lucide-react";
-import { NavLink, useNavigate, useParams } from "react-router-dom";
+import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import BrandLogo from "../components/BrandLogo";
 import IdleSessionGuard from "../components/IdleSessionGuard";
 import LiveClassCards from "../components/LiveClassCards";
@@ -32,12 +35,12 @@ const sections = [
   ["profile", "My Profile", UserRound],
   ["programme", "My Programme", GraduationCap],
   ["students", "My Students", Users],
+  ["classroom", "Classroom", MessageSquare],
   ["timetable", "Timetable", CalendarDays],
   ["live-classes", "Live Classes", Video],
   ["announcements", "Announcements", Megaphone],
   ["assignments", "Assignments", FileCheck2],
   ["resources", "Learning Resources", BookOpen],
-  ["chat", "Programme Chat", MessageSquare],
   ["notifications", "Notifications", Bell],
   ["articles", "Learning Articles", Newspaper],
   ["support", "Support", LifeBuoy],
@@ -79,61 +82,157 @@ function EmptyState({ title = "Nothing to show yet", message }) {
   );
 }
 
-function TutorFrame({ data, activeSection, children }) {
+function TutorSidebarContent({ data, displayName, onNavigate, onSignOut }) {
+  return (
+    <>
+      <NavLink className="brand" to="/tutor" onClick={onNavigate}>
+        <BrandLogo brand="main" size="portal" />
+        <span>
+          <span className="brand-name">Tutor Dashboard</span>
+          <span className="brand-motto">Zentel Insight</span>
+        </span>
+      </NavLink>
+      <div className="portal-sidebar-profile">
+        <span className="portal-avatar md"><span>{displayName.slice(0, 1).toUpperCase()}</span></span>
+        <div>
+          <strong>{displayName}</strong>
+          <span>{data.assignments.length ? `${data.assignments.length} assigned programme${data.assignments.length === 1 ? "" : "s"}` : "Programme pending"}</span>
+        </div>
+      </div>
+      <nav aria-label="Tutor dashboard">
+        {sections.map(([slug, label, Icon]) => (
+          <NavLink
+            key={slug}
+            to={slug === "dashboard" ? "/tutor" : `/tutor/${slug}`}
+            end={slug === "dashboard"}
+            onClick={onNavigate}
+            className={({ isActive }) => isActive ? "portal-link active" : "portal-link"}
+          >
+            <Icon size={18} aria-hidden="true" />
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+      <button className="portal-link signout" type="button" onClick={onSignOut}>
+        <LogOut size={18} aria-hidden="true" />
+        Sign Out
+      </button>
+    </>
+  );
+}
+
+function TutorFrame({ data, children }) {
   const { profile, user, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const displayName = tutorDisplayName(data?.profile || profile) || user?.email || "Tutor";
+  const drawerId = useId();
+  const menuButtonRef = useRef(null);
+  const scrollYRef = useRef(0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [canUsePortal, setCanUsePortal] = useState(false);
+
+  useEffect(() => {
+    setCanUsePortal(true);
+    return () => document.body.classList.remove("portal-menu-open");
+  }, []);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const mediaQuery = window.matchMedia("(min-width: 920.01px)");
+    function handleResize(event) {
+      if (event.matches) setMenuOpen(false);
+    }
+    handleResize(mediaQuery);
+    mediaQuery.addEventListener("change", handleResize);
+    return () => mediaQuery.removeEventListener("change", handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const restoreFocusTarget = menuButtonRef.current;
+    function handleKeyDown(event) {
+      if (event.key === "Escape") setMenuOpen(false);
+    }
+
+    scrollYRef.current = window.scrollY;
+    document.addEventListener("keydown", handleKeyDown);
+    document.body.classList.add("portal-menu-open");
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollYRef.current}px`;
+    document.body.style.width = "100%";
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.classList.remove("portal-menu-open");
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.width = "";
+      window.scrollTo(0, scrollYRef.current);
+      restoreFocusTarget?.focus();
+    };
+  }, [menuOpen]);
+
+  function closeMenu() {
+    setMenuOpen(false);
+  }
 
   async function handleSignOut() {
+    closeMenu();
     await signOut({ scope: "local" });
     navigate("/login", { replace: true });
   }
 
+  const desktopSidebar = (
+    <aside className="portal-sidebar portal-sidebar-desktop">
+      <TutorSidebarContent data={data} displayName={displayName} onNavigate={closeMenu} onSignOut={handleSignOut} />
+    </aside>
+  );
+
+  const mobileDrawer = menuOpen && canUsePortal
+    ? createPortal(
+      <>
+        <button
+          className="portal-drawer-backdrop"
+          type="button"
+          aria-label="Close tutor menu"
+          onClick={closeMenu}
+        />
+        <aside id={drawerId} className="portal-sidebar portal-mobile-drawer open" aria-label="Tutor dashboard menu">
+          <TutorSidebarContent data={data} displayName={displayName} onNavigate={closeMenu} onSignOut={handleSignOut} />
+        </aside>
+      </>,
+      document.body
+    )
+    : null;
+
   return (
     <section className="portal-shell management-shell tutor-shell">
-      <aside className="portal-sidebar portal-sidebar-desktop">
-        <NavLink className="brand" to="/tutor">
-          <BrandLogo brand="main" size="portal" />
-          <span>
-            <span className="brand-name">Tutor Dashboard</span>
-            <span className="brand-motto">Zentel Insight</span>
-          </span>
-        </NavLink>
-        <div className="portal-sidebar-profile">
-          <span className="portal-avatar md"><span>{displayName.slice(0, 1).toUpperCase()}</span></span>
-          <div>
-            <strong>{displayName}</strong>
-            <span>{data.assignments.length ? `${data.assignments.length} assigned programme${data.assignments.length === 1 ? "" : "s"}` : "Programme pending"}</span>
-          </div>
-        </div>
-        <nav aria-label="Tutor dashboard">
-          {sections.map(([slug, label, Icon]) => (
-            <NavLink key={slug} to={slug === "dashboard" ? "/tutor" : `/tutor/${slug}`} end={slug === "dashboard"} className={({ isActive }) => isActive ? "portal-link active" : "portal-link"}>
-              <Icon size={18} aria-hidden="true" />
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-        <button className="portal-link signout" type="button" onClick={handleSignOut}>
-          <LogOut size={18} aria-hidden="true" />
-          Sign Out
-        </button>
-      </aside>
+      {desktopSidebar}
+      {mobileDrawer}
       <main className="portal-main">
         <header className="portal-header">
+          <button
+            ref={menuButtonRef}
+            className="icon-button portal-menu-button"
+            type="button"
+            aria-label={menuOpen ? "Close tutor menu" : "Open tutor menu"}
+            aria-expanded={menuOpen}
+            aria-controls={drawerId}
+            onClick={() => setMenuOpen((current) => !current)}
+          >
+            {menuOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
+          </button>
           <div>
             <p className="eyebrow">Welcome back</p>
             <h1>{displayName}</h1>
           </div>
           <span className="portal-tag success">Tutor</span>
         </header>
-        <nav className="management-section-tabs" aria-label="Tutor sections">
-          {sections.map(([slug, label]) => (
-            <NavLink key={slug} to={slug === "dashboard" ? "/tutor" : `/tutor/${slug}`} className={activeSection === slug ? "active" : ""}>
-              {label}
-            </NavLink>
-          ))}
-        </nav>
         {children}
       </main>
       <IdleSessionGuard enabled={Boolean(data)} />
@@ -303,6 +402,74 @@ function StudentsSection({ data }) {
   );
 }
 
+function TutorClassroomSection({ data }) {
+  const officialCount = data.officialStudents.length;
+  const preferenceCount = data.preferenceStudents.length;
+  const primaryAssignment = data.assignments[0] || null;
+
+  return (
+    <div className="portal-page">
+      <PageHeading
+        title="Classroom."
+        description="Manage assigned programme students, live sessions and programme chat from one workspace."
+      />
+      <div className="dashboard-grid">
+        <article className="dashboard-card">
+          <GraduationCap size={22} aria-hidden="true" />
+          <span>Programme</span>
+          <strong>{primaryAssignment?.programs?.title || "Not assigned"}</strong>
+          <small>{primaryAssignment?.program_levels?.level_name || "All assigned tracks"}</small>
+        </article>
+        <article className="dashboard-card">
+          <Users size={22} aria-hidden="true" />
+          <span>Students</span>
+          <strong>{officialCount + preferenceCount}</strong>
+          <small>{officialCount} official, {preferenceCount} self-selected</small>
+        </article>
+        <article className="dashboard-card">
+          <Video size={22} aria-hidden="true" />
+          <span>Live Classes</span>
+          <strong>{data.liveClasses.length}</strong>
+          <small>Scheduled or live sessions</small>
+        </article>
+        <article className="dashboard-card">
+          <MessageSquare size={22} aria-hidden="true" />
+          <span>Group Chat</span>
+          <strong>Realtime</strong>
+          <small>Messages persist in Supabase</small>
+        </article>
+      </div>
+      <div className="portal-grid">
+        <article className="notice-card">
+          <h3>Connected Students</h3>
+          <div className="portal-list compact-list">
+            {data.officialStudents.slice(0, 6).map((student) => (
+              <div className="portal-record-card" key={student.id}>
+                <h3>{student.profiles?.full_name || "Student"}</h3>
+                <p>{student.programs?.title || "Programme"} {student.program_levels?.level_name ? `/ ${student.program_levels.level_name}` : ""}</p>
+                <span className="portal-tag success">Official</span>
+              </div>
+            ))}
+            {data.preferenceStudents.slice(0, 4).map((student) => (
+              <div className="portal-record-card" key={student.id}>
+                <h3>{student.profiles?.full_name || "Student"}</h3>
+                <p>{student.programs?.title || "Programme"} {student.program_levels?.level_name ? `/ ${student.program_levels.level_name}` : ""}</p>
+                <span className="portal-tag warning">Self-selected</span>
+              </div>
+            ))}
+            {!officialCount && !preferenceCount ? <EmptyState message="No students are connected to your assigned programme yet." /> : null}
+          </div>
+        </article>
+        <article className="notice-card">
+          <h3>Upcoming live classes</h3>
+          <LiveClassCards sessions={data.liveClasses.slice(0, 3)} emptyMessage="No classroom live classes have been scheduled yet." />
+        </article>
+      </div>
+      <ProgramChatPanel />
+    </div>
+  );
+}
+
 function RecordsSection({ title, description, records, render, emptyMessage }) {
   return (
     <div className="portal-page">
@@ -397,6 +564,7 @@ export default function TutorDashboard() {
       {activeSection === "profile" ? <ProfileSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "programme" ? <ProgrammeSection data={data} /> : null}
       {activeSection === "students" ? <StudentsSection data={data} /> : null}
+      {activeSection === "classroom" ? <TutorClassroomSection data={data} /> : null}
       {activeSection === "timetable" ? (
         <RecordsSection
           title="Timetable."
@@ -420,12 +588,6 @@ export default function TutorDashboard() {
       ) : null}
       {activeSection === "resources" ? (
         <RecordsSection title="Learning resources." description="Resources for assigned programmes." records={data.resources} render={(item) => renderTutorRecord("Resource", item)} emptyMessage="No resources have been published yet." />
-      ) : null}
-      {activeSection === "chat" ? (
-        <div className="portal-page">
-          <PageHeading title="Programme chat." description="Send messages only in assigned programme rooms." />
-          <ProgramChatPanel />
-        </div>
       ) : null}
       {activeSection === "notifications" ? (
         <RecordsSection title="Notifications." description="Tutor account notices and updates." records={data.notifications} render={(item) => renderTutorRecord("Notification", item)} emptyMessage="No notifications yet." />

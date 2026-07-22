@@ -42,7 +42,7 @@ export async function getTutorDashboardData(tutorId) {
     supportTickets
   ] = programIds.length
     ? await Promise.all([
-        safeSelect("students", supabase.from("enrolments").select("*, profiles(id, full_name, email, phone), programs(id, title), program_levels(id, level_name)").in("program_id", programIds).order("created_at", { ascending: false })),
+        safeSelect("students", supabase.from("enrolments").select("*, profiles(id, full_name, email, phone), programs(id, title), program_levels(id, level_name)").in("program_id", programIds).eq("status", "active").order("created_at", { ascending: false })),
         safeSelect("student preferences", supabase.from("student_program_preferences").select("*, profiles(id, full_name, email, phone), programs(id, title), program_levels(id, level_name)").in("program_id", programIds).order("created_at", { ascending: false })),
         safeSelect("timetable", supabase.from("timetable_entries").select("*, programs(id, title), program_levels(id, level_name)").in("program_id", programIds).order("day_of_week", { ascending: true })),
         safeSelect("announcements", supabase.from("announcements").select("*, programs(id, title), program_levels(id, level_name)").in("program_id", programIds).order("created_at", { ascending: false })),
@@ -55,12 +55,14 @@ export async function getTutorDashboardData(tutorId) {
       ])
     : [[], [], [], [], [], [], [], [], [], []];
 
+  const officialStudentIds = new Set(normalizeList(officialStudents).map((item) => item.user_id).filter(Boolean));
+
   return {
     profile,
     tutorProfile,
     assignments: normalizeList(assignments),
     officialStudents: normalizeList(officialStudents),
-    preferenceStudents: normalizeList(preferenceStudents),
+    preferenceStudents: normalizeList(preferenceStudents).filter((item) => !officialStudentIds.has(item.user_id)),
     timetable: normalizeList(timetable),
     announcements: normalizeList(announcements),
     learningAssignments: normalizeList(learningAssignments),

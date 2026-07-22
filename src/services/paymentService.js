@@ -122,6 +122,8 @@ export function saveTemporaryPayment(record) {
     temporaryStatus: record.temporaryStatus || "pending",
     failureReason: record.failureReason || ""
   };
+  if (record.paymentId) sanitizedRecord.paymentId = record.paymentId;
+  if (record.providerMode) sanitizedRecord.providerMode = record.providerMode;
 
   window.sessionStorage.setItem(PENDING_PAYMENT_STORAGE_KEY, JSON.stringify(sanitizedRecord));
   return sanitizedRecord;
@@ -288,20 +290,14 @@ async function createServerPaymentSession(trustedCheckout, item, customer) {
       }
     });
 
-    if (!data?.ok) {
-      if (import.meta.env.DEV) console.info("Payment session fallback activated", { ok: data?.ok, code: data?.code || "" });
-      return null;
-    }
+    if (!data?.ok) throw new Error(data?.error || "Payment setup could not be completed.");
 
     return data;
   } catch (error) {
-    if (import.meta.env.DEV) {
-      console.info("Payment session fallback activated", {
-        status: error instanceof EdgeFunctionError ? error.status : 0,
-        code: error instanceof EdgeFunctionError ? error.code : ""
-      });
-    }
-    return null;
+    const message = error instanceof EdgeFunctionError && error.message
+      ? error.message
+      : error?.message || "Payment setup is temporarily unavailable.";
+    throw new Error(message);
   }
 }
 
@@ -347,22 +343,28 @@ function isDeclinedError(error) {
 export async function startPaystackPayment({ item, customer, onSuccess, onCancel, onError }) {
   const trustedCheckout = validatePaymentRequest({ item, customer });
   const serverSession = await createServerPaymentSession(trustedCheckout, item, customer);
-  const reference = serverSession?.reference || generatePaymentReference(trustedCheckout.referencePrefix);
-  const pendingRecord = saveTemporaryPayment({
+  const serverAmountKobo = Number(serverSession?.amountKobo || 0);
+  const serverTrustedCheckout = {
     ...trustedCheckout,
+    amountKobo: Number.isInteger(serverAmountKobo) && serverAmountKobo > 0 ? serverAmountKobo : trustedCheckout.amountKobo
+  };
+  const reference = serverSession.reference || generatePaymentReference(serverTrustedCheckout.referencePrefix);
+  const pendingRecord = saveTemporaryPayment({
+    ...serverTrustedCheckout,
     reference,
-    paymentId: serverSession?.paymentId || "",
+    paymentId: serverSession.paymentId || "",
     currency: "NGN",
     createdAt: new Date().toISOString(),
     temporaryStatus: "pending",
-    providerMode: serverSession?.mode || "frontend_only"
+    providerMode: serverSession.mode || "backend"
   });
   const popup = await createPaystackPopup();
   const publicKey = getPaystackPublicKey();
   const metadata = createMetadata(pendingRecord);
 
-  if (serverSession?.mode === "backend" && openPaystackWithAccessCode(popup, serverSession)) {
-    return pendingRecord;
+  if (serverSession.mode === "backend") {
+    if (openPaystackWithAccessCode(popup, serverSession)) return pendingRecord;
+    throw new Error("Payment setup could not be completed. Please try again.");
   }
 
   popup.newTransaction({

@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import {
   getProgramCatalog,
   getPortalPageContent,
+  getStudentClassroom,
   getStudentAnnouncements,
   getStudentAssignments,
   getStudentCertificates,
   getStudentDashboard,
   getStudentEnrolments,
+  getStudentLiveClasses,
   getStudentNotifications,
   getStudentPayments,
   getPortalArticles,
@@ -84,6 +86,14 @@ export function useStudentEnrolments(userId) {
 
 export function useStudentTimetable(userId) {
   return usePortalQuery(() => getStudentTimetable(userId), [userId]);
+}
+
+export function useStudentLiveClasses(userId) {
+  return usePortalQuery(() => getStudentLiveClasses(userId), [userId]);
+}
+
+export function useStudentClassroom(userId) {
+  return usePortalQuery(() => getStudentClassroom(userId), [userId]);
 }
 
 export function useStudentAnnouncements(userId) {

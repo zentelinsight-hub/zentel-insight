@@ -2810,8 +2810,88 @@ body.portal-route-active .route-content.page-enter {
   margin-bottom: var(--space-4);
 }
 
+.admin-student-toolbar,
+.pagination-controls,
+.program-price-editor {
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.admin-student-toolbar {
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.admin-student-toolbar label {
+  min-width: min(100%, 220px);
+  flex: 1 1 220px;
+}
+
+.table-action-stack {
+  min-width: 220px;
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+.student-edit-panel {
+  max-width: 100%;
+}
+
+.tutor-edit-panel {
+  max-width: 100%;
+}
+
+.pagination-controls {
+  justify-content: flex-end;
+  margin-top: var(--space-4);
+}
+
+.pagination-controls span {
+  color: var(--color-muted);
+  font-weight: 850;
+}
+
+.program-price-list {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.program-price-editor {
+  flex-wrap: wrap;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-alt);
+}
+
+.program-price-editor > div {
+  min-width: min(100%, 220px);
+  flex: 1 1 220px;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.program-price-editor strong,
+.program-price-editor span {
+  overflow-wrap: anywhere;
+}
+
+.program-price-editor > label {
+  min-width: min(100%, 160px);
+  flex: 1 1 160px;
+}
+
 .segmented-control.compact {
   gap: var(--space-1);
+}
+
+.segmented-control.multi-row {
+  flex-wrap: wrap;
+  justify-content: flex-start;
 }
 
 .segmented-control.compact button {

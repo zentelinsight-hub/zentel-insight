@@ -8,12 +8,14 @@ import {
 
 const paystackMocks = vi.hoisted(() => ({
   newTransaction: vi.fn(),
+  resumeTransaction: vi.fn(),
   invokeEdgeFunction: vi.fn()
 }));
 
 vi.mock("@paystack/inline-js", () => ({
   default: vi.fn(function PaystackInlineMock() {
     this.newTransaction = paystackMocks.newTransaction;
+    this.resumeTransaction = paystackMocks.resumeTransaction;
   })
 }));
 
@@ -70,8 +72,32 @@ function getPaystackConfig() {
 
 beforeEach(() => {
   paystackMocks.newTransaction.mockReset();
+  paystackMocks.resumeTransaction.mockReset();
   paystackMocks.invokeEdgeFunction.mockReset();
-  paystackMocks.invokeEdgeFunction.mockRejectedValue(new Error("Payment setup is temporarily unavailable."));
+  let sequence = 0;
+  paystackMocks.invokeEdgeFunction.mockImplementation((_functionName, options = {}) => {
+    sequence += 1;
+    const body = options.body || {};
+    const isStudyHub = body.brand === "studyhub";
+    const subjectCount = Array.isArray(body.subjects) ? body.subjects.length : 0;
+    const amountKobo = isStudyHub
+      ? body.productType === "studyhub_summer_lessons"
+        ? 3000000
+        : (body.classGroup === "SSS" ? 2000000 : 1500000) * Math.max(1, subjectCount) * Math.max(1, Number(body.months || 1))
+      : 2000000;
+    const prefix = isStudyHub
+      ? body.productType === "studyhub_summer_lessons" ? "ZH-SUMMER" : body.classGroup === "SSS" ? "ZH-SSS" : "ZH-JSS"
+      : "ZI-COURSE";
+    return Promise.resolve({
+      ok: true,
+      mode: "frontend_fallback",
+      paymentId: `payment-${sequence}`,
+      reference: `${prefix}-1790000000000-SERVER${String(sequence).padStart(2, "0")}`,
+      amountKobo,
+      currency: "NGN",
+      brand: body.brand
+    });
+  });
   window.sessionStorage.clear();
   vi.spyOn(Date, "now").mockReturnValue(1790000000000);
 });
@@ -83,7 +109,7 @@ afterEach(() => {
   window.sessionStorage.clear();
 });
 
-describe("temporary frontend Paystack checkout", () => {
+describe("trusted Paystack checkout", () => {
   it("reports Paystack public-key status and blocks checkout when the key is missing", async () => {
     const { getPaymentEnvironmentStatus, startPaystackPayment, PENDING_PAYMENT_STORAGE_KEY } = await loadPaymentService({
       paystackPublicKey: ""
@@ -100,7 +126,7 @@ describe("temporary frontend Paystack checkout", () => {
     expect(window.sessionStorage.getItem(PENDING_PAYMENT_STORAGE_KEY)).toBeNull();
   });
 
-  it("opens Paystack directly for a main course using trusted catalogue pricing", async () => {
+  it("opens Paystack for a main course from a trusted Edge Function session", async () => {
     const onSuccess = vi.fn();
     const { PENDING_PAYMENT_STORAGE_KEY, readTemporaryPayment, startPaystackPayment } = await loadPaymentService();
 
@@ -113,7 +139,14 @@ describe("temporary frontend Paystack checkout", () => {
     const stored = JSON.parse(window.sessionStorage.getItem(PENDING_PAYMENT_STORAGE_KEY));
 
     expect(isValidPaymentReference(pending.reference)).toBe(true);
-    expect(pending.reference).toMatch(/^ZI-COURSE-1790000000000-[A-Z0-9]{8,}$/);
+    expect(paystackMocks.invokeEdgeFunction).toHaveBeenCalledWith("create-payment-session", expect.objectContaining({
+      body: expect.objectContaining({
+        brand: "zentel_insight",
+        programSlug: "graphic-design",
+        trackSlug: "brand-and-social-media-design"
+      })
+    }));
+    expect(pending.reference).toMatch(/^ZI-COURSE-1790000000000-SERVER[0-9]{2}$/);
     expect(config).toMatchObject({
       key: "pk_test_public",
       email: "student@example.com",
@@ -133,7 +166,9 @@ describe("temporary frontend Paystack checkout", () => {
       trackName: "Brand and Social Media Design",
       amountKobo: 2000000,
       customerEmail: "student@example.com",
-      temporaryStatus: "pending"
+      temporaryStatus: "pending",
+      providerMode: "frontend_fallback",
+      paymentId: "payment-1"
     });
 
     config.onSuccess({ reference: pending.reference });
@@ -149,7 +184,41 @@ describe("temporary frontend Paystack checkout", () => {
     });
   });
 
-  it("records cancelled and errored main-course checkouts without calling a backend", async () => {
+  it("resumes backend-initialized Paystack transactions with the server access code", async () => {
+    paystackMocks.invokeEdgeFunction.mockResolvedValueOnce({
+      ok: true,
+      mode: "backend",
+      paymentId: "payment-backend",
+      reference: "ZI-COURSE-1790000000000-BACKEND1",
+      amountKobo: 2000000,
+      accessCode: "access-code-123",
+      brand: "zentel_insight"
+    });
+
+    const { startPaystackPayment } = await loadPaymentService();
+    const pending = await startPaystackPayment({ item: courseItem, customer });
+
+    expect(pending).toMatchObject({
+      reference: "ZI-COURSE-1790000000000-BACKEND1",
+      amountKobo: 2000000,
+      providerMode: "backend",
+      paymentId: "payment-backend"
+    });
+    expect(paystackMocks.resumeTransaction).toHaveBeenCalledWith("access-code-123");
+    expect(paystackMocks.newTransaction).not.toHaveBeenCalled();
+  });
+
+  it("blocks checkout when the trusted payment Edge Function is unavailable", async () => {
+    paystackMocks.invokeEdgeFunction.mockRejectedValueOnce(new Error("Payment setup is temporarily unavailable."));
+    const { startPaystackPayment } = await loadPaymentService();
+
+    await expect(startPaystackPayment({ item: courseItem, customer })).rejects.toThrow(
+      "Payment setup is temporarily unavailable"
+    );
+    expect(paystackMocks.newTransaction).not.toHaveBeenCalled();
+  });
+
+  it("records cancelled and errored main-course checkouts from trusted Edge records", async () => {
     const onCancel = vi.fn();
     const onError = vi.fn();
     const { readTemporaryPayment, startPaystackPayment } = await loadPaymentService();

@@ -16,6 +16,7 @@ import {
   LogOut,
   Megaphone,
   Menu,
+  MessageSquare,
   Moon,
   Newspaper,
   Settings,
@@ -24,8 +25,11 @@ import {
   Trash2,
   Upload,
   UserRound,
+  Video,
   X
 } from "lucide-react";
+import LiveClassCards from "../components/LiveClassCards";
+import ProgramChatPanel from "../components/ProgramChatPanel";
 import { useAuth } from "../context/authHooks";
 import { useTheme } from "../context/themeHooks";
 import { siteConfig } from "../data/site";
@@ -36,8 +40,10 @@ import {
   useStudentAnnouncements,
   useStudentAssignments,
   useStudentCertificates,
+  useStudentClassroom,
   useStudentDashboard,
   useStudentEnrolments,
+  useStudentLiveClasses,
   useStudentNotifications,
   useStudentPayments,
   useStudentPreferences,
@@ -66,7 +72,8 @@ import BrandLogo from "../components/BrandLogo";
 const portalLinks = [
   ["/portal", "Dashboard", LayoutDashboard],
   ["/portal/profile", "My Profile", UserRound],
-  ["/portal/my-courses", "My Courses", GraduationCap],
+  ["/portal/my-courses", "My Course", GraduationCap],
+  ["/portal/classroom", "Classroom", MessageSquare],
   ["/portal/timetable", "Timetable", CalendarDays],
   ["/portal/announcements", "Announcements", Megaphone],
   ["/portal/assignments", "Assignments", FileCheck2],
@@ -83,6 +90,7 @@ const pageMeta = {
   dashboard: "/portal",
   profile: "/portal/profile",
   "my-courses": "/portal/my-courses",
+  classroom: "/portal/classroom",
   timetable: "/portal/timetable",
   announcements: "/portal/announcements",
   assignments: "/portal/assignments",
@@ -910,6 +918,89 @@ export function PortalOverview() {
   );
 }
 
+function StudentClassroomPage() {
+  const { user } = useAuth();
+  const classroom = useStudentClassroom(user?.id);
+  const liveClasses = useStudentLiveClasses(user?.id);
+
+  return (
+    <PortalPage slug="classroom">
+      {(content) => {
+        if (classroom.loading) return <PortalLoading label="Loading classroom" />;
+        if (classroom.error) return <PortalError message={classroom.error} onRetry={classroom.refetch} />;
+        if (!classroom.data) {
+          return (
+            <PortalEmpty
+              content={{
+                ...content,
+                empty_title: "Choose a programme to open Classroom",
+                empty_message: "Your Classroom appears after an active enrolment is assigned or a programme preference is selected."
+              }}
+            />
+          );
+        }
+
+        const tutorName = classroom.data.tutor_id
+          ? `${classroom.data.tutor_title || ""} ${classroom.data.tutor_first_name || "Tutor"}`.trim()
+          : "A tutor has not yet been assigned to this programme. You will be notified when your classroom becomes available.";
+
+        return (
+          <div className="portal-page">
+            <div className="portal-page-heading">
+              <div>
+                <p className="eyebrow">Classroom</p>
+                <h2>{classroom.data.program_title}</h2>
+                <p>{classroom.data.is_verified_enrolment ? "Official programme classroom." : "Self-selected programme classroom preview. Enrolment remains unverified until Admin assignment or payment confirmation."}</p>
+              </div>
+              <span className={classroom.data.is_verified_enrolment ? "portal-tag success" : "portal-tag warning"}>
+                {classroom.data.is_verified_enrolment ? "Official" : "Unverified"}
+              </span>
+            </div>
+            <div className="dashboard-grid">
+              <article className="dashboard-card">
+                <GraduationCap size={22} aria-hidden="true" />
+                <span>Programme</span>
+                <strong>{classroom.data.program_title}</strong>
+                <small>{classroom.data.track_name || "All tracks"}</small>
+              </article>
+              <article className="dashboard-card">
+                <UserRound size={22} aria-hidden="true" />
+                <span>Tutor</span>
+                <strong>{classroom.data.tutor_id ? tutorName : "Pending"}</strong>
+                <small>{classroom.data.tutor_specialisation || "Tutor assignment status"}</small>
+              </article>
+              <article className="dashboard-card">
+                <Video size={22} aria-hidden="true" />
+                <span>Live Classes</span>
+                <strong>{liveClasses.data?.length || 0}</strong>
+                <small>Scheduled or live classroom sessions</small>
+              </article>
+              <article className="dashboard-card">
+                <MessageSquare size={22} aria-hidden="true" />
+                <span>Programme Chat</span>
+                <strong>Realtime</strong>
+                <small>Messages are stored in Supabase</small>
+              </article>
+            </div>
+            {!classroom.data.tutor_id ? (
+              <div className="notice-card portal-state-card">
+                <h2>Tutor assignment pending</h2>
+                <p>A tutor has not yet been assigned to this programme. You will be notified when your classroom becomes available.</p>
+              </div>
+            ) : null}
+            {liveClasses.loading ? <PortalLoading label="Loading live classes" /> : null}
+            {liveClasses.error ? <PortalError message={liveClasses.error} onRetry={liveClasses.refetch} /> : null}
+            {!liveClasses.loading && !liveClasses.error ? (
+              <LiveClassCards sessions={liveClasses.data || []} emptyMessage="No classroom live classes have been scheduled yet." />
+            ) : null}
+            <ProgramChatPanel />
+          </div>
+        );
+      }}
+    </PortalPage>
+  );
+}
+
 function MyCoursesPage() {
   const { user } = useAuth();
   const query = useStudentEnrolments(user?.id);
@@ -1528,6 +1619,7 @@ function SettingsPage() {
 
 export function PortalSection({ page }) {
   if (page === "my-courses") return <MyCoursesPage />;
+  if (page === "classroom") return <StudentClassroomPage />;
   if (page === "timetable") return <TimetablePage />;
   if (page === "announcements") return <AnnouncementsPage />;
   if (page === "assignments") return <AssignmentsPage />;

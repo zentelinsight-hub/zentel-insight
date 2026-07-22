@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   BookOpen,
   CheckCircle2,
@@ -8,12 +9,14 @@ import {
   LifeBuoy,
   LogOut,
   Megaphone,
+  Menu,
   MessageSquare,
   ShieldCheck,
   Users,
-  Video
+  Video,
+  X
 } from "lucide-react";
-import { NavLink, useNavigate, useParams } from "react-router-dom";
+import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import BrandLogo from "../components/BrandLogo";
 import IdleSessionGuard from "../components/IdleSessionGuard";
 import LiveClassCards from "../components/LiveClassCards";
@@ -34,8 +37,12 @@ import {
   saveResource,
   saveTimetableEntry,
   scheduleLiveClass,
+  searchAdminStudents,
+  searchAdminTutors,
   setAccountStatus,
-  updateAdminProfile
+  updateProgramLevelPrice,
+  updateStudentProfile,
+  updateTutorProfile
 } from "../services/adminService";
 import { formatCurrency, formatDateTime } from "../utils/format";
 import { usePageMeta } from "../utils/usePageMeta";
@@ -45,8 +52,8 @@ const sections = [
   ["people", "Students and Tutors", Users],
   ["programmes", "Programmes", GraduationCap],
   ["content", "Content", Megaphone],
+  ["classrooms", "Classrooms", MessageSquare],
   ["live-classes", "Live Classes", Video],
-  ["chat", "Programme Chat", MessageSquare],
   ["payments", "Payments", CreditCard],
   ["support", "Support", LifeBuoy],
   ["audit", "Audit Logs", ShieldCheck]
@@ -72,48 +79,151 @@ function getTrackOptions(programs = [], programId) {
   return programs.find((program) => program.id === programId)?.program_levels || [];
 }
 
+function AdminSidebarContent({ displayName, onNavigate, onSignOut }) {
+  return (
+    <>
+      <NavLink className="brand" to="/admin" onClick={onNavigate}>
+        <BrandLogo brand="main" size="portal" />
+        <span>
+          <span className="brand-name">Admin Dashboard</span>
+          <span className="brand-motto">Zentel Insight</span>
+        </span>
+      </NavLink>
+      <div className="portal-sidebar-profile">
+        <span className="portal-avatar md"><span>{displayName.slice(0, 1).toUpperCase()}</span></span>
+        <div>
+          <strong>{displayName}</strong>
+          <span>Verified admin session</span>
+        </div>
+      </div>
+      <nav aria-label="Admin dashboard">
+        {sections.map(([slug, label, Icon]) => (
+          <NavLink
+            key={slug}
+            to={slug === "overview" ? "/admin" : `/admin/${slug}`}
+            end={slug === "overview"}
+            onClick={onNavigate}
+            className={({ isActive }) => isActive ? "portal-link active" : "portal-link"}
+          >
+            <Icon size={18} aria-hidden="true" />
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+      <button className="portal-link signout" type="button" onClick={onSignOut}>
+        <LogOut size={18} aria-hidden="true" />
+        Sign Out
+      </button>
+    </>
+  );
+}
+
 function AdminFrame({ data, children }) {
   const { profile, user, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const displayName = profile?.full_name || user?.email || "Admin";
+  const drawerId = useId();
+  const menuButtonRef = useRef(null);
+  const scrollYRef = useRef(0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [canUsePortal, setCanUsePortal] = useState(false);
+
+  useEffect(() => {
+    setCanUsePortal(true);
+    return () => document.body.classList.remove("portal-menu-open");
+  }, []);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const mediaQuery = window.matchMedia("(min-width: 920.01px)");
+    function handleResize(event) {
+      if (event.matches) setMenuOpen(false);
+    }
+    handleResize(mediaQuery);
+    mediaQuery.addEventListener("change", handleResize);
+    return () => mediaQuery.removeEventListener("change", handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const restoreFocusTarget = menuButtonRef.current;
+    function handleKeyDown(event) {
+      if (event.key === "Escape") setMenuOpen(false);
+    }
+
+    scrollYRef.current = window.scrollY;
+    document.addEventListener("keydown", handleKeyDown);
+    document.body.classList.add("portal-menu-open");
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollYRef.current}px`;
+    document.body.style.width = "100%";
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.classList.remove("portal-menu-open");
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.width = "";
+      window.scrollTo(0, scrollYRef.current);
+      restoreFocusTarget?.focus();
+    };
+  }, [menuOpen]);
+
+  function closeMenu() {
+    setMenuOpen(false);
+  }
 
   async function handleSignOut() {
+    closeMenu();
     await signOut();
     navigate("/login", { replace: true });
   }
 
+  const desktopSidebar = (
+    <aside className="portal-sidebar portal-sidebar-desktop">
+      <AdminSidebarContent displayName={displayName} onNavigate={closeMenu} onSignOut={handleSignOut} />
+    </aside>
+  );
+
+  const mobileDrawer = menuOpen && canUsePortal
+    ? createPortal(
+      <>
+        <button
+          className="portal-drawer-backdrop"
+          type="button"
+          aria-label="Close admin menu"
+          onClick={closeMenu}
+        />
+        <aside id={drawerId} className="portal-sidebar portal-mobile-drawer open" aria-label="Admin dashboard menu">
+          <AdminSidebarContent displayName={displayName} onNavigate={closeMenu} onSignOut={handleSignOut} />
+        </aside>
+      </>,
+      document.body
+    )
+    : null;
+
   return (
     <section className="portal-shell management-shell admin-shell">
-      <aside className="portal-sidebar portal-sidebar-desktop">
-        <NavLink className="brand" to="/admin">
-          <BrandLogo brand="main" size="portal" />
-          <span>
-            <span className="brand-name">Admin Dashboard</span>
-            <span className="brand-motto">Zentel Insight</span>
-          </span>
-        </NavLink>
-        <div className="portal-sidebar-profile">
-          <span className="portal-avatar md"><span>{displayName.slice(0, 1).toUpperCase()}</span></span>
-          <div>
-            <strong>{displayName}</strong>
-            <span>Verified admin session</span>
-          </div>
-        </div>
-        <nav aria-label="Admin dashboard">
-          {sections.map(([slug, label, Icon]) => (
-            <NavLink key={slug} to={slug === "overview" ? "/admin" : `/admin/${slug}`} end={slug === "overview"} className={({ isActive }) => isActive ? "portal-link active" : "portal-link"}>
-              <Icon size={18} aria-hidden="true" />
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-        <button className="portal-link signout" type="button" onClick={handleSignOut}>
-          <LogOut size={18} aria-hidden="true" />
-          Sign Out
-        </button>
-      </aside>
+      {desktopSidebar}
+      {mobileDrawer}
       <main className="portal-main">
         <header className="portal-header">
+          <button
+            ref={menuButtonRef}
+            className="icon-button portal-menu-button"
+            type="button"
+            aria-label={menuOpen ? "Close admin menu" : "Open admin menu"}
+            aria-expanded={menuOpen}
+            aria-controls={drawerId}
+            onClick={() => setMenuOpen((current) => !current)}
+          >
+            {menuOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
+          </button>
           <div>
             <p className="eyebrow">Admin</p>
             <h1>{displayName}</h1>
@@ -362,7 +472,6 @@ function TutorCreationForm({ programs, onSaved }) {
 function AssignmentForms({ data, onSaved }) {
   const [studentAssignment, setStudentAssignment] = useState({ user_id: "", program_id: "", program_level_id: "", status: "active" });
   const [tutorAssignment, setTutorAssignment] = useState({ tutor_id: "", program_id: "", track_id: "" });
-  const [profileEdit, setProfileEdit] = useState({ id: "", full_name: "", phone: "", address: "", education_level: "", title: "" });
   const [status, setStatus] = useState({ type: "", message: "" });
   const students = data.students;
   const tutors = data.tutors.map((item) => item.profiles).filter(Boolean);
@@ -388,17 +497,6 @@ function AssignmentForms({ data, onSaved }) {
       onSaved();
     } catch (error) {
       setStatus({ type: "warning", message: error.message || "Tutor programme assignment could not be saved." });
-    }
-  }
-
-  async function saveProfile(event) {
-    event.preventDefault();
-    try {
-      await updateAdminProfile(profileEdit.id, profileEdit);
-      setStatus({ type: "success", message: "Profile updated." });
-      onSaved();
-    } catch (error) {
-      setStatus({ type: "warning", message: error.message || "Profile could not be updated." });
     }
   }
 
@@ -454,59 +552,330 @@ function AssignmentForms({ data, onSaved }) {
         </label>
         <button className="button button-secondary" type="submit">Assign Tutor</button>
       </form>
-      <form className="form-card management-form" onSubmit={saveProfile}>
-        <h3>Edit Authoritative Profile Fields</h3>
-        <label>
-          <span>User</span>
-          <select
-            value={profileEdit.id}
-            onChange={(event) => {
-              const profile = data.profiles.find((item) => item.id === event.target.value) || {};
-              setProfileEdit({
-                id: profile.id || "",
-                full_name: profile.full_name || "",
-                phone: profile.phone || "",
-                address: profile.address || "",
-                education_level: profile.education_level || "",
-                title: profile.title || ""
-              });
-            }}
-            required
-          >
-            <option value="">Choose user</option>
-            {data.profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name || profile.email}</option>)}
-          </select>
-        </label>
-        <div className="form-grid">
-          <label><span>Full name</span><input value={profileEdit.full_name} onChange={(event) => setProfileEdit({ ...profileEdit, full_name: event.target.value })} /></label>
-          <label><span>Phone</span><input value={profileEdit.phone} onChange={(event) => setProfileEdit({ ...profileEdit, phone: event.target.value })} /></label>
-          <label><span>Education level</span><input value={profileEdit.education_level} onChange={(event) => setProfileEdit({ ...profileEdit, education_level: event.target.value })} /></label>
-          <label><span>Title</span><select value={profileEdit.title} onChange={(event) => setProfileEdit({ ...profileEdit, title: event.target.value })}><option value="">None</option><option value="Mr">Mr</option><option value="Mrs">Mrs</option></select></label>
-        </div>
-        <label><span>Address</span><input value={profileEdit.address} onChange={(event) => setProfileEdit({ ...profileEdit, address: event.target.value })} /></label>
-        <button className="button button-secondary" type="submit">Save Profile</button>
-      </form>
       <StatusMessage status={status} />
     </div>
   );
 }
 
+function buildStudentEditForm(student = {}) {
+  return {
+    id: student.id || "",
+    full_name: student.full_name || "",
+    phone: student.phone || "",
+    date_of_birth: student.date_of_birth || "",
+    education_level: student.education_level || "",
+    address: student.address || "",
+    program_id: student.program_id || "",
+    program_level_id: student.program_level_id || "",
+    account_status: student.account_status || "inactive",
+    status_reason: student.status_reason || ""
+  };
+}
+
+function StudentEditPanel({ student, programs, onClose, onSaved }) {
+  const [form, setForm] = useState(() => buildStudentEditForm(student));
+  const [status, setStatus] = useState({ type: "", message: "" });
+  const [loading, setLoading] = useState(false);
+  const tracks = getTrackOptions(programs, form.program_id);
+
+  useEffect(() => {
+    setForm(buildStudentEditForm(student));
+    setStatus({ type: "", message: "" });
+  }, [student]);
+
+  if (!student) return null;
+
+  async function submit(event) {
+    event.preventDefault();
+    const programChanged = form.program_id !== (student.program_id || "") || form.program_level_id !== (student.program_level_id || "");
+    if (programChanged && (!form.program_id || !form.program_level_id)) {
+      setStatus({ type: "warning", message: "Choose both programme and track before saving a programme change." });
+      return;
+    }
+
+    setLoading(true);
+    setStatus({ type: "", message: "" });
+    try {
+      await updateStudentProfile({
+        ...form,
+        program_id: programChanged ? form.program_id : "",
+        program_level_id: programChanged ? form.program_level_id : ""
+      });
+      setStatus({ type: "success", message: "Student record saved." });
+      onSaved();
+    } catch (error) {
+      setStatus({ type: "warning", message: error.message || "Student record could not be saved." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form className="form-card management-form student-edit-panel" onSubmit={submit}>
+      <div className="management-card-heading">
+        <div>
+          <h3>Edit Student Record</h3>
+          <p>{student.email}</p>
+        </div>
+        <button className="button button-secondary" type="button" onClick={onClose}>Close</button>
+      </div>
+      <div className="form-grid">
+        <label><span>Full name</span><input value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} /></label>
+        <label><span>Phone</span><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
+        <label><span>Date of birth</span><input type="date" value={form.date_of_birth || ""} onChange={(event) => setForm({ ...form, date_of_birth: event.target.value })} /></label>
+        <label><span>Education level</span><input value={form.education_level} onChange={(event) => setForm({ ...form, education_level: event.target.value })} /></label>
+        <label>
+          <span>Programme</span>
+          <select value={form.program_id} onChange={(event) => setForm({ ...form, program_id: event.target.value, program_level_id: "" })}>
+            <option value="">No programme change</option>
+            {programs.map((program) => <option key={program.id} value={program.id}>{program.title}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>Track</span>
+          <select value={form.program_level_id} onChange={(event) => setForm({ ...form, program_level_id: event.target.value })} required={Boolean(form.program_id)}>
+            <option value="">Choose track</option>
+            {tracks.map((track) => <option key={track.id} value={track.id}>{track.level_name}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>Account status</span>
+          <select value={form.account_status} onChange={(event) => setForm({ ...form, account_status: event.target.value })}>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </label>
+      </div>
+      <label><span>Address</span><input value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} /></label>
+      <label><span>Status reason</span><textarea value={form.status_reason} onChange={(event) => setForm({ ...form, status_reason: event.target.value })} /></label>
+      <StatusMessage status={status} />
+      <button className="button button-primary" type="submit" disabled={loading}>{loading ? "Saving Student" : "Save Student"}</button>
+    </form>
+  );
+}
+
+function buildTutorEditForm(tutor = {}) {
+  return {
+    user_id: tutor.user_id || "",
+    title: tutor.title || "Mr",
+    full_name: tutor.full_name || "",
+    phone: tutor.phone || "",
+    specialisation: tutor.specialisation || "",
+    professional_bio: tutor.professional_bio || "",
+    qualifications: tutor.qualifications || "",
+    teaching_experience: tutor.teaching_experience || "",
+    availability: tutor.availability || "",
+    program_id: tutor.program_id || "",
+    track_id: tutor.track_id || "",
+    account_status: tutor.account_status || "inactive",
+    status_reason: tutor.status_reason || ""
+  };
+}
+
+function TutorEditPanel({ tutor, programs, onClose, onSaved }) {
+  const [form, setForm] = useState(() => buildTutorEditForm(tutor));
+  const [status, setStatus] = useState({ type: "", message: "" });
+  const [loading, setLoading] = useState(false);
+  const tracks = getTrackOptions(programs, form.program_id);
+
+  useEffect(() => {
+    setForm(buildTutorEditForm(tutor));
+    setStatus({ type: "", message: "" });
+  }, [tutor]);
+
+  if (!tutor) return null;
+
+  async function submit(event) {
+    event.preventDefault();
+    const assignmentChanged = form.program_id !== (tutor.program_id || "") || form.track_id !== (tutor.track_id || "");
+    if (assignmentChanged && !form.program_id) {
+      setStatus({ type: "warning", message: "Choose a programme before saving a Tutor assignment change." });
+      return;
+    }
+
+    setLoading(true);
+    setStatus({ type: "", message: "" });
+    try {
+      await updateTutorProfile({
+        ...form,
+        program_id: assignmentChanged ? form.program_id : "",
+        track_id: assignmentChanged ? form.track_id : ""
+      });
+      setStatus({ type: "success", message: "Tutor record saved." });
+      onSaved();
+    } catch (error) {
+      setStatus({ type: "warning", message: error.message || "Tutor record could not be saved." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form className="form-card management-form tutor-edit-panel" onSubmit={submit}>
+      <div className="management-card-heading">
+        <div>
+          <h3>Edit Tutor Record</h3>
+          <p>{tutor.email}</p>
+        </div>
+        <button className="button button-secondary" type="button" onClick={onClose}>Close</button>
+      </div>
+      <div className="form-grid">
+        <label>
+          <span>Title</span>
+          <select value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })}>
+            <option value="Mr">Mr</option>
+            <option value="Mrs">Mrs</option>
+          </select>
+        </label>
+        <label><span>Full name</span><input value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} /></label>
+        <label><span>Phone</span><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
+        <label><span>Specialisation</span><input value={form.specialisation} onChange={(event) => setForm({ ...form, specialisation: event.target.value })} /></label>
+        <label>
+          <span>Programme</span>
+          <select value={form.program_id} onChange={(event) => setForm({ ...form, program_id: event.target.value, track_id: "" })}>
+            <option value="">No assignment change</option>
+            {programs.map((program) => <option key={program.id} value={program.id}>{program.title}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>Track</span>
+          <select value={form.track_id} onChange={(event) => setForm({ ...form, track_id: event.target.value })}>
+            <option value="">All tracks</option>
+            {tracks.map((track) => <option key={track.id} value={track.id}>{track.level_name}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>Account status</span>
+          <select value={form.account_status} onChange={(event) => setForm({ ...form, account_status: event.target.value })}>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </label>
+      </div>
+      <label><span>Professional bio</span><textarea value={form.professional_bio} onChange={(event) => setForm({ ...form, professional_bio: event.target.value })} /></label>
+      <label><span>Qualifications</span><textarea value={form.qualifications} onChange={(event) => setForm({ ...form, qualifications: event.target.value })} /></label>
+      <label><span>Teaching experience</span><textarea value={form.teaching_experience} onChange={(event) => setForm({ ...form, teaching_experience: event.target.value })} /></label>
+      <label><span>Availability</span><textarea value={form.availability} onChange={(event) => setForm({ ...form, availability: event.target.value })} /></label>
+      <label><span>Status reason</span><textarea value={form.status_reason} onChange={(event) => setForm({ ...form, status_reason: event.target.value })} /></label>
+      <StatusMessage status={status} />
+      <button className="button button-primary" type="submit" disabled={loading}>{loading ? "Saving Tutor" : "Save Tutor"}</button>
+    </form>
+  );
+}
+
 function PeopleSection({ data, onSaved }) {
+  const [studentSearchInput, setStudentSearchInput] = useState("");
+  const [studentSearch, setStudentSearch] = useState("");
   const [studentStatusFilter, setStudentStatusFilter] = useState("all");
-  const [tutorStatusFilter, setTutorStatusFilter] = useState("all");
-  const matchesStatus = (profile, filter) => filter === "all" || (profile.account_status || "inactive") === filter;
-  const filteredStudents = data.students.filter((student) => matchesStatus(student, studentStatusFilter));
-  const filteredTutors = data.tutors.filter((tutor) => matchesStatus(tutor.profiles || { account_status: "inactive" }, tutorStatusFilter));
+  const [studentProgramFilter, setStudentProgramFilter] = useState("");
+  const [studentPage, setStudentPage] = useState(1);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [tutorSearchInput, setTutorSearchInput] = useState("");
+  const [tutorSearch, setTutorSearch] = useState("");
+  const [tutorFilter, setTutorFilter] = useState("all");
+  const [tutorPage, setTutorPage] = useState(1);
+  const [selectedTutor, setSelectedTutor] = useState(null);
+  const studentsQuery = useAsyncData(
+    () => searchAdminStudents({
+      query: studentSearch,
+      status: studentStatusFilter,
+      programId: studentProgramFilter,
+      page: studentPage,
+      pageSize: 25
+    }),
+    [studentSearch, studentStatusFilter, studentProgramFilter, studentPage]
+  );
+  const tutorsQuery = useAsyncData(
+    () => searchAdminTutors({
+      query: tutorSearch,
+      filter: tutorFilter,
+      page: tutorPage,
+      pageSize: 25
+    }),
+    [tutorSearch, tutorFilter, tutorPage]
+  );
+  const studentRecords = studentsQuery.data?.records || [];
+  const studentTotal = studentsQuery.data?.total || 0;
+  const studentPageCount = studentsQuery.data?.pageCount || 1;
+  const tutorRecords = tutorsQuery.data?.records || [];
+  const tutorTotal = tutorsQuery.data?.total || 0;
+  const tutorPageCount = tutorsQuery.data?.pageCount || 1;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setStudentSearch(studentSearchInput);
+      setStudentPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [studentSearchInput]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setTutorSearch(tutorSearchInput);
+      setTutorPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [tutorSearchInput]);
+
+  useEffect(() => {
+    setStudentPage(1);
+  }, [studentStatusFilter, studentProgramFilter]);
+
+  useEffect(() => {
+    setTutorPage(1);
+  }, [tutorFilter]);
+
+  function handleStudentsChanged() {
+    studentsQuery.refetch();
+    onSaved();
+  }
+
+  function handleTutorsChanged() {
+    tutorsQuery.refetch();
+    onSaved();
+  }
 
   return (
     <div className="portal-page">
       <PageHeading title="Students and tutors." description="Review account records, create tutors securely, and assign official programme access." />
-      <TutorCreationForm programs={data.programs} onSaved={onSaved} />
-      <AssignmentForms data={data} onSaved={onSaved} />
+      <TutorCreationForm programs={data.programs} onSaved={handleTutorsChanged} />
+      <AssignmentForms data={data} onSaved={() => { handleStudentsChanged(); handleTutorsChanged(); }} />
+      <StudentEditPanel
+        student={selectedStudent}
+        programs={data.programs}
+        onClose={() => setSelectedStudent(null)}
+        onSaved={handleStudentsChanged}
+      />
+      <TutorEditPanel
+        tutor={selectedTutor}
+        programs={data.programs}
+        onClose={() => setSelectedTutor(null)}
+        onSaved={handleTutorsChanged}
+      />
       <div className="portal-grid">
         <article className="notice-card">
           <div className="management-card-heading">
-            <h3>Registered students</h3>
+            <div>
+              <h3>Registered students</h3>
+              <p>{studentTotal ? `${studentTotal} matching student${studentTotal === 1 ? "" : "s"}` : "Search and filter student records"}</p>
+            </div>
+          </div>
+          <div className="admin-student-toolbar">
+            <label>
+              <span>Search students</span>
+              <input
+                value={studentSearchInput}
+                onChange={(event) => setStudentSearchInput(event.target.value)}
+                placeholder="Name, email, phone, programme or status"
+              />
+            </label>
+            <label>
+              <span>Programme</span>
+              <select value={studentProgramFilter} onChange={(event) => setStudentProgramFilter(event.target.value)}>
+                <option value="">All programmes</option>
+                {data.programs.map((program) => <option key={program.id} value={program.id}>{program.title}</option>)}
+              </select>
+            </label>
             <div className="segmented-control compact" role="group" aria-label="Student account status filter">
               {["all", "active", "inactive"].map((status) => (
                 <button key={status} type="button" className={studentStatusFilter === status ? "active" : ""} onClick={() => setStudentStatusFilter(status)}>
@@ -515,15 +884,22 @@ function PeopleSection({ data, onSaved }) {
               ))}
             </div>
           </div>
+          {studentsQuery.error ? (
+            <div className="form-status warning" role="alert">
+              Student records could not be loaded.
+              <button className="text-link" type="button" onClick={studentsQuery.refetch}>Try again</button>
+            </div>
+          ) : null}
           <div className="responsive-table-wrap">
             <table className="management-table">
-              <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Status</th><th>Status audit</th><th>Action</th></tr></thead>
+              <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Programme</th><th>Status</th><th>Status audit</th><th>Action</th></tr></thead>
               <tbody>
-                {filteredStudents.map((student) => (
+                {studentRecords.map((student) => (
                   <tr key={student.id}>
                     <td>{student.full_name || "Unnamed"}</td>
                     <td>{student.email}</td>
                     <td>{student.phone}</td>
+                    <td>{student.program_title ? `${student.program_title}${student.level_name ? ` / ${student.level_name}` : ""}` : "Not assigned"}</td>
                     <td><AccountStatusBadge status={student.account_status} /></td>
                     <td>
                       <dl className="status-audit-details compact">
@@ -532,42 +908,141 @@ function PeopleSection({ data, onSaved }) {
                         <div><dt>Reason</dt><dd>{student.status_reason || "Not recorded"}</dd></div>
                       </dl>
                     </td>
-                    <td><AccountStatusControls profile={student} profiles={data.profiles} onSaved={onSaved} /></td>
+                    <td>
+                      <div className="table-action-stack">
+                        <button className="button button-secondary" type="button" onClick={() => setSelectedStudent(student)}>Edit</button>
+                        <AccountStatusControls profile={student} profiles={data.profiles} onSaved={handleStudentsChanged} />
+                      </div>
+                    </td>
                   </tr>
                 ))}
-                {!filteredStudents.length ? <tr><td colSpan="6">No students match this status filter.</td></tr> : null}
+                {studentsQuery.loading ? <tr><td colSpan="7">Loading students...</td></tr> : null}
+                {!studentsQuery.loading && !studentsQuery.error && !studentRecords.length ? <tr><td colSpan="7">No students match this search.</td></tr> : null}
               </tbody>
             </table>
+          </div>
+          <div className="pagination-controls" aria-label="Student search pagination">
+            <button className="button button-secondary" type="button" disabled={studentPage <= 1 || studentsQuery.loading} onClick={() => setStudentPage((page) => Math.max(1, page - 1))}>Previous</button>
+            <span>Page {studentPage} of {studentPageCount}</span>
+            <button className="button button-secondary" type="button" disabled={studentPage >= studentPageCount || studentsQuery.loading} onClick={() => setStudentPage((page) => page + 1)}>Next</button>
           </div>
         </article>
         <article className="notice-card">
           <div className="management-card-heading">
-            <h3>Tutors</h3>
-            <div className="segmented-control compact" role="group" aria-label="Tutor account status filter">
-              {["all", "active", "inactive"].map((status) => (
-                <button key={status} type="button" className={tutorStatusFilter === status ? "active" : ""} onClick={() => setTutorStatusFilter(status)}>
-                  {status === "all" ? "All" : status[0].toUpperCase() + status.slice(1)}
+            <div>
+              <h3>Tutor directory</h3>
+              <p>{tutorTotal ? `${tutorTotal} matching tutor${tutorTotal === 1 ? "" : "s"}` : "Search and filter Tutor records"}</p>
+            </div>
+          </div>
+          <div className="admin-student-toolbar">
+            <label>
+              <span>Search tutors</span>
+              <input
+                value={tutorSearchInput}
+                onChange={(event) => setTutorSearchInput(event.target.value)}
+                placeholder="Name, email, phone, programme or specialisation"
+              />
+            </label>
+            <div className="segmented-control compact multi-row" role="group" aria-label="Tutor directory filter">
+              {[
+                ["all", "All"],
+                ["active", "Active"],
+                ["inactive", "Inactive"],
+                ["assigned", "Assigned"],
+                ["unassigned", "Unassigned"]
+              ].map(([value, label]) => (
+                <button key={value} type="button" className={tutorFilter === value ? "active" : ""} onClick={() => setTutorFilter(value)}>
+                  {label}
                 </button>
               ))}
             </div>
           </div>
-          <div className="portal-list compact-list">
-            {filteredTutors.map((tutor) => {
-              const profile = tutor.profiles || { id: tutor.user_id, full_name: "", email: "", account_status: "inactive" };
-              return (
-              <div className="portal-record-card" key={tutor.user_id}>
-                <h3>{tutor.title} {tutor.profiles?.full_name || "Tutor"}</h3>
-                <p>{tutor.profiles?.email}</p>
-                <span className="portal-tag">{tutor.specialisation || "Specialisation pending"}</span>
-                <AccountStatusControls profile={profile} profiles={data.profiles} onSaved={onSaved} />
-              </div>
-              );
-            })}
-            {!filteredTutors.length ? <p>No tutors match this status filter.</p> : null}
+          {tutorsQuery.error ? (
+            <div className="form-status warning" role="alert">
+              Tutor records could not be loaded.
+              <button className="text-link" type="button" onClick={tutorsQuery.refetch}>Try again</button>
+            </div>
+          ) : null}
+          <div className="responsive-table-wrap">
+            <table className="management-table">
+              <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Programme</th><th>Status</th><th>Profile</th><th>Action</th></tr></thead>
+              <tbody>
+                {tutorRecords.map((tutor) => (
+                  <tr key={tutor.user_id}>
+                    <td>{tutor.title} {tutor.full_name || "Tutor"}</td>
+                    <td>{tutor.email}</td>
+                    <td>{tutor.phone || "Not recorded"}</td>
+                    <td>{tutor.program_title ? `${tutor.program_title}${tutor.track_name ? ` / ${tutor.track_name}` : ""}` : "Unassigned"}</td>
+                    <td><AccountStatusBadge status={tutor.account_status} /></td>
+                    <td>{Number(tutor.profile_completion || 0)}%</td>
+                    <td>
+                      <div className="table-action-stack">
+                        <button className="button button-secondary" type="button" onClick={() => setSelectedTutor(tutor)}>Edit</button>
+                        <AccountStatusControls profile={tutor} profiles={data.profiles} onSaved={handleTutorsChanged} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {tutorsQuery.loading ? <tr><td colSpan="7">Loading tutors...</td></tr> : null}
+                {!tutorsQuery.loading && !tutorsQuery.error && !tutorRecords.length ? <tr><td colSpan="7">No Tutors match this search.</td></tr> : null}
+              </tbody>
+            </table>
+          </div>
+          <div className="pagination-controls" aria-label="Tutor search pagination">
+            <button className="button button-secondary" type="button" disabled={tutorPage <= 1 || tutorsQuery.loading} onClick={() => setTutorPage((page) => Math.max(1, page - 1))}>Previous</button>
+            <span>Page {tutorPage} of {tutorPageCount}</span>
+            <button className="button button-secondary" type="button" disabled={tutorPage >= tutorPageCount || tutorsQuery.loading} onClick={() => setTutorPage((page) => page + 1)}>Next</button>
           </div>
         </article>
       </div>
     </div>
+  );
+}
+
+function ProgramLevelPriceEditor({ level, onSaved }) {
+  const [price, setPrice] = useState(String(Number(level.price_kobo || 0) / 100));
+  const [reason, setReason] = useState("");
+  const [status, setStatus] = useState({ type: "", message: "" });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setPrice(String(Number(level.price_kobo || 0) / 100));
+    setReason("");
+    setStatus({ type: "", message: "" });
+  }, [level.id, level.price_kobo]);
+
+  async function submit(event) {
+    event.preventDefault();
+    setLoading(true);
+    setStatus({ type: "", message: "" });
+    try {
+      await updateProgramLevelPrice({ levelId: level.id, price, reason });
+      setStatus({ type: "success", message: "Price saved." });
+      onSaved();
+    } catch (error) {
+      setStatus({ type: "warning", message: error.message || "Price could not be saved." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form className="program-price-editor" onSubmit={submit}>
+      <div>
+        <strong>{level.level_name}</strong>
+        <span>{formatAmountKobo(level.price_kobo)}</span>
+      </div>
+      <label>
+        <span>Price in naira</span>
+        <input type="number" min="0" step="1" value={price} onChange={(event) => setPrice(event.target.value)} />
+      </label>
+      <label>
+        <span>Reason</span>
+        <input value={reason} onChange={(event) => setReason(event.target.value)} />
+      </label>
+      <button className="button button-secondary" type="submit" disabled={loading}>{loading ? "Saving" : "Save Price"}</button>
+      <StatusMessage status={status} />
+    </form>
   );
 }
 
@@ -648,11 +1123,11 @@ function ProgrammesSection({ data, onSaved }) {
               <h3>{program.title}</h3>
               <p>{program.short_description}</p>
             </div>
-            <dl className="portal-mini-details">
+            <div className="program-price-list">
               {(program.program_levels || []).map((level) => (
-                <div key={level.id}><dt>{level.level_name}</dt><dd>{formatAmountKobo(level.price_kobo)}</dd></div>
+                <ProgramLevelPriceEditor key={level.id} level={level} onSaved={onSaved} />
               ))}
-            </dl>
+            </div>
           </article>
         ))}
       </div>
@@ -919,9 +1394,9 @@ export default function AdminDashboard() {
       {activeSection === "programmes" ? <ProgrammesSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "content" ? <ContentSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "live-classes" ? <LiveClassesSection data={data} onSaved={dataQuery.refetch} /> : null}
-      {activeSection === "chat" ? (
+      {activeSection === "classrooms" ? (
         <div className="portal-page">
-          <PageHeading title="Programme chat moderation." description="Send messages to programme rooms and moderate inappropriate messages." />
+          <PageHeading title="Classroom moderation." description="Inspect programme classroom chat rooms and moderate inappropriate messages." />
           <ProgramChatPanel canModerate />
         </div>
       ) : null}

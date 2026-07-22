@@ -20,6 +20,9 @@ Deno.serve(async (request) => {
 
   const admin = await assertVerifiedAdmin(request);
   if (!admin.ok) return jsonResponse({ ok: false, error: admin.error }, admin.status, request);
+  let tutorUserId = "";
+  let createdNewAuthUser = false;
+  let failureStep = "validate_input";
 
   try {
     const body = await request.json();
@@ -41,40 +44,69 @@ Deno.serve(async (request) => {
     }
     if (!programId) throw new Error("Assign a programme to this tutor.");
 
-    const { data: existingProfiles, error: existingError } = await admin.supabase
+    failureStep = "find_existing_profile";
+    const { data: existingProfile, error: existingError } = await admin.supabase
       .from("profiles")
-      .select("id")
+      .select("id, email, full_name")
       .ilike("email", email)
-      .limit(1);
+      .maybeSingle();
 
     if (existingError) throw existingError;
-    if (existingProfiles?.length) {
-      return jsonResponse({ ok: false, error: "A user with this email already exists." }, 409, request);
+    if (existingProfile?.id) {
+      failureStep = "verify_existing_tutor_role";
+      const { data: existingRole, error: existingRoleError } = await admin.supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", existingProfile.id)
+        .maybeSingle();
+      if (existingRoleError) throw existingRoleError;
+      if (existingRole?.role !== "tutor") {
+        return jsonResponse({ ok: false, error: "A non-Tutor account already uses this email address." }, 409, request);
+      }
+      tutorUserId = existingProfile.id;
     }
 
-    const { data: created, error: createError } = await admin.supabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: fullName,
-        phone,
-        title,
-        role: "tutor",
-        must_change_password: true
-      }
-    });
+    if (!tutorUserId) {
+      failureStep = "create_auth_user";
+      const { data: created, error: createError } = await admin.supabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: fullName,
+          phone,
+          title,
+          role: "tutor",
+          must_change_password: true
+        }
+      });
 
-    if (createError) {
-      if (/already|registered|exists/i.test(createError.message || "")) {
-        return jsonResponse({ ok: false, error: "A user with this email already exists." }, 409, request);
+      if (createError) {
+        if (/already|registered|exists/i.test(createError.message || "")) {
+          failureStep = "repair_existing_auth_user";
+          const { data: listedUsers, error: listUsersError } = await admin.supabase.auth.admin.listUsers({
+            page: 1,
+            perPage: 1000
+          });
+          if (listUsersError) throw listUsersError;
+          const existingAuthUser = listedUsers?.users?.find((item: { email?: string; id?: string }) => normalizeEmail(item.email) === email);
+          if (!existingAuthUser?.id) {
+            return jsonResponse({ ok: false, error: "A user with this email already exists." }, 409, request);
+          }
+          tutorUserId = existingAuthUser.id;
+        } else {
+          throw createError;
+        }
       }
-      throw createError;
+
+      if (!tutorUserId) {
+        tutorUserId = created.user?.id || "";
+        createdNewAuthUser = true;
+        if (!tutorUserId) throw new Error("Tutor account was not created.");
+      }
     }
 
-    const tutorUserId = created.user?.id;
-    if (!tutorUserId) throw new Error("Tutor account was not created.");
-
+    failureStep = "upsert_profile";
     const { error: profileError } = await admin.supabase.from("profiles").upsert({
       id: tutorUserId,
       full_name: fullName,
@@ -89,12 +121,14 @@ Deno.serve(async (request) => {
     }, { onConflict: "id" });
     if (profileError) throw profileError;
 
+    failureStep = "upsert_role";
     const { error: roleError } = await admin.supabase.from("user_roles").upsert({
       user_id: tutorUserId,
       role: "tutor"
     }, { onConflict: "user_id" });
     if (roleError) throw roleError;
 
+    failureStep = "upsert_tutor_profile";
     const { error: tutorProfileError } = await admin.supabase.from("tutor_profiles").upsert({
       user_id: tutorUserId,
       title,
@@ -102,25 +136,46 @@ Deno.serve(async (request) => {
     }, { onConflict: "user_id" });
     if (tutorProfileError) throw tutorProfileError;
 
-    const { data: assignment, error: assignmentError } = await admin.supabase
+    failureStep = "assign_programme";
+    let assignmentQuery = admin.supabase
       .from("tutor_program_assignments")
-      .upsert({
-        tutor_id: tutorUserId,
-        program_id: programId,
-        track_id: trackId,
-        assigned_by: admin.user.id,
-        active: true
-      }, { onConflict: "tutor_id,program_id,track_id" })
       .select("id")
-      .maybeSingle();
+      .eq("tutor_id", tutorUserId)
+      .eq("program_id", programId);
+    assignmentQuery = trackId ? assignmentQuery.eq("track_id", trackId) : assignmentQuery.is("track_id", null);
+    const { data: existingAssignment, error: existingAssignmentError } = await assignmentQuery.maybeSingle();
+    if (existingAssignmentError) throw existingAssignmentError;
+
+    const { data: assignment, error: assignmentError } = existingAssignment?.id
+      ? await admin.supabase
+        .from("tutor_program_assignments")
+        .update({
+          assigned_by: admin.user.id,
+          active: true
+        })
+        .eq("id", existingAssignment.id)
+        .select("id")
+        .maybeSingle()
+      : await admin.supabase
+        .from("tutor_program_assignments")
+        .insert({
+          tutor_id: tutorUserId,
+          program_id: programId,
+          track_id: trackId,
+          assigned_by: admin.user.id,
+          active: true
+        })
+        .select("id")
+        .maybeSingle();
     if (assignmentError) throw assignmentError;
 
+    failureStep = "write_audit_log";
     await writeAuditLog(admin.supabase, {
       actorUserId: admin.user.id,
       action: "tutor_account_created",
       targetTable: "profiles",
       targetId: tutorUserId,
-      metadata: { assignmentId: assignment?.id || null, programId, trackId, email }
+      metadata: { assignmentId: assignment?.id || null, programId, trackId, email, createdNewAuthUser }
     });
 
     return jsonResponse({
@@ -129,7 +184,19 @@ Deno.serve(async (request) => {
       message: "Tutor account created successfully."
     }, 200, request);
   } catch (error) {
-    console.error("create-tutor-account", (error as Error).message);
-    return jsonResponse({ ok: false, error: (error as Error).message || "Tutor account could not be created." }, 400, request);
+    const message = (error as Error).message || "Tutor account could not be created.";
+    console.error("create-tutor-account", failureStep, message);
+    if (createdNewAuthUser && tutorUserId) {
+      const { error: deleteError } = await admin.supabase.auth.admin.deleteUser(tutorUserId);
+      if (deleteError) console.error("create-tutor-account cleanup", deleteError.message);
+    }
+    await writeAuditLog(admin.supabase, {
+      actorUserId: admin.user?.id,
+      action: "tutor_account_create_failed",
+      targetTable: "profiles",
+      targetId: tutorUserId || null,
+      metadata: { failureStep, message, cleanedUpAuthUser: createdNewAuthUser && Boolean(tutorUserId) }
+    });
+    return jsonResponse({ ok: false, error: `${message} Failed step: ${failureStep}.` }, 400, request);
   }
 });

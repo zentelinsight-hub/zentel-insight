@@ -106,6 +106,98 @@ export async function updateAdminProfile(userId, values) {
   return data;
 }
 
+export async function searchAdminStudents({ query = "", status = "all", programId = "", page = 1, pageSize = 25 } = {}) {
+  const supabase = await getClient();
+  const safePage = Math.max(1, Number(page) || 1);
+  const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 25));
+  const { data, error } = await supabase.rpc("admin_search_students", {
+    search_text: String(query || "").trim(),
+    status_filter: status || "all",
+    program_filter: programId || null,
+    page_limit: safePageSize,
+    page_offset: (safePage - 1) * safePageSize
+  });
+  if (error) throw error;
+  const rows = normalizeList(data);
+  const total = Number(rows[0]?.total_count || 0);
+  return {
+    records: rows.map((row) => {
+      const record = { ...row };
+      delete record.total_count;
+      return record;
+    }),
+    total,
+    page: safePage,
+    pageSize: safePageSize,
+    pageCount: Math.max(1, Math.ceil(total / safePageSize))
+  };
+}
+
+export async function searchAdminTutors({ query = "", filter = "all", page = 1, pageSize = 25 } = {}) {
+  const supabase = await getClient();
+  const safePage = Math.max(1, Number(page) || 1);
+  const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 25));
+  const { data, error } = await supabase.rpc("admin_search_tutors", {
+    search_text: String(query || "").trim(),
+    tutor_filter: filter || "all",
+    page_limit: safePageSize,
+    page_offset: (safePage - 1) * safePageSize
+  });
+  if (error) throw error;
+  const rows = normalizeList(data);
+  const total = Number(rows[0]?.total_count || 0);
+  return {
+    records: rows.map((row) => {
+      const record = { ...row };
+      delete record.total_count;
+      return record;
+    }),
+    total,
+    page: safePage,
+    pageSize: safePageSize,
+    pageCount: Math.max(1, Math.ceil(total / safePageSize))
+  };
+}
+
+export async function updateStudentProfile(values) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("admin_update_student_profile", {
+    target_user_id: values.id,
+    next_full_name: String(values.full_name || "").trim(),
+    next_phone: String(values.phone || "").trim(),
+    next_date_of_birth: values.date_of_birth || null,
+    next_education_level: String(values.education_level || "").trim(),
+    next_address: String(values.address || "").trim(),
+    next_program_id: values.program_id || null,
+    next_program_level_id: values.program_level_id || null,
+    next_account_status: values.account_status || null,
+    next_status_reason: values.status_reason || null
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function updateTutorProfile(values) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("admin_update_tutor_profile", {
+    target_tutor_id: values.user_id || values.id,
+    next_title: values.title || "Mr",
+    next_full_name: String(values.full_name || "").trim(),
+    next_phone: String(values.phone || "").trim(),
+    next_specialisation: String(values.specialisation || "").trim(),
+    next_professional_bio: String(values.professional_bio || "").trim(),
+    next_qualifications: String(values.qualifications || "").trim(),
+    next_teaching_experience: String(values.teaching_experience || "").trim(),
+    next_availability: String(values.availability || "").trim(),
+    next_account_status: values.account_status || null,
+    next_status_reason: values.status_reason || null,
+    next_program_id: values.program_id || null,
+    next_track_id: values.track_id || null
+  });
+  if (error) throw error;
+  return data;
+}
+
 export async function setAccountStatus({ userId, status, reason }) {
   const supabase = await getClient();
   const { data, error } = await supabase.rpc("admin_set_account_status", {
@@ -160,32 +252,37 @@ export async function saveProgramLevel(values) {
   return data;
 }
 
+export async function updateProgramLevelPrice({ levelId, price, reason }) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("admin_update_program_level_price", {
+    target_program_level_id: levelId,
+    next_price_naira: Number(price || 0),
+    change_reason: reason || null
+  });
+  if (error) throw error;
+  return data;
+}
+
 export async function assignStudentProgramme(values) {
   const supabase = await getClient();
-  const payload = {
-    user_id: values.user_id,
-    program_id: values.program_id,
-    program_level_id: values.program_level_id,
-    status: values.status || "active",
-    enrolled_date: values.enrolled_date || new Date().toISOString().slice(0, 10)
-  };
-  const { data, error } = await supabase.from("enrolments").insert(payload).select("*").single();
+  const { data, error } = await supabase.rpc("admin_assign_student_programme", {
+    target_user_id: values.user_id,
+    target_program_id: values.program_id,
+    target_program_level_id: values.program_level_id,
+    assignment_status: values.status || "active"
+  });
   if (error) throw error;
   return data;
 }
 
 export async function assignTutorProgramme(values) {
   const supabase = await getClient();
-  const { data, error } = await supabase
-    .from("tutor_program_assignments")
-    .upsert({
-      tutor_id: values.tutor_id,
-      program_id: values.program_id,
-      track_id: values.track_id || null,
-      active: values.active !== false
-    }, { onConflict: "tutor_id,program_id,track_id" })
-    .select("*")
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("admin_assign_tutor_programme", {
+    target_tutor_id: values.tutor_id,
+    target_program_id: values.program_id,
+    target_track_id: values.track_id || null,
+    assignment_active: values.active !== false
+  });
   if (error) throw error;
   return data;
 }

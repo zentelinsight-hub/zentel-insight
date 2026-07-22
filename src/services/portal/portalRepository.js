@@ -455,6 +455,36 @@ export async function getStudentTimetable(userId) {
   };
 }
 
+export async function getStudentLiveClasses(userId) {
+  const supabase = await getClient();
+  const scope = await getResolvedProgrammeScope(userId);
+  if (!scope.programIds.length) return [];
+
+  let query = supabase
+    .from("live_class_sessions")
+    .select("*, programs(id, title), program_levels(id, level_name), profiles!live_class_sessions_tutor_id_fkey(id, full_name, title)")
+    .in("program_id", scope.programIds)
+    .in("status", ["scheduled", "live"])
+    .order("scheduled_start", { ascending: true })
+    .limit(20);
+
+  if (scope.trackIds.length) {
+    query = query.or(`track_id.is.null,track_id.in.(${scope.trackIds.join(",")})`);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return normalizeList(data);
+}
+
+export async function getStudentClassroom(userId) {
+  if (!userId) return null;
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("get_resolved_student_classroom");
+  if (error) throw error;
+  return normalizeList(data)[0] || null;
+}
+
 export async function getStudentAnnouncements(userId) {
   const supabase = await getClient();
   const scope = await getActiveEnrolmentScope(userId);
@@ -626,9 +656,10 @@ export async function createSupportTicket(userId, values) {
 }
 
 export async function getStudentDashboard(userId) {
-  const [enrolments, timetableResult, announcements, assignments, resources, payments, certificates, notifications] = await Promise.all([
+  const [enrolments, timetableResult, liveClasses, announcements, assignments, resources, payments, certificates, notifications] = await Promise.all([
     withPortalFallback("dashboard enrolments", () => getStudentEnrolments(userId), []),
     withPortalFallback("dashboard timetable", () => getStudentTimetable(userId), getEmptyTimetableResult()),
+    withPortalFallback("dashboard live classes", () => getStudentLiveClasses(userId), []),
     withPortalFallback("dashboard announcements", () => getStudentAnnouncements(userId), []),
     withPortalFallback("dashboard assignments", () => getStudentAssignments(userId), []),
     withPortalFallback("dashboard resources", () => getStudentResources(userId), []),
@@ -650,6 +681,7 @@ export async function getStudentDashboard(userId) {
     needsProgrammeSelection: timetableResult.needsProgrammeSelection,
     upcomingClass: timetableResult.nextClass,
     todayClass: timetableResult.todayClass,
+    liveClasses,
     announcements: announcements.slice(0, 3),
     resources: resources.slice(0, 4),
     pendingAssignments: assignments.filter((item) => {

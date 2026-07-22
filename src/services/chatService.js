@@ -1,6 +1,6 @@
 import { getSupabaseClient } from "./supabaseClient";
 
-export const CHAT_IMAGE_BUCKET = "chat-images";
+export const CHAT_IMAGE_BUCKET = "classroom-media";
 export const CHAT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 
 const chatImageTypes = {
@@ -62,7 +62,11 @@ export async function sendProgramChatMessage({ roomId, senderId, body, imageFile
   let imagePath = "";
 
   if (imageFile) {
-    imagePath = `${roomId}/${senderId}/chat-${Date.now()}.${extension}`;
+    const now = new Date();
+    const year = String(now.getFullYear());
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    imagePath = `${roomId}/${senderId}/${year}/${month}/${id}.${extension}`;
     const { error: uploadError } = await supabase.storage.from(CHAT_IMAGE_BUCKET).upload(imagePath, imageFile, {
       cacheControl: "3600",
       contentType: imageFile.type,
@@ -87,6 +91,18 @@ export async function sendProgramChatMessage({ roomId, senderId, body, imageFile
   if (error) {
     if (imagePath) await supabase.storage.from(CHAT_IMAGE_BUCKET).remove([imagePath]);
     throw error;
+  }
+
+  if (imagePath) {
+    const { error: attachmentError } = await supabase.from("message_attachments").insert({
+      message_id: data.id,
+      bucket_id: CHAT_IMAGE_BUCKET,
+      storage_path: imagePath,
+      mime_type: imageFile.type,
+      size_bytes: imageFile.size,
+      uploaded_by: senderId
+    });
+    if (attachmentError && import.meta.env.DEV) console.info("Chat attachment metadata could not be saved", attachmentError);
   }
 
   return data;

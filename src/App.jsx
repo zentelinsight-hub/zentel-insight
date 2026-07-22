@@ -158,6 +158,7 @@ export default function App() {
               <Route path="programs" element={<Navigate to="/programs" replace />} />
               <Route path="enrolments" element={<Navigate to="/portal/my-courses" replace />} />
               <Route path="my-courses" element={<PortalSection page="my-courses" />} />
+              <Route path="classroom" element={<PortalSection page="classroom" />} />
               <Route path="timetable" element={<PortalSection page="timetable" />} />
               <Route path="announcements" element={<PortalSection page="announcements" />} />
               <Route path="assignments" element={<PortalSection page="assignments" />} />
