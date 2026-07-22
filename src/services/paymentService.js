@@ -1,4 +1,5 @@
 import { getProgramLevel, studyHubPricing } from "../data/programs";
+import { EdgeFunctionError, invokeEdgeFunction } from "./edgeFunctionClient";
 import { isValidEmail } from "../utils/format";
 import {
   COURSE_PAYMENT_TYPE,
@@ -174,18 +175,29 @@ function resolveStudyHubCheckout(item, customer) {
 }
 
 function resolveMainCheckout(item, customer) {
-  const selected = resolveCourseCheckout(item.programSlug, item.levelSlug);
-  const match = getProgramLevel(selected.programSlug, selected.levelSlug);
-  if (!match) throw new Error("This programme or payment option is unavailable. Return to the programmes page and choose a valid option.");
+  const selected = item?.programSlug && item?.levelSlug
+    ? {
+        programSlug: sanitizeText(item.programSlug),
+        levelSlug: sanitizeText(item.levelSlug),
+        programTitle: sanitizeText(item.programTitle || item.productTitle),
+        level: sanitizeText(item.level || item.trackName),
+        priceKobo: Number(item.priceKobo || 0),
+        price: Number(item.price || 0)
+      }
+    : resolveCourseCheckout(item.programSlug, item.levelSlug);
+  const fallbackMatch = getProgramLevel(selected.programSlug, selected.levelSlug);
+  const amountKobo = fallbackMatch?.level?.priceKobo || selected.priceKobo || nairaToKobo(fallbackMatch?.level?.price || selected.price || 0);
+  const programTitle = fallbackMatch?.program?.title || selected.programTitle || "Zentel Insight programme";
+  const trackName = fallbackMatch?.level?.name || selected.level || "Selected track";
 
   return {
     brand: "zentel_insight",
     productType: COURSE_PAYMENT_TYPE,
-    productTitle: match.program.title,
-    programSlug: match.program.slug,
-    trackSlug: match.level.slug,
-    trackName: match.level.name,
-    amountKobo: match.level.priceKobo || nairaToKobo(match.level.price),
+    productTitle: programTitle,
+    programSlug: selected.programSlug,
+    trackSlug: selected.levelSlug,
+    trackName,
+    amountKobo,
     referencePrefix: "ZI-COURSE",
     customerName: customer.name.trim(),
     customerEmail: customer.email.trim().toLowerCase(),
@@ -244,6 +256,55 @@ function createMetadata(record) {
   };
 }
 
+async function createServerPaymentSession(trustedCheckout, item, customer) {
+  const environment = getPaymentEnvironmentStatus();
+  try {
+    const data = await invokeEdgeFunction("create-payment-session", {
+      requireSession: false,
+      unavailableMessage: "Payment setup is temporarily unavailable.",
+      failureMessage: "Payment setup could not be completed.",
+      body: {
+      brand: trustedCheckout.brand === "studyhub" ? "studyhub" : "zentel_insight",
+      productType: trustedCheckout.productType,
+      programSlug: trustedCheckout.programSlug || item.programSlug,
+      trackSlug: trustedCheckout.trackSlug || item.levelSlug,
+      levelSlug: trustedCheckout.trackSlug || item.levelSlug,
+      classLevel: trustedCheckout.classLevel || item.studyHub?.classLevel,
+      classGroup: item.studyHub?.classGroup,
+      subjectIds: trustedCheckout.subjectNames || item.studyHub?.subjects || [],
+      subjects: trustedCheckout.subjectNames || item.studyHub?.subjects || [],
+      months: trustedCheckout.months || item.studyHub?.months,
+      parentName: customer.parentName || customer.name,
+      studentName: customer.studentName || trustedCheckout.studentName || customer.name,
+      customer: {
+        fullName: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        studentName: customer.studentName || "",
+        parentName: customer.parentName || customer.name
+      },
+      paystackPublicKeyMode: environment.paystackMode,
+      paystackPublicKeyConfigured: environment.paystackPublicKeyConfigured
+      }
+    });
+
+    if (!data?.ok) {
+      if (import.meta.env.DEV) console.info("Payment session fallback activated", { ok: data?.ok, code: data?.code || "" });
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.info("Payment session fallback activated", {
+        status: error instanceof EdgeFunctionError ? error.status : 0,
+        code: error instanceof EdgeFunctionError ? error.code : ""
+      });
+    }
+    return null;
+  }
+}
+
 async function createPaystackPopup() {
   try {
     const { default: Paystack } = await import("@paystack/inline-js");
@@ -251,6 +312,18 @@ async function createPaystackPopup() {
   } catch {
     throw new Error("Paystack could not be opened. No payment has been charged. Please check your connection and try again.");
   }
+}
+
+function openPaystackWithAccessCode(popup, session) {
+  if (session.accessCode && typeof popup.resumeTransaction === "function") {
+    popup.resumeTransaction(session.accessCode);
+    return true;
+  }
+  if (session.authorizationUrl) {
+    window.location.assign(session.authorizationUrl);
+    return true;
+  }
+  return false;
 }
 
 function makeResultPath(record, status, reason = "") {
@@ -273,17 +346,24 @@ function isDeclinedError(error) {
 
 export async function startPaystackPayment({ item, customer, onSuccess, onCancel, onError }) {
   const trustedCheckout = validatePaymentRequest({ item, customer });
-  const reference = generatePaymentReference(trustedCheckout.referencePrefix);
+  const serverSession = await createServerPaymentSession(trustedCheckout, item, customer);
+  const reference = serverSession?.reference || generatePaymentReference(trustedCheckout.referencePrefix);
   const pendingRecord = saveTemporaryPayment({
     ...trustedCheckout,
     reference,
+    paymentId: serverSession?.paymentId || "",
     currency: "NGN",
     createdAt: new Date().toISOString(),
-    temporaryStatus: "pending"
+    temporaryStatus: "pending",
+    providerMode: serverSession?.mode || "frontend_only"
   });
   const popup = await createPaystackPopup();
   const publicKey = getPaystackPublicKey();
   const metadata = createMetadata(pendingRecord);
+
+  if (serverSession?.mode === "backend" && openPaystackWithAccessCode(popup, serverSession)) {
+    return pendingRecord;
+  }
 
   popup.newTransaction({
     key: publicKey,

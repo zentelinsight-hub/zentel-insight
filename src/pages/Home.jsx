@@ -4,6 +4,7 @@ import {
   BookOpen,
   CalendarDays,
   GraduationCap,
+  MonitorPlay,
   ShieldCheck,
   Users
 } from "lucide-react";
@@ -114,6 +115,43 @@ export default function Home() {
               <span>{stat.label}</span>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="page-section portal-preview-section">
+        <div className="container portal-preview-grid">
+          <div className="portal-preview-copy">
+            <p className="eyebrow">Student Portal</p>
+            <h2>Your Learning, Organised in One Place</h2>
+            <p>
+              Access your programme information, class timetable, announcements, assignments, learning resources and
+              account updates through the Zentel Insight Student Portal.
+            </p>
+            <div className="hero-actions">
+              <Link className="button button-primary" to="/portal">
+                Open Student Portal
+                <MonitorPlay size={18} aria-hidden="true" />
+              </Link>
+              <Link className="button button-secondary" to="/programs">
+                Explore Programmes
+                <ArrowRight size={18} aria-hidden="true" />
+              </Link>
+            </div>
+          </div>
+          <div className="portal-preview-frame" aria-label="Student Portal dashboard preview">
+            <div className="portal-preview-browser-bar" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+            <img
+              src="/images/student-portal-preview.webp"
+              alt="Sanitized Zentel Insight Student Portal dashboard showing programme, timetable, announcement and learning-resource cards."
+              width="1440"
+              height="900"
+              loading="lazy"
+            />
+          </div>
         </div>
       </section>
 

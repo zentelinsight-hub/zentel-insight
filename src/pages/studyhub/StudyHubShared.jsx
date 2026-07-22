@@ -103,7 +103,11 @@ export function StudyHubFaq() {
     <div className="value-grid compact">
       {[
         ["Is an account required?", "No account is needed for StudyHub enrolment. Parents can pay directly from the enrolment page."],
-        ["How is the total calculated?", "Class price per subject per month multiplied by selected subjects and months."],
+        [
+          "How is the total calculated?",
+          "Each StudyHub option has its own current amount. Review the Pricing or Checkout page before paying; totals are calculated from the selected class, subjects and months."
+        ],
+        ["Are payments refundable?", "All payments made to Zentel Insight are final and non-refundable."],
         ["Are results guaranteed?", "No. StudyHub provides academic support and revision structure, but school results depend on many factors."]
       ].map(([title, body]) => (
         <article className="value-card" key={title}>

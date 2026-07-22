@@ -2,14 +2,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getEmailRedirectTo, loginWithEmail, resendSignupConfirmation, signupWithEmail } from "./authService";
 
-const mockState = vi.hoisted(() => ({ supabase: null }));
+const mockState = vi.hoisted(() => ({ supabase: null, role: "student", accountStatus: "active", invokeEdgeFunction: null }));
 
 vi.mock("./supabaseClient", () => ({
   getSupabaseClient: vi.fn(async () => mockState.supabase)
 }));
 
+vi.mock("./edgeFunctionClient", () => ({
+  EdgeFunctionError: class EdgeFunctionError extends Error {},
+  invokeEdgeFunction: vi.fn((...args) => mockState.invokeEdgeFunction(...args))
+}));
+
 beforeEach(() => {
   vi.stubEnv("VITE_SITE_URL", "https://zentelinsight.com.ng");
+  mockState.role = "student";
+  mockState.accountStatus = "active";
+  mockState.invokeEdgeFunction = vi.fn(async () => ({ linked: 0 }));
   mockState.supabase = {
     auth: {
       signInWithPassword: vi.fn(),
@@ -17,9 +25,16 @@ beforeEach(() => {
       resend: vi.fn(),
       signOut: vi.fn()
     },
-    functions: {
-      invoke: vi.fn(async () => ({ data: { linked: 0 }, error: null }))
-    }
+    from: vi.fn((table) => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: vi.fn(async () => ({
+            data: table === "user_roles" ? { role: mockState.role } : { account_status: mockState.accountStatus },
+            error: null
+          }))
+        }))
+      }))
+    }))
   };
 });
 
@@ -46,7 +61,24 @@ describe("auth service", () => {
       email: "student@example.com",
       password: "password123"
     });
-    expect(mockState.supabase.functions.invoke).toHaveBeenCalledWith("claim-my-enrolments", { body: {} });
+    expect(mockState.invokeEdgeFunction).toHaveBeenCalledWith("claim-my-enrolments", expect.objectContaining({ body: {} }));
+  });
+
+  it("allows inactive students to authenticate without claiming portal enrolments", async () => {
+    mockState.accountStatus = "inactive";
+    mockState.supabase.auth.signInWithPassword.mockResolvedValue({
+      data: {
+        session: { access_token: "token" },
+        user: { id: "user-1", email: "student@example.com", email_confirmed_at: "2026-07-16T00:00:00Z" }
+      },
+      error: null
+    });
+
+    const result = await loginWithEmail({ email: "student@example.com", password: "password123" });
+
+    expect(result.ok).toBe(true);
+    expect(result.accountStatus).toBe("inactive");
+    expect(mockState.invokeEdgeFunction).not.toHaveBeenCalled();
   });
 
   it("blocks unverified login before the portal and signs out locally", async () => {
@@ -64,7 +96,7 @@ describe("auth service", () => {
     expect(result.unverified).toBe(true);
     expect(result.message).toBe("Your email address has not been verified. Open your verification email or request a new one.");
     expect(mockState.supabase.auth.signOut).toHaveBeenCalledWith({ scope: "local" });
-    expect(mockState.supabase.functions.invoke).not.toHaveBeenCalled();
+    expect(mockState.invokeEdgeFunction).not.toHaveBeenCalled();
   });
 
   it("signs up through Supabase once with profile metadata and a confirmation-link redirect", async () => {

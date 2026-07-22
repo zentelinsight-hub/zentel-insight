@@ -14,3 +14,12 @@ verify_jwt = true
 
 [functions.delete-account]
 verify_jwt = true
+
+[functions.verify-admin-access-code]
+verify_jwt = true
+
+[functions.create-tutor-account]
+verify_jwt = true
+
+[functions.create-live-class-token]
+verify_jwt = true

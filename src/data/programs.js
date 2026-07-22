@@ -23,7 +23,10 @@ const standardNotice =
 const courseFaq = [
   ["Do I need prior experience?", "Start with the track that matches your current confidence. Foundation tracks are built for new learners."],
   ["Is employment guaranteed?", "No. The programmes build practical skill and portfolio evidence, but no job or income outcome is guaranteed."],
-  ["How is payment handled?", "Checkout uses the selected track price from the approved catalogue and card details are handled by Paystack."]
+  [
+    "How is payment handled?",
+    "Each programme and track has its own price. Learners should check the Programme page or Checkout page for the current amount before paying. Card details are handled by Paystack. All payments made to Zentel Insight are final and non-refundable."
+  ]
 ];
 
 function makeProgram(config) {

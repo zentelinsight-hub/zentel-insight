@@ -248,6 +248,11 @@ export default function StudyHubEnrol({ programme = "" }) {
               <div className="total"><span>Total</span><strong>{formatCurrency(total)}</strong></div>
             </div>
 
+            <p className="payment-notice">
+              Confirm the selected option and total before payment. All payments made to Zentel Insight are final and
+              non-refundable. Keep your Paystack reference for manual confirmation.
+            </p>
+
             {status ? <div className="form-status warning">{status}</div> : null}
             <button className="button button-primary" type="submit" disabled={loading}>
               {loading ? "Opening Paystack" : "Pay with Paystack"}

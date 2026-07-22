@@ -2,7 +2,8 @@ import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import ProgramCard from "../components/ProgramCard";
 import SectionHeader from "../components/SectionHeader";
-import { programs } from "../data/programs";
+import { programs as fallbackPrograms } from "../data/programs";
+import { usePublicPrograms } from "../hooks/usePublicCatalog";
 import { usePageMeta } from "../utils/usePageMeta";
 
 const trackFilters = ["All", "Foundations", "Applications", "Portfolio"];
@@ -10,6 +11,8 @@ const trackFilters = ["All", "Foundations", "Applications", "Portfolio"];
 export default function Programs() {
   const [query, setQuery] = useState("");
   const [trackFilter, setTrackFilter] = useState("All");
+  const programsQuery = usePublicPrograms();
+  const programs = useMemo(() => programsQuery.data || fallbackPrograms, [programsQuery.data]);
 
   usePageMeta({
     path: "/programs",
@@ -30,7 +33,7 @@ export default function Programs() {
         program.levels.some((item) => item.name.toLowerCase().includes(trackFilter.toLowerCase()));
       return matchesQuery && matchesTrack;
     });
-  }, [query, trackFilter]);
+  }, [programs, query, trackFilter]);
 
   return (
     <>
@@ -84,6 +87,14 @@ export default function Programs() {
               {filteredPrograms.map((program) => (
                 <ProgramCard key={program.slug} program={program} />
               ))}
+            </div>
+          ) : programsQuery.loading ? (
+            <div className="route-loader">Loading current programmes</div>
+          ) : programsQuery.error ? (
+            <div className="notice-card">
+              <h2>Programmes could not be refreshed</h2>
+              <p>The local catalogue is shown only when the online programme records are unavailable.</p>
+              <button className="button button-secondary" type="button" onClick={programsQuery.refetch}>Try Again</button>
             </div>
           ) : (
             <div className="notice-card">

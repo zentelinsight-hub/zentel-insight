@@ -25,6 +25,7 @@ function renderAuth(mode, initialEntries = [mode === "signup" ? "/signup" : "/lo
         <Route path="/signup" element={<><AuthForm mode="signup" /><LocationProbe /></>} />
         <Route path="/login" element={<><AuthForm mode="login" /><LocationProbe /></>} />
         <Route path="/portal" element={<div>Portal reached</div>} />
+        <Route path="/admin/verify" element={<div>Admin verification reached</div>} />
       </Routes>
     </MemoryRouter>
   );
@@ -83,10 +84,46 @@ describe("AuthForm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Log In" }));
 
     expect(await screen.findByText("Portal reached")).toBeInTheDocument();
-    expect(authMocks.loginWithEmail).toHaveBeenCalledWith(expect.objectContaining({
-      email: "learner@example.com",
-      password: "password123"
-    }));
+    expect(authMocks.loginWithEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: "learner@example.com",
+        password: "password123"
+      }),
+      expect.objectContaining({ onProgress: expect.any(Function) })
+    );
+  });
+
+  it("shows viewport secure-login progress while account checks complete", async () => {
+    let resolveLogin;
+    authMocks.loginWithEmail.mockImplementation((_payload, options) => {
+      options.onProgress({ type: "password-authenticated" });
+      options.onProgress({ type: "role-resolved", role: "student" });
+      options.onProgress({ type: "account-status-checked", role: "student", accountStatus: "active" });
+      return new Promise((resolve) => {
+        resolveLogin = resolve;
+      });
+    });
+    renderAuth("login", ["/login?returnTo=/portal"]);
+
+    fireEvent.change(screen.getAllByLabelText("Email address")[0], { target: { value: "learner@example.com" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password123" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Log In" }));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("status", { name: "Secure sign-in progress" })).toHaveClass("auth-progress-overlay");
+    expect(screen.getByText("Signing you in")).toBeInTheDocument();
+    expect(screen.getByText("Checking account status")).toBeInTheDocument();
+    expect(screen.getByText("Running security checks")).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(["Checking", "account", "role"].join(" "), "i"))).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveLogin({ ok: true, role: "student", message: "ok" });
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByText("Portal reached")).toBeInTheDocument();
   });
 
   it("resends a confirmation link from the login page", async () => {

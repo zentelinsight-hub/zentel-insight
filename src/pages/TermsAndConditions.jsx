@@ -40,14 +40,16 @@ export default function TermsAndConditions() {
 
         <h2>Payments and Enrolment</h2>
         <p>
-          Payments are handled through Paystack. A successful browser callback does not automatically mean payment
-          confirmation has been completed. Course access is activated only after the transaction is confirmed.
+          Each programme and track has its own price. Learners should check the Programme or Checkout page for the
+          current amount before paying. Payments are handled through Paystack. A successful browser callback does not
+          automatically mean payment confirmation has been completed. Course access is activated only after the
+          transaction is confirmed.
         </p>
 
-        <h2>Refunds and Changes</h2>
+        <h2>Payment Finality and Changes</h2>
         <p>
-          Refunds, rescheduling, and enrolment changes should follow the officially published Zentel Insight policy when
-          available. Until then, learners should confirm the current conditions before payment by contacting{" "}
+          All payments made to Zentel Insight are final and non-refundable. Learners should confirm the current
+          programme, track, schedule, enrolment conditions, and total amount before payment by contacting{" "}
           <a href={`mailto:${siteConfig.contact.email}`}>{siteConfig.contact.email}</a>.
         </p>
 

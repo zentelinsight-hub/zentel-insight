@@ -2,17 +2,20 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CreditCard, ShieldCheck } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/authHooks";
-import { getProgramBySlug, getProgramLevel, programs } from "../../data/programs";
+import { getProgramBySlug, getProgramLevel, programs as fallbackPrograms, slugifyProgramValue } from "../../data/programs";
+import { usePublicPrograms } from "../../hooks/usePublicCatalog";
 import { formatCurrency, isValidEmail } from "../../utils/format";
-import { resolveCourseCheckout } from "../../utils/paymentCalculations";
+import { COURSE_PAYMENT_TYPE, nairaToKobo } from "../../utils/paymentCalculations";
 import { startPaystackPayment } from "../../services/paymentService";
 
 export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lockedSelection = false }) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { profile, user } = useAuth();
+  const programsQuery = usePublicPrograms();
+  const programs = programsQuery.data || fallbackPrograms;
   const startingProgramSlug = initialProgramSlug || searchParams.get("program") || (lockedSelection ? "" : programs[0]?.slug || "");
-  const defaultProgram = getProgramBySlug(startingProgramSlug);
+  const defaultProgram = programs.find((program) => program.slug === startingProgramSlug) || getProgramBySlug(startingProgramSlug);
   const startingLevelSlug = initialLevelSlug || searchParams.get("level") || defaultProgram?.levels?.[0]?.slug || "";
   const [programSlug, setProgramSlug] = useState(startingProgramSlug);
   const [levelSlug, setLevelSlug] = useState(startingLevelSlug);
@@ -23,9 +26,17 @@ export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lock
   const paymentOpeningRef = useRef(false);
   const hasNavigatedRef = useRef(false);
 
-  const selectedProgram = useMemo(() => getProgramBySlug(programSlug), [programSlug]);
-  const selected = useMemo(() => getProgramLevel(programSlug, levelSlug), [programSlug, levelSlug]);
+  const selectedProgram = useMemo(
+    () => programs.find((program) => program.slug === programSlug) || getProgramBySlug(programSlug),
+    [programSlug, programs]
+  );
+  const selected = useMemo(() => {
+    const publicLevel = selectedProgram?.levels.find((level) => level.slug === slugifyProgramValue(levelSlug) || slugifyProgramValue(level.name) === slugifyProgramValue(levelSlug));
+    if (selectedProgram && publicLevel) return { program: selectedProgram, level: publicLevel };
+    return getProgramLevel(programSlug, levelSlug);
+  }, [levelSlug, programSlug, selectedProgram]);
   const loading = ["creating_session", "opening", "verifying"].includes(paymentState);
+  const shouldWaitForOnlineCatalogue = !lockedSelection && !selectedProgram && programsQuery.loading;
 
   useEffect(() => {
     setCustomer((current) => ({
@@ -75,7 +86,17 @@ export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lock
     paymentOpeningRef.current = true;
     hasNavigatedRef.current = false;
     setPaymentState("creating_session");
-    const item = resolveCourseCheckout(selected.program.slug, selected.level.slug);
+    const item = {
+      paymentType: COURSE_PAYMENT_TYPE,
+      slug: `${selected.program.slug}:${selected.level.slug}`,
+      title: `${selected.program.title} - ${selected.level.name}`,
+      programSlug: selected.program.slug,
+      programTitle: selected.program.title,
+      levelSlug: selected.level.slug,
+      level: selected.level.name,
+      price: selected.level.price,
+      priceKobo: selected.level.priceKobo || nairaToKobo(selected.level.price)
+    };
 
     try {
       await startPaystackPayment({
@@ -122,6 +143,7 @@ export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lock
   }
 
   if (!selectedProgram) {
+    if (shouldWaitForOnlineCatalogue) return <div className="route-loader">Loading current programme prices</div>;
     return (
       <div className="notice-card">
         <h2>Program Not Found</h2>
@@ -244,8 +266,9 @@ export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lock
       </div>
 
       <p className="payment-notice">
-        Card details are handled by Paystack. Keep your payment reference for manual confirmation; course access is not
-        activated by this temporary checkout page.
+        Card details are handled by Paystack. Confirm the selected track and total payable before payment. All payments
+        made to Zentel Insight are final and non-refundable. Keep your payment reference for manual confirmation; course
+        access is activated only after payment is confirmed.
       </p>
 
       {status.message ? <div className={`form-status ${status.type}`} aria-live="polite">{status.message}</div> : null}

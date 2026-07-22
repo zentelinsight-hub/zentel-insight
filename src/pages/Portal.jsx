@@ -58,6 +58,7 @@ import {
   updateStudentProfile
 } from "../services/portal/portalRepository";
 import { claimMyEnrolments, requestPasswordReset } from "../services/authService";
+import { readStoredLastActivity, writeStoredLastActivity, clearStoredSessionSecurity } from "../services/sessionSecurity";
 import { formatCurrency, formatDateTime, isValidEmail } from "../utils/format";
 import { usePageMeta } from "../utils/usePageMeta";
 import BrandLogo from "../components/BrandLogo";
@@ -475,6 +476,7 @@ function usePortalIdleSession({ enabled, signOut, onBeforeSignOut }) {
     clearTimers();
     setWarningOpen(false);
     onBeforeSignOut?.();
+    clearStoredSessionSecurity();
     if (shouldBroadcast) broadcast("signed_out");
     await signOut({ scope: "local" });
     navigate("/login?reason=idle", { replace: true });
@@ -497,6 +499,7 @@ function usePortalIdleSession({ enabled, signOut, onBeforeSignOut }) {
     if (!enabled || signingOutRef.current) return;
     clearTimers();
     lastActivityRef.current = Date.now();
+    writeStoredLastActivity(lastActivityRef.current);
     logoutAtRef.current = lastActivityRef.current + PORTAL_IDLE_TIMEOUT_MS;
     setWarningOpen(false);
     setRemainingMs(PORTAL_IDLE_TIMEOUT_MS - PORTAL_IDLE_WARNING_MS);
@@ -516,7 +519,20 @@ function usePortalIdleSession({ enabled, signOut, onBeforeSignOut }) {
   useEffect(() => {
     if (!enabled) return undefined;
     signingOutRef.current = false;
-    resetTimers(false);
+    const storedActivity = readStoredLastActivity();
+    if (storedActivity && Date.now() - storedActivity >= PORTAL_IDLE_TIMEOUT_MS) {
+      void runLocalSignOut(true);
+      return undefined;
+    }
+    if (storedActivity) {
+      lastActivityRef.current = storedActivity;
+      writeStoredLastActivity(storedActivity);
+      const elapsed = Date.now() - storedActivity;
+      if (elapsed >= PORTAL_IDLE_WARNING_MS) showWarning(false);
+      else resetTimers(false);
+    } else {
+      resetTimers(false);
+    }
 
     const events = ["pointerdown", "keydown", "touchstart", "scroll", "wheel", "mousemove", "visibilitychange", "focus"];
     events.forEach((eventName) => window.addEventListener(eventName, recordActivity, { passive: true }));

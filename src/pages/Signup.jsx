@@ -20,6 +20,13 @@ export default function Signup() {
           <p className="eyebrow">Create account</p>
           <h1>Create your student account.</h1>
           <p>Create your Zentel Insight student account and verify your email to continue.</p>
+          <div className="auth-security-copy">
+            <h2>Registration details</h2>
+            <p>
+              Please ensure that your name, contact information and other registration details are correct before
+              creating your account. Some account information can only be updated by Zentel Insight administration.
+            </p>
+          </div>
         </div>
         <AuthForm mode="signup" />
       </div>

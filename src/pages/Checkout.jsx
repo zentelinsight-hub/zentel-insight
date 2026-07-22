@@ -1,18 +1,20 @@
 import BrandLogo from "../components/BrandLogo";
 import PaymentForm from "../components/payment/PaymentForm";
-import { getProgramBySlug, getProgramLevel } from "../data/programs";
+import { usePublicProgram } from "../hooks/usePublicCatalog";
 import { usePageMeta } from "../utils/usePageMeta";
 import { useParams } from "react-router-dom";
+import { getProgramBySlug, slugifyProgramValue } from "../data/programs";
 
 export default function Checkout() {
   const { programSlug, trackSlug } = useParams();
-  const program = getProgramBySlug(programSlug);
-  const selected = getProgramLevel(programSlug, trackSlug);
-  const heading = selected ? `Pay for ${selected.program.title}.` : program ? "Track Not Found" : "Program Not Found";
+  const programQuery = usePublicProgram(programSlug);
+  const program = programQuery.data || getProgramBySlug(programSlug);
+  const selectedLevel = program?.levels.find((level) => level.slug === slugifyProgramValue(trackSlug) || slugifyProgramValue(level.name) === slugifyProgramValue(trackSlug));
+  const heading = selectedLevel ? `Pay for ${program.title}.` : program ? "Track Not Found" : "Program Not Found";
 
   usePageMeta({
     path: `/checkout/${programSlug || ""}/${trackSlug || ""}`,
-    title: selected ? `Checkout - ${selected.program.title}` : "Checkout",
+    title: selectedLevel ? `Checkout - ${program.title}` : "Checkout",
     description: "Public Zentel Insight course checkout with trusted catalogue pricing.",
     robots: "noindex,nofollow"
   });

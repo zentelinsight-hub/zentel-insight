@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, Lock, Mail, Send } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import AuthProgressOverlay from "../AuthProgressOverlay";
 import { loginWithEmail, resendSignupConfirmation, signupWithEmail } from "../../services/authService";
+import { getHomePathForRole, USER_ROLES } from "../../services/roleService";
 import { isValidEmail } from "../../utils/format";
+import { createProgressState } from "../../utils/authProgress";
 import { safeRedirectPath } from "../../utils/paymentCalculations";
 
 const checkEmailMessage =
@@ -16,12 +19,23 @@ function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function getLoginDestination(result, returnTo) {
+  const roleHome = getHomePathForRole(result.role, false);
+  if (!returnTo || returnTo === "/portal") return roleHome;
+  if (result.role === USER_ROLES.ADMIN) {
+    return returnTo.startsWith("/admin") ? `/admin/verify?returnTo=${encodeURIComponent(returnTo)}` : roleHome;
+  }
+  if (result.role === USER_ROLES.TUTOR) return returnTo.startsWith("/tutor") ? returnTo : roleHome;
+  return returnTo.startsWith("/portal") ? returnTo : roleHome;
+}
+
 export default function AuthForm({ mode }) {
   const isSignup = mode === "signup";
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [authProgress, setAuthProgress] = useState(null);
   const [status, setStatus] = useState({ type: "", message: "" });
   const [showCheckEmailModal, setShowCheckEmailModal] = useState(false);
   const [resendEmail, setResendEmail] = useState(searchParams.get("email") || "");
@@ -116,6 +130,30 @@ export default function AuthForm({ mode }) {
     return nextErrors;
   }
 
+  function handleLoginProgress(event) {
+    if (event.type === "password-authenticated") {
+      setAuthProgress(createProgressState("initial", 0, [0]));
+      return;
+    }
+
+    if (event.type === "role-resolved") {
+      const variant = event.role === USER_ROLES.ADMIN ? "adminPassword" : "standard";
+      setAuthProgress(createProgressState(variant, 1, [0]));
+      return;
+    }
+
+    if (event.type === "account-status-checked") {
+      const variant = event.role === USER_ROLES.ADMIN ? "adminPassword" : "standard";
+      setAuthProgress(createProgressState(variant, 2, [0, 1]));
+      return;
+    }
+
+    if (event.type === "security-checks-complete") {
+      const variant = event.role === USER_ROLES.ADMIN ? "adminPassword" : "standard";
+      setAuthProgress(createProgressState(variant, 2, [0, 1, 2]));
+    }
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     if (submittingRef.current) return;
@@ -126,10 +164,11 @@ export default function AuthForm({ mode }) {
 
     submittingRef.current = true;
     setLoading(true);
+    if (!isSignup) setAuthProgress(createProgressState("initial", 0, []));
     let navigated = false;
     try {
       const payload = { ...values, email: normalizeEmail(values.email) };
-      const result = isSignup ? await signupWithEmail(payload) : await loginWithEmail(payload);
+      const result = isSignup ? await signupWithEmail(payload) : await loginWithEmail(payload, { onProgress: handleLoginProgress });
       setStatus({ type: result.ok ? "success" : "warning", message: result.message });
       if (result.ok && isSignup) {
         setShowCheckEmailModal(true);
@@ -137,7 +176,7 @@ export default function AuthForm({ mode }) {
       }
       if (result.ok && !isSignup) {
         navigated = true;
-        navigate(returnTo, { replace: true });
+        navigate(getLoginDestination(result, returnTo), { replace: true });
       }
       if (!result.ok && result.unverified) {
         setResendEmail(payload.email);
@@ -148,6 +187,7 @@ export default function AuthForm({ mode }) {
       submittingRef.current = false;
       if (!navigated && !showCheckEmailModal) {
         setLoading(false);
+        setAuthProgress(null);
       }
     }
   }
@@ -177,6 +217,7 @@ export default function AuthForm({ mode }) {
 
   return (
     <>
+      <AuthProgressOverlay progress={authProgress} />
       <form className="form-card auth-card" onSubmit={handleSubmit} noValidate>
         {!isSignup && notice === "verify-email" ? (
           <div className="form-status warning" role="status">

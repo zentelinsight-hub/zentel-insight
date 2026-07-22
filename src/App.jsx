@@ -6,6 +6,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import RouteTransitionGate from "./components/RouteTransitionGate";
 import WelcomeExperience from "./components/WelcomeExperience";
 import { PortalLayout, PortalOverview, PortalProfile, PortalSection } from "./pages/Portal";
+import { USER_ROLES } from "./services/roleService";
 
 function getRouteBrand(location) {
   const params = new URLSearchParams(location.search);
@@ -58,6 +59,9 @@ const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const EmailVerified = lazy(() => import("./pages/EmailVerified"));
 const EmailVerificationFailed = lazy(() => import("./pages/EmailVerificationFailed"));
+const AdminVerify = lazy(() => import("./pages/AdminVerify"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const TutorDashboard = lazy(() => import("./pages/TutorDashboard"));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const Payment = lazy(() => import("./pages/Payment"));
 const PaymentStatus = lazy(() => import("./pages/PaymentStatus"));
@@ -65,6 +69,7 @@ const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
 const PaymentState = lazy(() => import("./pages/PaymentState"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const TermsAndConditions = lazy(() => import("./pages/TermsAndConditions"));
+const AccountDeletion = lazy(() => import("./pages/AccountDeletion"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function ScrollToTop() {
@@ -144,6 +149,7 @@ export default function App() {
               <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
               <Route path="/terms-conditions" element={<Navigate to="/terms-and-conditions" replace />} />
               <Route path="/terms" element={<Navigate to="/terms-and-conditions" replace />} />
+              <Route path="/account-deletion" element={<AccountDeletion />} />
               <Route path="/404" element={<NotFound />} />
               <Route path="*" element={<NotFound />} />
             </Route>
@@ -164,6 +170,26 @@ export default function App() {
               <Route path="settings" element={<PortalSection page="settings" />} />
               <Route path="profile" element={<PortalProfile />} />
             </Route>
+            <Route
+              path="/admin/verify"
+              element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]}><AdminVerify /></ProtectedRoute>}
+            />
+            <Route
+              path="/admin"
+              element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard /></ProtectedRoute>}
+            />
+            <Route
+              path="/admin/:section"
+              element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard /></ProtectedRoute>}
+            />
+            <Route
+              path="/tutor"
+              element={<ProtectedRoute allowedRoles={[USER_ROLES.TUTOR]}><TutorDashboard /></ProtectedRoute>}
+            />
+            <Route
+              path="/tutor/:section"
+              element={<ProtectedRoute allowedRoles={[USER_ROLES.TUTOR]}><TutorDashboard /></ProtectedRoute>}
+            />
             </Routes>
           )}
         </RouteTransitionGate>

@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import BrandLogo from "../components/BrandLogo";
 import SectionHeader from "../components/SectionHeader";
 import { getProgramBySlug } from "../data/programs";
+import { usePublicProgram } from "../hooks/usePublicCatalog";
 import { siteConfig } from "../data/site";
 import { formatCurrency } from "../utils/format";
 import { getProgramIcon } from "../utils/programIcons.jsx";
@@ -28,7 +29,8 @@ function InfoList({ icon: Icon = Check, items }) {
 export default function ProgramDetail() {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const program = getProgramBySlug(slug);
+  const programQuery = usePublicProgram(slug);
+  const program = programQuery.data || getProgramBySlug(slug);
   const [selectedLevelSlug, setSelectedLevelSlug] = useState("");
   const selectedLevel = useMemo(
     () => program?.levels.find((level) => level.slug === selectedLevelSlug) || null,
@@ -60,14 +62,19 @@ export default function ProgramDetail() {
       : undefined
   });
 
+  if (programQuery.loading && !program) {
+    return <div className="route-loader">Loading programme details</div>;
+  }
+
   if (!program) {
     return (
       <section className="page-section">
         <div className="container narrow">
           <div className="notice-card">
             <p className="eyebrow">Program unavailable</p>
-            <h1>We could not find that programme.</h1>
+            <h1>{programQuery.error ? "We could not load that programme." : "We could not find that programme."}</h1>
             <p>Return to the Programs page and choose from the current catalogue.</p>
+            {programQuery.error ? <button className="button button-secondary" type="button" onClick={programQuery.refetch}>Try Again</button> : null}
             <Link className="button button-primary" to="/programs">
               <ArrowLeft size={18} aria-hidden="true" />
               Back to Programs

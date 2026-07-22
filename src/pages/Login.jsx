@@ -23,7 +23,14 @@ export default function Login() {
           <BrandLogo brand="main" className="page-brand-logo" size="auth" />
           <p className="eyebrow">Account access</p>
           <h1>Log in to continue.</h1>
-          <p>Sign in to continue to your Zentel Insight student portal.</p>
+          <p>Sign in to continue to your Zentel Insight account workspace.</p>
+          <div className="auth-security-copy">
+            <h2>Secure sign-in</h2>
+            <p>
+              Your account is protected through secure authentication. Never share your password, verification code or
+              Student Portal credentials with another person.
+            </p>
+          </div>
         </div>
         <div className="auth-form-stack">
           {reason === "idle" ? (

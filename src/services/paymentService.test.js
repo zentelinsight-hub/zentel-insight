@@ -7,13 +7,19 @@ import {
 } from "../utils/paymentCalculations";
 
 const paystackMocks = vi.hoisted(() => ({
-  newTransaction: vi.fn()
+  newTransaction: vi.fn(),
+  invokeEdgeFunction: vi.fn()
 }));
 
 vi.mock("@paystack/inline-js", () => ({
   default: vi.fn(function PaystackInlineMock() {
     this.newTransaction = paystackMocks.newTransaction;
   })
+}));
+
+vi.mock("./edgeFunctionClient", () => ({
+  EdgeFunctionError: class EdgeFunctionError extends Error {},
+  invokeEdgeFunction: vi.fn((...args) => paystackMocks.invokeEdgeFunction(...args))
 }));
 
 const customer = {
@@ -64,6 +70,8 @@ function getPaystackConfig() {
 
 beforeEach(() => {
   paystackMocks.newTransaction.mockReset();
+  paystackMocks.invokeEdgeFunction.mockReset();
+  paystackMocks.invokeEdgeFunction.mockRejectedValue(new Error("Payment setup is temporarily unavailable."));
   window.sessionStorage.clear();
   vi.spyOn(Date, "now").mockReturnValue(1790000000000);
 });

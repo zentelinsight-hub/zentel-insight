@@ -1,4 +1,6 @@
 import { getSupabaseClient } from "./supabaseClient";
+import { ACCOUNT_STATUSES, getCurrentUserAccountStatus, getCurrentUserRole, USER_ROLES } from "./roleService";
+import { EdgeFunctionError, invokeEdgeFunction } from "./edgeFunctionClient";
 
 const authTimeoutMs = 15000;
 const verificationNotice =
@@ -56,7 +58,12 @@ function getSafeAuthError(error, fallback) {
   return message || fallback;
 }
 
-export async function loginWithEmail({ email, password }) {
+function notifyProgress(callback, event) {
+  if (typeof callback === "function") callback(event);
+}
+
+export async function loginWithEmail({ email, password }, options = {}) {
+  const onProgress = options.onProgress;
   const supabase = await getSupabaseClient();
   if (!supabase) {
     return {
@@ -89,8 +96,14 @@ export async function loginWithEmail({ email, password }) {
     return { ok: false, unverified: true, message: verificationNotice };
   }
 
-  await claimMyEnrolments();
-  return { ok: true, session: data.session, user: data.user, message: "You are now logged in." };
+  notifyProgress(onProgress, { type: "password-authenticated" });
+  const role = await getCurrentUserRole(data.user.id);
+  notifyProgress(onProgress, { type: "role-resolved", role });
+  const accountStatus = await getCurrentUserAccountStatus(data.user.id);
+  notifyProgress(onProgress, { type: "account-status-checked", role, accountStatus });
+  if (role === USER_ROLES.STUDENT && accountStatus === ACCOUNT_STATUSES.ACTIVE) await claimMyEnrolments();
+  notifyProgress(onProgress, { type: "security-checks-complete", role, accountStatus });
+  return { ok: true, session: data.session, user: data.user, role, accountStatus, message: "You are now logged in." };
 }
 
 export async function signupWithEmail({ email, password, fullName, dateOfBirth, phone, educationLevel, address }) {
@@ -189,27 +202,21 @@ export async function updatePassword(password) {
 }
 
 export async function claimMyEnrolments() {
-  const supabase = await getSupabaseClient();
-  if (!supabase) return { ok: false, linked: 0, message: "Account access is temporarily unavailable." };
-
-  let data;
-  let error;
   try {
-    ({ data, error } = await withTimeout(
-      supabase.functions.invoke("claim-my-enrolments", { body: {} }),
-      "Claiming paid enrolments timed out."
-    ));
+    const data = await invokeEdgeFunction("claim-my-enrolments", {
+      body: {},
+      unavailableMessage: "Paid enrolments could not be refreshed. Please try again from the portal.",
+      failureMessage: "Paid enrolments could not be refreshed. Please try again from the portal."
+    });
+    return {
+      ok: true,
+      linked: Number(data?.linked || 0),
+      message: data?.message || "Paid enrolments refreshed."
+    };
   } catch (requestError) {
-    return { ok: false, linked: 0, message: requestError.message || "Paid enrolments could not be refreshed." };
+    if (requestError instanceof EdgeFunctionError) {
+      return { ok: false, linked: 0, message: requestError.message };
+    }
+    return { ok: false, linked: 0, message: "Paid enrolments could not be refreshed." };
   }
-
-  if (error) {
-    return { ok: false, linked: 0, message: error.message || "Paid enrolments could not be refreshed." };
-  }
-
-  return {
-    ok: true,
-    linked: Number(data?.linked || 0),
-    message: data?.message || "Paid enrolments refreshed."
-  };
 }
