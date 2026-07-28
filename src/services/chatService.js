@@ -47,11 +47,27 @@ async function withMessageImageUrl(message, supabase) {
   return { ...message, image_url: signed?.signedUrl || "" };
 }
 
+async function getProfilesById(supabase, userIds) {
+  const ids = [...new Set(userIds.filter(Boolean))];
+  if (!ids.length) return new Map();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, title, avatar_path")
+    .in("id", ids);
+  if (error) throw error;
+  return new Map(normalizeList(data).map((profile) => [profile.id, profile]));
+}
+
+async function hydrateMessage(message, supabase, profileById = null) {
+  const profiles = profileById || await getProfilesById(supabase, [message?.sender_id]);
+  return withMessageImageUrl({ ...message, profiles: profiles.get(message?.sender_id) || null }, supabase);
+}
+
 export async function getProgramChatMessages(roomId, { limit = 40, before } = {}) {
   const supabase = await getClient();
   let query = supabase
     .from("program_chat_messages")
-    .select("*, profiles!program_chat_messages_sender_id_fkey(id, full_name, title, avatar_path)")
+    .select("*")
     .eq("room_id", roomId)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -60,7 +76,8 @@ export async function getProgramChatMessages(roomId, { limit = 40, before } = {}
   if (error) throw error;
 
   const messages = normalizeList(data).reverse();
-  return Promise.all(messages.map((message) => withMessageImageUrl(message, supabase)));
+  const profileById = await getProfilesById(supabase, messages.map((message) => message.sender_id));
+  return Promise.all(messages.map((message) => hydrateMessage(message, supabase, profileById)));
 }
 
 function validateChatImage(file) {
@@ -120,7 +137,17 @@ export async function sendProgramChatMessage({ roomId, senderId, body, imageFile
     if (attachmentError && import.meta.env.DEV) console.info("Chat attachment metadata could not be saved", attachmentError);
   }
 
-  return data;
+  return hydrateMessage(data, supabase);
+}
+
+export async function getProgramChatUnreadCounts() {
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("get_program_chat_unread_counts");
+  if (error) throw error;
+  return normalizeList(data).reduce((counts, item) => {
+    counts[item.room_id] = Number(item.unread_count || 0);
+    return counts;
+  }, {});
 }
 
 export async function markProgramChatRead(roomId, userId) {
@@ -170,7 +197,7 @@ export async function subscribeToProgramChat(roomId, onMessage) {
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "program_chat_messages", filter: `room_id=eq.${roomId}` },
       (payload) => {
-        withMessageImageUrl(payload.new, supabase)
+        hydrateMessage(payload.new, supabase)
           .then((message) => onMessage?.(message))
           .catch(() => onMessage?.(payload.new));
       }

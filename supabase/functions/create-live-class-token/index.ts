@@ -186,12 +186,23 @@ Deno.serve(async (request) => {
     const authorized = await isAuthorizedForSession(supabase, auth.user.id, role, session);
     if (!authorized) return jsonResponse({ ok: false, error: "You are not authorized for this live class." }, 403, request);
 
-    const isHost = role === "admin" || (role === "tutor" && session.tutor_id === auth.user.id);
+    const isHost = role === "admin" || (role === "tutor" && (!session.tutor_id || session.tutor_id === auth.user.id));
     if (session.provider !== "daily") {
       return jsonResponse({ ok: false, error: "The configured live-class provider is not supported by this function." }, 501, request);
     }
 
     let readySession = session;
+    if (isHost && role === "tutor" && !readySession.tutor_id) {
+      const { data: assignedSession, error: assignError } = await supabase
+        .from("live_class_sessions")
+        .update({ tutor_id: auth.user.id })
+        .eq("id", readySession.id)
+        .is("tutor_id", null)
+        .select("*")
+        .maybeSingle();
+      if (assignError) throw assignError;
+      readySession = assignedSession || { ...readySession, tutor_id: auth.user.id };
+    }
     if (!readySession.provider_room_id || !readySession.provider_room_url) {
       if (!isHost) {
         return jsonResponse({ ok: false, error: "The Tutor has not started this live class yet." }, 403, request);

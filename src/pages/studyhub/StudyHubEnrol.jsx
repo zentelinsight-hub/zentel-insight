@@ -1,10 +1,10 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CreditCard, Check } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import BrandLogo from "../../components/BrandLogo";
 import { siteConfig } from "../../data/site";
 import { studyHubPricing } from "../../data/programs";
-import { startPaystackPayment } from "../../services/paymentService";
+import { flushQueuedPaymentAttempts, startPaystackPayment } from "../../services/paymentService";
 import { calculateStudyHubPrice, nairaToKobo, STUDYHUB_PAYMENT_TYPE } from "../../utils/paymentCalculations";
 import { formatCurrency, isValidEmail } from "../../utils/format";
 import { usePageMeta } from "../../utils/usePageMeta";
@@ -34,6 +34,10 @@ export default function StudyHubEnrol({ programme = "" }) {
     if (isSummerLessons) return studyHubPricing.summerLessons.price;
     return calculateStudyHubPrice(classGroup, selectedSubjects.length, months);
   }, [classGroup, isSummerLessons, selectedSubjects.length, months]);
+
+  useEffect(() => {
+    void flushQueuedPaymentAttempts();
+  }, []);
 
   usePageMeta({
     path: isSummerLessons ? "/studyhub/enrol/summer-lessons" : "/studyhub/enrol",

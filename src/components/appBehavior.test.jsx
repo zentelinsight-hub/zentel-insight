@@ -30,6 +30,18 @@ import StudyHubSss from "../pages/studyhub/StudyHubSss";
 import StudyHubSubjects from "../pages/studyhub/StudyHubSubjects";
 import StudyHubSummerLessons from "../pages/studyhub/StudyHubSummerLessons";
 
+vi.mock("../hooks/usePublicCatalog", async () => {
+  const { programs: catalogPrograms } = await import("../data/programs");
+  function result(data) {
+    return { data, loading: false, error: "", refetch: vi.fn() };
+  }
+  return {
+    usePublicPrograms: () => result(catalogPrograms),
+    usePublicProgram: (slug) => result(catalogPrograms.find((program) => program.slug === slug) || null),
+    useCheckoutProgram: (slug) => result(catalogPrograms.find((program) => program.slug === slug) || null)
+  };
+});
+
 function renderWithRouter(ui, initialEntries = ["/"]) {
   return render(<MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>);
 }

@@ -7,7 +7,7 @@ function clean(value: unknown) {
 }
 
 async function isAssignedTutorForSession(supabase: any, userId: string, session: any) {
-  if (session.tutor_id !== userId) return false;
+  if (session.tutor_id && session.tutor_id !== userId) return false;
   const { data, error } = await supabase
     .from("tutor_program_assignments")
     .select("id, track_id")
@@ -71,7 +71,7 @@ Deno.serve(async (request) => {
         attendance_status: "left"
       })
       .eq("class_session_id", session.id)
-      .eq("user_id", auth.user.id);
+      .is("left_at", null);
 
     await writeAuditLog(supabase, {
       actorUserId: auth.user.id,

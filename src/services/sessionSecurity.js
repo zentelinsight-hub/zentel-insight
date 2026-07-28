@@ -1,5 +1,7 @@
-export const PROTECTED_IDLE_WARNING_MS = 18 * 60 * 1000;
-export const PROTECTED_IDLE_TIMEOUT_MS = 20 * 60 * 1000;
+export const IDLE_WARNING_MS = 9 * 60 * 1000;
+export const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+export const PROTECTED_IDLE_WARNING_MS = IDLE_WARNING_MS;
+export const PROTECTED_IDLE_TIMEOUT_MS = IDLE_TIMEOUT_MS;
 export const PROTECTED_ACTIVITY_THROTTLE_MS = 1000;
 
 const lastActivityKey = "zentel:protected:last-activity";

@@ -93,7 +93,7 @@ export default function Programs() {
           ) : programsQuery.error ? (
             <div className="notice-card">
               <h2>Programmes could not be refreshed</h2>
-              <p>The local catalogue is shown only when the online programme records are unavailable.</p>
+              <p>Refresh the programme list and try again before proceeding to checkout.</p>
               <button className="button button-secondary" type="button" onClick={programsQuery.refetch}>Try Again</button>
             </div>
           ) : (

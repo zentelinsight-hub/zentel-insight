@@ -49,9 +49,15 @@ const statusCopy = {
 
 function getStatus(record) {
   if (!record) return "unavailable";
-  if (record.temporaryStatus === "success") return "success";
+  if (["success", "client_success"].includes(record.temporaryStatus)) return "success";
+  if (record.temporaryStatus === "closed") return "cancelled";
+  if (record.temporaryStatus === "failed") return record.failureReason === "declined" ? "declined" : "error";
   if (["cancelled", "declined", "error"].includes(record.temporaryStatus)) return record.temporaryStatus;
-  if (["cancelled", "declined", "error"].includes(record.failureReason)) return record.failureReason;
+  if (["cancelled", "closed", "declined", "error", "failed"].includes(record.failureReason)) {
+    if (record.failureReason === "closed") return "cancelled";
+    if (record.failureReason === "failed") return "error";
+    return record.failureReason;
+  }
   return "pending";
 }
 

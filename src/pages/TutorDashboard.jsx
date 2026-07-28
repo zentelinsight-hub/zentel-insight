@@ -1,5 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, useState } from "react";
 import {
   Bell,
   BookOpen,
@@ -8,25 +7,29 @@ import {
   GraduationCap,
   LayoutDashboard,
   LifeBuoy,
-  LogOut,
-  Menu,
   Megaphone,
   MessageSquare,
   Newspaper,
   Settings,
+  Trash2,
+  Upload,
   UserRound,
   Users,
-  Video,
-  X
+  Video
 } from "lucide-react";
-import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
-import BrandLogo from "../components/BrandLogo";
-import IdleSessionGuard from "../components/IdleSessionGuard";
+import { useNavigate, useParams } from "react-router-dom";
 import LiveClassCards from "../components/LiveClassCards";
 import ProgramChatPanel from "../components/ProgramChatPanel";
+import PortalShell from "../components/portal/PortalShell";
 import { useAuth } from "../context/authHooks";
 import { useAsyncData } from "../hooks/useAsyncData";
-import { getTutorDashboardData, updateTutorProfessionalProfile } from "../services/tutorService";
+import { getTutorDashboardData } from "../services/tutorService";
+import {
+  calculateProfileCompletion,
+  markAllNotificationsRead,
+  markNotificationRead,
+  updateStudentProfile as updateOwnProfilePicture
+} from "../services/portal/portalRepository";
 import { formatDateTime } from "../utils/format";
 import { usePageMeta } from "../utils/usePageMeta";
 
@@ -82,161 +85,50 @@ function EmptyState({ title = "Nothing to show yet", message }) {
   );
 }
 
-function TutorSidebarContent({ data, displayName, onNavigate, onSignOut }) {
-  return (
-    <>
-      <NavLink className="brand" to="/tutor" onClick={onNavigate}>
-        <BrandLogo brand="main" size="portal" />
-        <span>
-          <span className="brand-name">Tutor Dashboard</span>
-          <span className="brand-motto">Zentel Insight</span>
-        </span>
-      </NavLink>
-      <div className="portal-sidebar-profile">
-        <span className="portal-avatar md"><span>{displayName.slice(0, 1).toUpperCase()}</span></span>
-        <div>
-          <strong>{displayName}</strong>
-          <span>{data.assignments.length ? `${data.assignments.length} assigned programme${data.assignments.length === 1 ? "" : "s"}` : "Programme pending"}</span>
-        </div>
-      </div>
-      <nav aria-label="Tutor dashboard">
-        {sections.map(([slug, label, Icon]) => (
-          <NavLink
-            key={slug}
-            to={slug === "dashboard" ? "/tutor" : `/tutor/${slug}`}
-            end={slug === "dashboard"}
-            onClick={onNavigate}
-            className={({ isActive }) => isActive ? "portal-link active" : "portal-link"}
-          >
-            <Icon size={18} aria-hidden="true" />
-            {label}
-          </NavLink>
-        ))}
-      </nav>
-      <button className="portal-link signout" type="button" onClick={onSignOut}>
-        <LogOut size={18} aria-hidden="true" />
-        Sign Out
-      </button>
-    </>
-  );
-}
-
-function TutorFrame({ data, children }) {
-  const { profile, user, signOut } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
+function TutorFrame({ data, onRealtimeChange, children }) {
+  const { profile, user } = useAuth();
   const displayName = tutorDisplayName(data?.profile || profile) || user?.email || "Tutor";
-  const drawerId = useId();
-  const menuButtonRef = useRef(null);
-  const scrollYRef = useRef(0);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [canUsePortal, setCanUsePortal] = useState(false);
-
-  useEffect(() => {
-    setCanUsePortal(true);
-    return () => document.body.classList.remove("portal-menu-open");
-  }, []);
-
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [location.pathname]);
-
-  useEffect(() => {
-    if (!window.matchMedia) return undefined;
-    const mediaQuery = window.matchMedia("(min-width: 920.01px)");
-    function handleResize(event) {
-      if (event.matches) setMenuOpen(false);
-    }
-    handleResize(mediaQuery);
-    mediaQuery.addEventListener("change", handleResize);
-    return () => mediaQuery.removeEventListener("change", handleResize);
-  }, []);
-
-  useEffect(() => {
-    if (!menuOpen) return undefined;
-    const restoreFocusTarget = menuButtonRef.current;
-    function handleKeyDown(event) {
-      if (event.key === "Escape") setMenuOpen(false);
-    }
-
-    scrollYRef.current = window.scrollY;
-    document.addEventListener("keydown", handleKeyDown);
-    document.body.classList.add("portal-menu-open");
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollYRef.current}px`;
-    document.body.style.width = "100%";
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.classList.remove("portal-menu-open");
-      document.body.style.position = "";
-      document.body.style.top = "";
-      document.body.style.width = "";
-      window.scrollTo(0, scrollYRef.current);
-      restoreFocusTarget?.focus();
-    };
-  }, [menuOpen]);
-
-  function closeMenu() {
-    setMenuOpen(false);
-  }
-
-  async function handleSignOut() {
-    closeMenu();
-    await signOut({ scope: "local" });
-    navigate("/login", { replace: true });
-  }
-
-  const desktopSidebar = (
-    <aside className="portal-sidebar portal-sidebar-desktop">
-      <TutorSidebarContent data={data} displayName={displayName} onNavigate={closeMenu} onSignOut={handleSignOut} />
-    </aside>
-  );
-
-  const mobileDrawer = menuOpen && canUsePortal
-    ? createPortal(
-      <>
-        <button
-          className="portal-drawer-backdrop"
-          type="button"
-          aria-label="Close tutor menu"
-          onClick={closeMenu}
-        />
-        <aside id={drawerId} className="portal-sidebar portal-mobile-drawer open" aria-label="Tutor dashboard menu">
-          <TutorSidebarContent data={data} displayName={displayName} onNavigate={closeMenu} onSignOut={handleSignOut} />
-        </aside>
-      </>,
-      document.body
-    )
-    : null;
-
   return (
-    <section className="portal-shell management-shell tutor-shell">
-      {desktopSidebar}
-      {mobileDrawer}
-      <main className="portal-main">
-        <header className="portal-header">
-          <button
-            ref={menuButtonRef}
-            className="icon-button portal-menu-button"
-            type="button"
-            aria-label={menuOpen ? "Close tutor menu" : "Open tutor menu"}
-            aria-expanded={menuOpen}
-            aria-controls={drawerId}
-            onClick={() => setMenuOpen((current) => !current)}
-          >
-            {menuOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
-          </button>
-          <div>
-            <p className="eyebrow">Welcome back</p>
-            <h1>{displayName}</h1>
-          </div>
-          <span className="portal-tag success">Tutor</span>
-        </header>
-        {children}
-      </main>
-      <IdleSessionGuard enabled={Boolean(data)} />
-    </section>
+    <PortalShell
+      sidebar={{
+        homeTo: "/tutor",
+        brandLabel: "Tutor Dashboard",
+        profileName: displayName,
+        profileDetail: data.assignments.length
+          ? `${data.assignments.length} assigned programme${data.assignments.length === 1 ? "" : "s"}`
+          : "Programme pending",
+        avatarUrl: data?.profile?.avatar_url || profile?.avatar_url,
+        navLabel: "Tutor dashboard",
+        menuLabel: "tutor",
+        shellClass: "management-shell tutor-shell",
+        items: sections.map(([slug, label, Icon]) => ({
+          to: slug === "dashboard" ? "/tutor" : `/tutor/${slug}`,
+          label,
+          Icon,
+          end: slug === "dashboard",
+          badge: slug === "notifications" ? data.notifications.filter((item) => !item.read_at).length : 0
+        }))
+      }}
+      header={{ eyebrow: "Welcome back", title: displayName, status: <span className="portal-tag success">Tutor</span> }}
+      idleEnabled={Boolean(data)}
+      realtimeTables={[
+        "announcements",
+        "assignments",
+        "enrolments",
+        "live_class_sessions",
+        "portal_articles",
+        "portal_notifications",
+        "program_levels",
+        "resources",
+        "support_tickets",
+        "timetable_entries",
+        "tutor_profiles",
+        "tutor_program_assignments"
+      ]}
+      onRealtimeChange={onRealtimeChange}
+    >
+      {children}
+    </PortalShell>
   );
 }
 
@@ -279,37 +171,56 @@ function DashboardSection({ data, onSaved }) {
 }
 
 function ProfileSection({ data, onSaved }) {
-  const { user } = useAuth();
-  const [form, setForm] = useState({
-    professional_bio: "",
-    qualifications: "",
-    teaching_experience: "",
-    availability: "",
-    specialisation: ""
-  });
+  const { profile, refreshProfile, user } = useAuth();
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(profile?.avatar_url || "");
+  const [removeAvatar, setRemoveAvatar] = useState(false);
   const [status, setStatus] = useState({ type: "", message: "" });
   const [saving, setSaving] = useState(false);
+  const avatarObjectUrlRef = useRef("");
 
   useEffect(() => {
-    setForm({
-      professional_bio: data.tutorProfile?.professional_bio || "",
-      qualifications: data.tutorProfile?.qualifications || "",
-      teaching_experience: data.tutorProfile?.teaching_experience || "",
-      availability: data.tutorProfile?.availability || "",
-      specialisation: data.tutorProfile?.specialisation || ""
-    });
-  }, [data.tutorProfile]);
+    setAvatarPreview(profile?.avatar_url || "");
+    setAvatarFile(null);
+    setRemoveAvatar(false);
+    if (avatarObjectUrlRef.current) URL.revokeObjectURL(avatarObjectUrlRef.current);
+    avatarObjectUrlRef.current = "";
+  }, [profile]);
+
+  useEffect(() => () => {
+    if (avatarObjectUrlRef.current) URL.revokeObjectURL(avatarObjectUrlRef.current);
+  }, []);
+
+  function selectAvatar(event) {
+    const file = event.target.files?.[0] || null;
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 3 * 1024 * 1024) {
+      setStatus({ type: "warning", message: "Upload a JPEG, PNG or WebP image no larger than 3 MB." });
+      return;
+    }
+    if (avatarObjectUrlRef.current) URL.revokeObjectURL(avatarObjectUrlRef.current);
+    avatarObjectUrlRef.current = URL.createObjectURL(file);
+    setAvatarPreview(avatarObjectUrlRef.current);
+    setAvatarFile(file);
+    setRemoveAvatar(false);
+    setStatus({ type: "", message: "" });
+  }
 
   async function submit(event) {
     event.preventDefault();
+    if (!avatarFile && !removeAvatar) return;
     setSaving(true);
     setStatus({ type: "", message: "" });
     try {
-      await updateTutorProfessionalProfile(user.id, {
-        ...form,
-        title: data.tutorProfile?.title || data.profile?.title || "Mr"
+      await updateOwnProfilePicture(user.id, {
+        ...data.profile,
+        avatarFile,
+        removeAvatar,
+        avatar_path: profile?.avatar_path || data.profile?.avatar_path || "",
+        previous_avatar_path: profile?.avatar_path || data.profile?.avatar_path || ""
       });
-      setStatus({ type: "success", message: "Professional profile saved." });
+      await refreshProfile();
+      setStatus({ type: "success", message: "Profile picture updated." });
       onSaved();
     } catch (error) {
       setStatus({ type: "warning", message: error.message || "Professional profile could not be saved." });
@@ -322,38 +233,43 @@ function ProfileSection({ data, onSaved }) {
     <div className="portal-page">
       <PageHeading
         title="My professional profile."
-        description="Update approved teaching information. Identity, title, phone, role and programme assignment remain Admin-managed."
+        description="Review approved teaching information and manage your profile picture. Professional credentials and programme assignments are Admin-managed."
       />
       <form className="form-card management-form" onSubmit={submit}>
-        <div className="portal-grid">
-          <article className="portal-record-card">
-            <h3>{data.profile?.title} {data.profile?.full_name || "Tutor"}</h3>
-            <p>{data.profile?.email}</p>
-            <span className="portal-tag">Admin-managed identity</span>
-          </article>
-          <label>
-            <span>Specialisation</span>
-            <input value={form.specialisation} onChange={(event) => setForm({ ...form, specialisation: event.target.value })} />
-          </label>
-          <label>
-            <span>Availability</span>
-            <input value={form.availability} onChange={(event) => setForm({ ...form, availability: event.target.value })} />
-          </label>
+        <div className="portal-profile-summary">
+          <div className="portal-avatar-uploader">
+            <span className="portal-avatar xl">
+              {avatarPreview ? <img src={avatarPreview} alt="" /> : <span>{tutorDisplayName(data.profile).slice(0, 1).toUpperCase()}</span>}
+            </span>
+            <div>
+              <label className="button button-secondary">
+                <Upload size={16} aria-hidden="true" />Change Photo
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={selectAvatar} />
+              </label>
+              {avatarPreview ? (
+                <button className="button button-secondary" type="button" onClick={() => { setAvatarFile(null); setAvatarPreview(""); setRemoveAvatar(Boolean(profile?.avatar_path)); }}>
+                  <Trash2 size={16} aria-hidden="true" />Remove Photo
+                </button>
+              ) : null}
+            </div>
+          </div>
+          <div className="portal-metric-card">
+            <span>Profile completion</span>
+            <strong>{Number(data.profile?.profile_completion || calculateProfileCompletion(data.profile))}%</strong>
+            <small>Admin-managed credentials and your profile picture contribute to completion.</small>
+          </div>
         </div>
-        <label>
-          <span>Professional bio</span>
-          <textarea value={form.professional_bio} onChange={(event) => setForm({ ...form, professional_bio: event.target.value })} />
-        </label>
-        <label>
-          <span>Qualifications</span>
-          <textarea value={form.qualifications} onChange={(event) => setForm({ ...form, qualifications: event.target.value })} />
-        </label>
-        <label>
-          <span>Teaching experience</span>
-          <textarea value={form.teaching_experience} onChange={(event) => setForm({ ...form, teaching_experience: event.target.value })} />
-        </label>
+        <dl className="portal-mini-details">
+          <div><dt>Name</dt><dd>{data.profile?.title} {data.profile?.full_name || "Tutor"}</dd></div>
+          <div><dt>Email</dt><dd>{data.profile?.email || user?.email}</dd></div>
+          <div><dt>Phone</dt><dd>{data.profile?.phone || "Not recorded"}</dd></div>
+          <div><dt>Specialisation</dt><dd>{data.tutorProfile?.specialisation || "Not recorded"}</dd></div>
+          <div><dt>Qualifications</dt><dd>{data.tutorProfile?.qualifications || "Not recorded"}</dd></div>
+          <div><dt>Availability</dt><dd>{data.tutorProfile?.availability || "Not recorded"}</dd></div>
+        </dl>
+        <span className="portal-tag">Professional details are Admin-managed</span>
         {status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}
-        <button className="button button-primary" type="submit" disabled={saving}>{saving ? "Saving" : "Save Professional Profile"}</button>
+        <button className="button button-primary" type="submit" disabled={saving || (!avatarFile && !removeAvatar)}>{saving ? "Saving" : "Save Photo"}</button>
       </form>
     </div>
   );
@@ -502,6 +418,10 @@ function SettingsSection() {
         <h3>Account email</h3>
         <p>{user?.email}</p>
       </article>
+      <article className="portal-record-card">
+        <h3>Session security</h3>
+        <p>For your security, your Portal session will automatically sign out after 10 minutes without activity. You will receive a warning shortly before logout.</p>
+      </article>
       <button className="button button-primary" type="button" onClick={handleSignOut}>Sign Out</button>
     </div>
   );
@@ -512,9 +432,61 @@ function renderTutorRecord(kind, item) {
     <article className="portal-record-card" key={item.id}>
       <p className="eyebrow">{item.programs?.title || kind}</p>
       <h3>{item.title || item.subject || kind}</h3>
-      <p>{item.summary || item.description || item.instructions || item.message || "Details pending."}</p>
+      <p>{item.summary || item.description || item.instructions || item.message || "No additional details were provided."}</p>
       <small>{formatDateTime(item.published_at || item.scheduled_start || item.created_at)}</small>
     </article>
+  );
+}
+
+function TutorNotificationsSection({ records, onSaved }) {
+  const { user } = useAuth();
+  const [busyId, setBusyId] = useState("");
+  const unreadCount = records.filter((item) => !item.read_at).length;
+
+  async function markOne(id) {
+    setBusyId(id);
+    try {
+      await markNotificationRead(user.id, id);
+      onSaved();
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function markAll() {
+    setBusyId("all");
+    try {
+      await markAllNotificationsRead(user.id);
+      onSaved();
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  return (
+    <div className="portal-page">
+      <PageHeading
+        title="Notifications."
+        description="Tutor account notices and programme updates."
+        actions={unreadCount ? <button className="button button-secondary" type="button" onClick={markAll} disabled={Boolean(busyId)}>Mark all as read</button> : null}
+      />
+      <div className="portal-list">
+        {records.map((item) => (
+          <article className={`portal-record-card ${item.read_at ? "" : "unread"}`} key={item.id}>
+            <div>
+              <p className="eyebrow">{item.notification_type || "Tutor update"}</p>
+              <h3>{item.title || "Notification"}</h3>
+              <p>{item.message || "Open the related Tutor section for details."}</p>
+              <small>{formatDateTime(item.created_at)}</small>
+            </div>
+            {item.read_at
+              ? <span className="portal-tag">Read</span>
+              : <button className="button button-secondary" type="button" onClick={() => markOne(item.id)} disabled={Boolean(busyId)}>{busyId === item.id ? "Saving" : "Mark as read"}</button>}
+          </article>
+        ))}
+        {!records.length ? <EmptyState message="No notifications yet." /> : null}
+      </div>
+    </div>
   );
 }
 
@@ -522,7 +494,7 @@ export default function TutorDashboard() {
   const { user } = useAuth();
   const { section = "dashboard" } = useParams();
   const activeSection = getActiveSection(section);
-  const dataQuery = useAsyncData(() => getTutorDashboardData(user?.id), [user?.id]);
+  const dataQuery = useAsyncData(() => getTutorDashboardData(user.id), [user?.id], { enabled: Boolean(user?.id) });
 
   usePageMeta({
     path: activeSection === "dashboard" ? "/tutor" : `/tutor/${activeSection}`,
@@ -563,7 +535,7 @@ export default function TutorDashboard() {
     ...(dataQuery.data || {})
   };
   return (
-    <TutorFrame data={data} activeSection={activeSection}>
+    <TutorFrame data={data} onRealtimeChange={dataQuery.refetch}>
       {activeSection === "dashboard" ? <DashboardSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "profile" ? <ProfileSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "programme" ? <ProgrammeSection data={data} /> : null}
@@ -594,7 +566,7 @@ export default function TutorDashboard() {
         <RecordsSection title="Learning resources." description="Resources for assigned programmes." records={data.resources} render={(item) => renderTutorRecord("Resource", item)} emptyMessage="No resources have been published yet." />
       ) : null}
       {activeSection === "notifications" ? (
-        <RecordsSection title="Notifications." description="Tutor account notices and updates." records={data.notifications} render={(item) => renderTutorRecord("Notification", item)} emptyMessage="No notifications yet." />
+        <TutorNotificationsSection records={data.notifications} onSaved={dataQuery.refetch} />
       ) : null}
       {activeSection === "articles" ? (
         <RecordsSection title="Learning articles." description="Published articles for assigned programmes." records={data.articles} render={(item) => renderTutorRecord("Article", item)} emptyMessage="No articles have been published yet." />

@@ -2,20 +2,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CreditCard, ShieldCheck } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/authHooks";
-import { getProgramBySlug, getProgramLevel, programs as fallbackPrograms, slugifyProgramValue } from "../../data/programs";
-import { usePublicPrograms } from "../../hooks/usePublicCatalog";
+import { slugifyProgramValue } from "../../data/programs";
 import { formatCurrency, isValidEmail } from "../../utils/format";
 import { COURSE_PAYMENT_TYPE, nairaToKobo } from "../../utils/paymentCalculations";
-import { startPaystackPayment } from "../../services/paymentService";
+import { flushQueuedPaymentAttempts, startPaystackPayment } from "../../services/paymentService";
 
-export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lockedSelection = false }) {
+export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lockedSelection = false, cataloguePrograms = [] }) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { profile, user } = useAuth();
-  const programsQuery = usePublicPrograms();
-  const programs = programsQuery.data || fallbackPrograms;
+  const programs = cataloguePrograms;
   const startingProgramSlug = initialProgramSlug || searchParams.get("program") || (lockedSelection ? "" : programs[0]?.slug || "");
-  const defaultProgram = programs.find((program) => program.slug === startingProgramSlug) || getProgramBySlug(startingProgramSlug);
+  const defaultProgram = programs.find((program) => program.slug === startingProgramSlug);
   const startingLevelSlug = initialLevelSlug || searchParams.get("level") || defaultProgram?.levels?.[0]?.slug || "";
   const [programSlug, setProgramSlug] = useState(startingProgramSlug);
   const [levelSlug, setLevelSlug] = useState(startingLevelSlug);
@@ -27,16 +25,18 @@ export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lock
   const hasNavigatedRef = useRef(false);
 
   const selectedProgram = useMemo(
-    () => programs.find((program) => program.slug === programSlug) || getProgramBySlug(programSlug),
+    () => programs.find((program) => program.slug === programSlug),
     [programSlug, programs]
   );
   const selected = useMemo(() => {
     const publicLevel = selectedProgram?.levels.find((level) => level.slug === slugifyProgramValue(levelSlug) || slugifyProgramValue(level.name) === slugifyProgramValue(levelSlug));
-    if (selectedProgram && publicLevel) return { program: selectedProgram, level: publicLevel };
-    return getProgramLevel(programSlug, levelSlug);
-  }, [levelSlug, programSlug, selectedProgram]);
-  const loading = ["creating_session", "opening", "verifying"].includes(paymentState);
-  const shouldWaitForOnlineCatalogue = !lockedSelection && !selectedProgram && programsQuery.loading;
+    return selectedProgram && publicLevel ? { program: selectedProgram, level: publicLevel } : null;
+  }, [levelSlug, selectedProgram]);
+  const loading = ["recording_attempt", "opening", "verifying"].includes(paymentState);
+
+  useEffect(() => {
+    void flushQueuedPaymentAttempts();
+  }, []);
 
   useEffect(() => {
     setCustomer((current) => ({
@@ -54,7 +54,7 @@ export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lock
   }, []);
 
   function updateProgram(nextSlug) {
-    const nextProgram = getProgramBySlug(nextSlug);
+    const nextProgram = programs.find((program) => program.slug === nextSlug);
     setProgramSlug(nextSlug);
     setLevelSlug(nextProgram?.levels?.[0]?.slug || "");
   }
@@ -85,14 +85,16 @@ export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lock
 
     paymentOpeningRef.current = true;
     hasNavigatedRef.current = false;
-    setPaymentState("creating_session");
+    setPaymentState("recording_attempt");
     const item = {
       paymentType: COURSE_PAYMENT_TYPE,
       slug: `${selected.program.slug}:${selected.level.slug}`,
       title: `${selected.program.title} - ${selected.level.name}`,
       programSlug: selected.program.slug,
+      programId: selected.program.id,
       programTitle: selected.program.title,
       levelSlug: selected.level.slug,
+      trackId: selected.level.id,
       level: selected.level.name,
       price: selected.level.price,
       priceKobo: selected.level.priceKobo || nairaToKobo(selected.level.price)
@@ -128,7 +130,7 @@ export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lock
           navigate(transaction.path || `/payment-success?reference=${encodeURIComponent(transaction.reference || "")}`);
         }
       });
-      setPaymentState((current) => (current === "creating_session" ? "opening" : current));
+      setPaymentState((current) => (current === "recording_attempt" ? "opening" : current));
       setStatus({ type: "success", message: "Paystack checkout opened. Complete or cancel the popup to continue." });
     } catch (error) {
       paymentOpeningRef.current = false;
@@ -143,7 +145,6 @@ export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lock
   }
 
   if (!selectedProgram) {
-    if (shouldWaitForOnlineCatalogue) return <div className="route-loader">Loading current programme prices</div>;
     return (
       <div className="notice-card">
         <h2>Program Not Found</h2>

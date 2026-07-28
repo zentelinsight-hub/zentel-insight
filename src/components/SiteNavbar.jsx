@@ -146,7 +146,7 @@ export default function SiteNavbar({
         ) : null}
 
         <div className="nav-controls">
-          <button className="icon-button" type="button" onClick={toggleTheme} aria-label="Toggle dark mode">
+          <button className="icon-button" type="button" onClick={toggleTheme} aria-label={isDark ? "Toggle light mode" : "Toggle dark mode"}>
             {isDark ? <Sun size={20} aria-hidden="true" /> : <Moon size={20} aria-hidden="true" />}
           </button>
           <button

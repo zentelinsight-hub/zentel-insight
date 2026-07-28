@@ -214,13 +214,8 @@ export async function updateStudentProfile(userId, values) {
     uploadedAvatarPath = values.avatarFile ? nextAvatarPath : "";
 
     const payload = {
-      full_name: values.full_name.trim(),
-      phone: values.phone.trim(),
-      date_of_birth: values.date_of_birth || null,
-      education_level: values.education_level.trim(),
-      address: values.address.trim(),
       avatar_path: nextAvatarPath,
-      profile_completed: true,
+      profile_completed: calculateProfileCompletion({ ...values, avatar_path: nextAvatarPath }) === 100,
       profile_completion: calculateProfileCompletion({ ...values, avatar_path: nextAvatarPath })
     };
     const { data, error } = await supabase.from("profiles").update(payload).eq("id", userId).select("*").maybeSingle();
@@ -462,7 +457,7 @@ export async function getStudentLiveClasses(userId) {
 
   let query = supabase
     .from("live_class_sessions")
-    .select("*, programs(id, title), program_levels(id, level_name), profiles!live_class_sessions_tutor_id_fkey(id, full_name, title)")
+    .select("*, programs(id, title), program_levels(id, level_name)")
     .in("program_id", scope.programIds)
     .in("status", ["scheduled", "live"])
     .order("scheduled_start", { ascending: true })
@@ -474,7 +469,16 @@ export async function getStudentLiveClasses(userId) {
 
   const { data, error } = await query;
   if (error) throw error;
-  return normalizeList(data);
+  const sessions = normalizeList(data);
+  const tutorIds = [...new Set(sessions.map((item) => item.tutor_id).filter(Boolean))];
+  if (!tutorIds.length) return sessions;
+  const { data: tutorProfiles, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, full_name, title, avatar_path")
+    .in("id", tutorIds);
+  if (profileError) throw profileError;
+  const profileById = new Map(normalizeList(tutorProfiles).map((item) => [item.id, item]));
+  return sessions.map((item) => ({ ...item, profiles: profileById.get(item.tutor_id) || null }));
 }
 
 export async function getStudentClassroom(userId) {

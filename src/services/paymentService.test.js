@@ -6,22 +6,19 @@ import {
   isValidPaymentReference
 } from "../utils/paymentCalculations";
 
-const paystackMocks = vi.hoisted(() => ({
+const paymentMocks = vi.hoisted(() => ({
   newTransaction: vi.fn(),
-  resumeTransaction: vi.fn(),
-  invokeEdgeFunction: vi.fn()
+  rpc: vi.fn()
 }));
 
 vi.mock("@paystack/inline-js", () => ({
   default: vi.fn(function PaystackInlineMock() {
-    this.newTransaction = paystackMocks.newTransaction;
-    this.resumeTransaction = paystackMocks.resumeTransaction;
+    this.newTransaction = paymentMocks.newTransaction;
   })
 }));
 
-vi.mock("./edgeFunctionClient", () => ({
-  EdgeFunctionError: class EdgeFunctionError extends Error {},
-  invokeEdgeFunction: vi.fn((...args) => paystackMocks.invokeEdgeFunction(...args))
+vi.mock("./supabaseClient", () => ({
+  getSupabaseClient: vi.fn(async () => ({ rpc: paymentMocks.rpc }))
 }));
 
 const customer = {
@@ -31,72 +28,66 @@ const customer = {
 };
 
 const courseItem = {
-  title: "Untrusted UI title",
-  price: 1,
-  priceKobo: 100,
+  paymentType: "zentel_course",
+  programId: "11111111-1111-4111-8111-111111111111",
+  trackId: "22222222-2222-4222-8222-222222222222",
+  programTitle: "Graphic Design",
   programSlug: "graphic-design",
   levelSlug: "brand-and-social-media-design",
-  level: "Brand and Social Media Design"
+  level: "Brand and Social Media Design",
+  price: 20000,
+  priceKobo: 2000000
 };
 
 function makeStudyHubItem(overrides = {}) {
-  const studyHub = {
-    productType: "studyhub_registration",
-    classLevel: "JSS2",
-    classGroup: "JSS",
-    subjects: ["Mathematics", "English Language"],
-    months: 2,
-    ...overrides.studyHub
-  };
-
   return {
     paymentType: STUDYHUB_PAYMENT_TYPE,
-    title: "StudyHub checkout",
-    price: 1,
-    priceKobo: 100,
-    studyHub,
-    ...overrides
+    studyHub: {
+      productType: "studyhub_registration",
+      classLevel: "JSS2",
+      classGroup: "JSS",
+      subjects: ["Mathematics", "English Language"],
+      months: 2,
+      ...overrides.studyHub
+    }
   };
 }
 
-async function loadPaymentService(overrides = {}) {
+async function loadPaymentService(publicKey = "pk_test_public") {
   vi.resetModules();
-  vi.stubEnv("VITE_PAYSTACK_PUBLIC_KEY", overrides.paystackPublicKey ?? "pk_test_public");
+  vi.stubEnv("VITE_PAYSTACK_PUBLIC_KEY", publicKey);
   return import("./paymentService.js");
 }
 
 function getPaystackConfig() {
-  expect(paystackMocks.newTransaction).toHaveBeenCalledOnce();
-  return paystackMocks.newTransaction.mock.calls[0][0];
+  expect(paymentMocks.newTransaction).toHaveBeenCalledOnce();
+  return paymentMocks.newTransaction.mock.calls[0][0];
 }
 
 beforeEach(() => {
-  paystackMocks.newTransaction.mockReset();
-  paystackMocks.resumeTransaction.mockReset();
-  paystackMocks.invokeEdgeFunction.mockReset();
-  let sequence = 0;
-  paystackMocks.invokeEdgeFunction.mockImplementation((_functionName, options = {}) => {
-    sequence += 1;
-    const body = options.body || {};
-    const isStudyHub = body.brand === "studyhub";
-    const subjectCount = Array.isArray(body.subjects) ? body.subjects.length : 0;
-    const amountKobo = isStudyHub
-      ? body.productType === "studyhub_summer_lessons"
-        ? 3000000
-        : (body.classGroup === "SSS" ? 2000000 : 1500000) * Math.max(1, subjectCount) * Math.max(1, Number(body.months || 1))
-      : 2000000;
-    const prefix = isStudyHub
-      ? body.productType === "studyhub_summer_lessons" ? "ZH-SUMMER" : body.classGroup === "SSS" ? "ZH-SSS" : "ZH-JSS"
-      : "ZI-COURSE";
-    return Promise.resolve({
-      ok: true,
-      mode: "frontend_fallback",
-      paymentId: `payment-${sequence}`,
-      reference: `${prefix}-1790000000000-SERVER${String(sequence).padStart(2, "0")}`,
-      amountKobo,
-      currency: "NGN",
-      brand: body.brand
-    });
+  paymentMocks.newTransaction.mockReset();
+  paymentMocks.rpc.mockReset();
+  paymentMocks.rpc.mockImplementation(async (name, payload) => {
+    if (name === "record_frontend_payment_event") {
+      return { data: [{ reported_status: payload.input_event_type, verification_status: "unverified" }], error: null };
+    }
+    const productType = payload.input_product_type;
+    const amountKobo = productType === STUDYHUB_SUMMER_LESSONS_PAYMENT_TYPE
+      ? 3000000
+      : productType === "studyhub_sss"
+        ? 6000000
+        : productType === "studyhub_jss"
+          ? 6000000
+          : 2000000;
+    return {
+      data: [{
+        payment_id: "payment-1",
+        reference: payload.input_reference,
+        amount_kobo: amountKobo,
+        verification_status: "unverified"
+      }],
+      error: null
+    };
   });
   window.sessionStorage.clear();
   vi.spyOn(Date, "now").mockReturnValue(1790000000000);
@@ -105,214 +96,114 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
-  vi.unstubAllGlobals();
   window.sessionStorage.clear();
 });
 
-describe("trusted Paystack checkout", () => {
-  it("reports Paystack public-key status and blocks checkout when the key is missing", async () => {
-    const { getPaymentEnvironmentStatus, startPaystackPayment, PENDING_PAYMENT_STORAGE_KEY } = await loadPaymentService({
-      paystackPublicKey: ""
-    });
-
+describe("frontend-first Paystack checkout", () => {
+  it("reports public-key mode and blocks checkout only when the public key is missing", async () => {
+    const { getPaymentEnvironmentStatus, startPaystackPayment } = await loadPaymentService("");
     expect(getPaymentEnvironmentStatus({ VITE_PAYSTACK_PUBLIC_KEY: "pk_live_public" })).toEqual({
       paystackPublicKeyConfigured: true,
       paystackMode: "live"
     });
-    await expect(startPaystackPayment({ item: courseItem, customer })).rejects.toThrow(
-      "Online payment is unavailable"
-    );
-    expect(paystackMocks.newTransaction).not.toHaveBeenCalled();
-    expect(window.sessionStorage.getItem(PENDING_PAYMENT_STORAGE_KEY)).toBeNull();
+    await expect(startPaystackPayment({ item: courseItem, customer })).rejects.toThrow("Online payment is unavailable");
+    expect(paymentMocks.newTransaction).not.toHaveBeenCalled();
   });
 
-  it("opens Paystack for a main course from a trusted Edge Function session", async () => {
+  it("records a main-programme attempt and opens Paystack with the authoritative amount", async () => {
     const onSuccess = vi.fn();
-    const { PENDING_PAYMENT_STORAGE_KEY, readTemporaryPayment, startPaystackPayment } = await loadPaymentService();
-
-    const pending = await startPaystackPayment({
-      item: courseItem,
-      customer,
-      onSuccess
-    });
+    const { readTemporaryPayment, startPaystackPayment } = await loadPaymentService();
+    const pending = await startPaystackPayment({ item: courseItem, customer, onSuccess });
     const config = getPaystackConfig();
-    const stored = JSON.parse(window.sessionStorage.getItem(PENDING_PAYMENT_STORAGE_KEY));
 
     expect(isValidPaymentReference(pending.reference)).toBe(true);
-    expect(paystackMocks.invokeEdgeFunction).toHaveBeenCalledWith("create-payment-session", expect.objectContaining({
-      body: expect.objectContaining({
-        brand: "zentel_insight",
-        programSlug: "graphic-design",
-        trackSlug: "brand-and-social-media-design"
-      })
+    expect(paymentMocks.rpc).toHaveBeenCalledWith("create_frontend_payment_attempt", expect.objectContaining({
+      input_program_id: courseItem.programId,
+      input_track_id: courseItem.trackId,
+      input_program_slug: "graphic-design",
+      input_track_slug: "brand-and-social-media-design"
     }));
-    expect(pending.reference).toMatch(/^ZI-COURSE-1790000000000-SERVER[0-9]{2}$/);
     expect(config).toMatchObject({
       key: "pk_test_public",
       email: "student@example.com",
       amount: 2000000,
       currency: "NGN",
-      reference: pending.reference,
-      metadata: {
-        brand: "zentel_insight",
-        product_type: "zentel_course",
-        program_slug: "graphic-design",
-        track_slug: "brand-and-social-media-design"
-      }
+      reference: pending.reference
     });
-    expect(stored).toMatchObject({
-      reference: pending.reference,
-      productTitle: "Graphic Design",
-      trackName: "Brand and Social Media Design",
-      amountKobo: 2000000,
-      customerEmail: "student@example.com",
-      temporaryStatus: "pending",
-      providerMode: "frontend_fallback",
-      paymentId: "payment-1"
+    expect(pending).toMatchObject({
+      providerMode: "frontend_direct",
+      attemptPersisted: true,
+      verificationStatus: "unverified"
     });
 
-    config.onSuccess({ reference: pending.reference });
-
+    config.onSuccess({ reference: pending.reference, id: "provider-1" });
     expect(onSuccess).toHaveBeenCalledWith(expect.objectContaining({
-      reference: pending.reference,
-      status: "success",
+      status: "client_success",
+      verificationStatus: "unverified",
       path: `/payment-success?reference=${pending.reference}`
     }));
     expect(readTemporaryPayment(pending.reference)).toMatchObject({
-      reference: pending.reference,
-      temporaryStatus: "success"
+      temporaryStatus: "client_success",
+      verificationStatus: "unverified"
     });
+    await vi.waitFor(() => expect(paymentMocks.rpc).toHaveBeenCalledWith(
+      "record_frontend_payment_event",
+      expect.objectContaining({ input_event_type: "client_success" })
+    ));
   });
 
-  it("resumes backend-initialized Paystack transactions with the server access code", async () => {
-    paystackMocks.invokeEdgeFunction.mockResolvedValueOnce({
-      ok: true,
-      mode: "backend",
-      paymentId: "payment-backend",
-      reference: "ZI-COURSE-1790000000000-BACKEND1",
-      amountKobo: 2000000,
-      accessCode: "access-code-123",
-      brand: "zentel_insight"
-    });
-
-    const { startPaystackPayment } = await loadPaymentService();
+  it("still opens Paystack and queues a retry when the attempt write fails", async () => {
+    paymentMocks.rpc.mockRejectedValueOnce(new Error("temporary database outage"));
+    const { PAYMENT_RETRY_STORAGE_KEY, startPaystackPayment } = await loadPaymentService();
     const pending = await startPaystackPayment({ item: courseItem, customer });
 
-    expect(pending).toMatchObject({
-      reference: "ZI-COURSE-1790000000000-BACKEND1",
-      amountKobo: 2000000,
-      providerMode: "backend",
-      paymentId: "payment-backend"
-    });
-    expect(paystackMocks.resumeTransaction).toHaveBeenCalledWith("access-code-123");
-    expect(paystackMocks.newTransaction).not.toHaveBeenCalled();
+    expect(getPaystackConfig()).toMatchObject({ amount: 2000000, reference: pending.reference });
+    expect(pending.attemptPersisted).toBe(false);
+    expect(JSON.parse(window.sessionStorage.getItem(PAYMENT_RETRY_STORAGE_KEY))).toEqual([
+      expect.objectContaining({ reference: pending.reference, attemptPersisted: false })
+    ]);
   });
 
-  it("blocks checkout when the trusted payment Edge Function is unavailable", async () => {
-    paystackMocks.invokeEdgeFunction.mockRejectedValueOnce(new Error("Payment setup is temporarily unavailable."));
-    const { startPaystackPayment } = await loadPaymentService();
-
-    await expect(startPaystackPayment({ item: courseItem, customer })).rejects.toThrow(
-      "Payment setup is temporarily unavailable"
-    );
-    expect(paystackMocks.newTransaction).not.toHaveBeenCalled();
-  });
-
-  it("records cancelled and errored main-course checkouts from trusted Edge records", async () => {
+  it("records a closed checkout and a declined checkout without marking either verified", async () => {
     const onCancel = vi.fn();
     const onError = vi.fn();
     const { readTemporaryPayment, startPaystackPayment } = await loadPaymentService();
 
-    const cancelled = await startPaystackPayment({
-      item: courseItem,
-      customer,
-      onCancel
-    });
+    const cancelled = await startPaystackPayment({ item: courseItem, customer, onCancel });
     getPaystackConfig().onCancel();
-
     expect(onCancel).toHaveBeenCalledWith(
       "The payment window was closed before completion.",
-      expect.objectContaining({
-        reference: cancelled.reference,
-        path: `/payment-failed?reference=${cancelled.reference}&reason=cancelled`
-      })
+      expect.objectContaining({ path: `/payment-failed?reference=${cancelled.reference}&reason=closed` })
     );
-    expect(readTemporaryPayment(cancelled.reference)).toMatchObject({
-      temporaryStatus: "cancelled",
-      failureReason: "cancelled"
-    });
+    expect(readTemporaryPayment(cancelled.reference)).toMatchObject({ temporaryStatus: "closed", verificationStatus: "unverified" });
 
-    paystackMocks.newTransaction.mockReset();
-    const errored = await startPaystackPayment({
-      item: courseItem,
-      customer,
-      onError
-    });
+    paymentMocks.newTransaction.mockReset();
+    const declined = await startPaystackPayment({ item: courseItem, customer, onError });
     getPaystackConfig().onError(new Error("Bank declined the transaction"));
-
     expect(onError).toHaveBeenCalledWith(
       expect.objectContaining({ message: "Payment was declined." }),
-      expect.objectContaining({
-        reference: errored.reference,
-        path: `/payment-failed?reference=${errored.reference}&reason=declined`
-      })
+      expect.objectContaining({ path: `/payment-failed?reference=${declined.reference}&reason=declined` })
     );
-    expect(readTemporaryPayment(errored.reference)).toMatchObject({
-      temporaryStatus: "declined",
-      failureReason: "declined"
-    });
+    expect(readTemporaryPayment(declined.reference)).toMatchObject({ temporaryStatus: "failed", failureReason: "declined" });
   });
 
-  it("opens StudyHub JSS and SSS checkout with calculated subject pricing", async () => {
+  it("opens StudyHub JSS and SSS with calculated prices", async () => {
     const { startPaystackPayment } = await loadPaymentService();
+    const payer = { ...customer, name: "Parent Name", studentName: "Student Name" };
+    const jss = await startPaystackPayment({ item: makeStudyHubItem(), customer: payer });
+    expect(getPaystackConfig()).toMatchObject({ amount: 6000000, reference: jss.reference });
 
-    const jss = await startPaystackPayment({
-      item: makeStudyHubItem(),
-      customer: { ...customer, name: "Parent Name", studentName: "Student Name" }
-    });
-    let config = getPaystackConfig();
-    expect(jss.reference).toMatch(/^ZH-JSS-1790000000000-[A-Z0-9]{8,}$/);
-    expect(config).toMatchObject({
-      email: "student@example.com",
-      amount: 6000000,
-      reference: jss.reference,
-      metadata: {
-        brand: "studyhub",
-        product_type: "studyhub_jss",
-        class_level: "JSS2",
-        student_name: "Student Name"
-      }
-    });
-
-    paystackMocks.newTransaction.mockReset();
+    paymentMocks.newTransaction.mockReset();
     const sss = await startPaystackPayment({
-      item: makeStudyHubItem({
-        studyHub: {
-          classLevel: "SSS1",
-          classGroup: "SSS",
-          subjects: ["Physics"],
-          months: 3
-        }
-      }),
-      customer: { ...customer, name: "Parent Name", studentName: "Student Name" }
+      item: makeStudyHubItem({ studyHub: { classLevel: "SSS1", classGroup: "SSS", subjects: ["Physics"], months: 3 } }),
+      customer: payer
     });
-    config = getPaystackConfig();
-    expect(sss.reference).toMatch(/^ZH-SSS-1790000000000-[A-Z0-9]{8,}$/);
-    expect(config).toMatchObject({
-      amount: 6000000,
-      reference: sss.reference,
-      metadata: {
-        brand: "studyhub",
-        product_type: "studyhub_sss",
-        class_level: "SSS1"
-      }
-    });
+    expect(getPaystackConfig()).toMatchObject({ amount: 6000000, reference: sss.reference });
   });
 
-  it("opens StudyHub Summer Lessons checkout as a fixed one-time payment", async () => {
+  it("opens StudyHub Summer Lessons as a one-time frontend payment", async () => {
     const onSuccess = vi.fn();
-    const { readTemporaryPayment, startPaystackPayment } = await loadPaymentService();
-
+    const { startPaystackPayment } = await loadPaymentService();
     const pending = await startPaystackPayment({
       item: makeStudyHubItem({
         studyHub: {
@@ -327,29 +218,12 @@ describe("trusted Paystack checkout", () => {
       onSuccess
     });
     const config = getPaystackConfig();
-
-    expect(pending.reference).toMatch(/^ZH-SUMMER-1790000000000-[A-Z0-9]{8,}$/);
-    expect(config).toMatchObject({
-      amount: 3000000,
-      reference: pending.reference,
-      metadata: {
-        brand: "studyhub",
-        product_type: "studyhub_summer_lessons",
-        class_level: "SSS2"
-      }
-    });
-
+    expect(config).toMatchObject({ amount: 3000000, reference: pending.reference });
     config.onSuccess({ reference: pending.reference });
-
     expect(onSuccess).toHaveBeenCalledWith(expect.objectContaining({
-      path: `/studyhub/payment-success?reference=${pending.reference}`,
-      status: "success"
+      status: "client_success",
+      verificationStatus: "unverified",
+      path: `/studyhub/payment-success?reference=${pending.reference}`
     }));
-    expect(readTemporaryPayment(pending.reference)).toMatchObject({
-      productType: "studyhub_summer_lessons",
-      productTitle: "Summer Lessons",
-      amountKobo: 3000000,
-      temporaryStatus: "success"
-    });
   });
 });

@@ -64,7 +64,7 @@ function IdleModal({ remainingMs, onStaySignedIn, onSignOutNow }) {
   );
 }
 
-export default function IdleSessionGuard({ enabled = true }) {
+export default function IdleSessionGuard({ enabled = true, onBeforeSignOut }) {
   const { signOut } = useAuth();
   const navigate = useNavigate();
   const [warningOpen, setWarningOpen] = useState(false);
@@ -99,11 +99,12 @@ export default function IdleSessionGuard({ enabled = true }) {
     signingOutRef.current = true;
     clearTimers();
     setWarningOpen(false);
+    onBeforeSignOut?.();
     clearStoredSessionSecurity();
     if (shouldBroadcast) broadcast("signed_out");
     await signOut({ scope: "local" });
     navigate("/login?reason=idle", { replace: true });
-  }, [broadcast, clearTimers, navigate, signOut]);
+  }, [broadcast, clearTimers, navigate, onBeforeSignOut, signOut]);
 
   const showWarning = useCallback((shouldBroadcast = true) => {
     logoutAtRef.current = lastActivityRef.current + PROTECTED_IDLE_TIMEOUT_MS;

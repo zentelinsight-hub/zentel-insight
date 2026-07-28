@@ -75,8 +75,164 @@ create index if not exists payment_attempt_events_reference_created_idx
 create index if not exists payments_reported_verification_created_idx
   on public.payments(reported_status, verification_status, created_at desc);
 
+alter table public.announcements add column if not exists audience_user_id uuid references auth.users(id) on delete set null;
+alter table public.portal_notifications add column if not exists announcement_id uuid references public.announcements(id) on delete cascade;
+
+create unique index if not exists portal_notifications_announcement_user_unique_idx
+  on public.portal_notifications(announcement_id, user_id)
+  where announcement_id is not null;
+create index if not exists portal_notifications_user_unread_created_idx
+  on public.portal_notifications(user_id, created_at desc)
+  where read_at is null;
+
+create or replace function public.sync_announcement_notifications()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.active is not true
+    or new.published is not true
+    or (new.published_at is not null and new.published_at > now()) then
+    return new;
+  end if;
+
+  insert into public.portal_notifications (
+    user_id,
+    announcement_id,
+    title,
+    message,
+    notification_type,
+    link_path
+  )
+  select
+    role_record.user_id,
+    new.id,
+    new.title,
+    coalesce(nullif(new.summary, ''), left(new.body, 240)),
+    'announcement',
+    case when role_record.role = 'tutor' then '/tutor/announcements' else '/portal/announcements' end
+  from public.user_roles role_record
+  join public.profiles profile
+    on profile.id = role_record.user_id
+   and profile.account_status = 'active'
+  where role_record.role in ('student', 'tutor')
+    and (
+      (new.audience_type = 'specific_user' and role_record.user_id = new.audience_user_id)
+      or (new.audience_type = 'all_students' and role_record.role = 'student')
+      or (new.audience_type = 'all_tutors' and role_record.role = 'tutor')
+      or (new.audience_type in ('all', 'all_learners'))
+      or (
+        new.audience_type in ('specific_program', 'specific_programme', 'specific_track')
+        and new.program_id is not null
+        and (
+          (
+            role_record.role = 'student'
+            and (
+              exists (
+                select 1
+                from public.enrolments enrolment
+                where enrolment.user_id = role_record.user_id
+                  and enrolment.program_id = new.program_id
+                  and enrolment.status = 'active'
+                  and (
+                    new.audience_type <> 'specific_track'
+                    or new.program_level_id is null
+                    or enrolment.program_level_id = new.program_level_id
+                  )
+              )
+              or exists (
+                select 1
+                from public.student_program_preferences preference
+                where preference.user_id = role_record.user_id
+                  and preference.program_id = new.program_id
+                  and (
+                    new.audience_type <> 'specific_track'
+                    or new.program_level_id is null
+                    or preference.track_id = new.program_level_id
+                  )
+              )
+            )
+          )
+          or (
+            role_record.role = 'tutor'
+            and exists (
+              select 1
+              from public.tutor_program_assignments tutor_assignment
+              where tutor_assignment.tutor_id = role_record.user_id
+                and tutor_assignment.program_id = new.program_id
+                and tutor_assignment.active = true
+                and (
+                  new.audience_type <> 'specific_track'
+                  or new.program_level_id is null
+                  or tutor_assignment.track_id is null
+                  or tutor_assignment.track_id = new.program_level_id
+                )
+            )
+          )
+        )
+      )
+    )
+    and (
+      new.program_id is null
+      or new.audience_type in ('specific_program', 'specific_programme', 'specific_track')
+      or (
+        role_record.role = 'student'
+        and (
+          exists (
+            select 1 from public.enrolments enrolment
+            where enrolment.user_id = role_record.user_id
+              and enrolment.program_id = new.program_id
+              and enrolment.status = 'active'
+          )
+          or exists (
+            select 1 from public.student_program_preferences preference
+            where preference.user_id = role_record.user_id
+              and preference.program_id = new.program_id
+          )
+        )
+      )
+      or (
+        role_record.role = 'tutor'
+        and exists (
+          select 1 from public.tutor_program_assignments tutor_assignment
+          where tutor_assignment.tutor_id = role_record.user_id
+            and tutor_assignment.program_id = new.program_id
+            and tutor_assignment.active = true
+        )
+      )
+    )
+  on conflict (announcement_id, user_id) where announcement_id is not null
+  do update set
+    title = excluded.title,
+    message = excluded.message,
+    notification_type = excluded.notification_type,
+    link_path = excluded.link_path;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists announcements_sync_notifications on public.announcements;
+create trigger announcements_sync_notifications
+  after insert or update of
+    title,
+    summary,
+    body,
+    audience_type,
+    audience_user_id,
+    program_id,
+    program_level_id,
+    active,
+    published,
+    published_at
+  on public.announcements
+  for each row execute procedure public.sync_announcement_notifications();
+
 create or replace function public.create_frontend_payment_attempt(
   input_reference text,
+  input_client_event_token text,
   input_brand text,
   input_product_type text,
   input_program_id uuid,
@@ -122,11 +278,14 @@ declare
   trusted_product_name text;
   trusted_selected_level text;
   subject_count integer := 0;
-  raw_client_token text := encode(gen_random_bytes(24), 'hex');
+  raw_client_token text := btrim(coalesce(input_client_event_token, ''));
   saved_payment public.payments;
 begin
   if clean_reference !~ '^(ZI-COURSE|ZH-(JSS|SSS|SUMMER))-[0-9]{13}-[A-Z0-9]{8,20}$' then
     raise exception 'The payment reference is invalid.';
+  end if;
+  if length(raw_client_token) < 32 or length(raw_client_token) > 160 then
+    raise exception 'The payment event token is invalid.';
   end if;
   if length(clean_customer_name) < 2 or length(clean_customer_name) > 160 then
     raise exception 'Enter a valid customer name.';
@@ -205,6 +364,24 @@ begin
 
   if trusted_amount_kobo is null or trusted_amount_kobo <= 0 then
     raise exception 'The current price could not be resolved.';
+  end if;
+
+  select * into saved_payment
+  from public.payments
+  where payments.reference = clean_reference
+    and payments.client_event_token_hash = encode(digest(raw_client_token, 'sha256'), 'hex');
+
+  if saved_payment.id is not null then
+    return query
+    select
+      saved_payment.id,
+      saved_payment.reference,
+      saved_payment.amount_kobo,
+      saved_payment.currency,
+      raw_client_token,
+      saved_payment.reported_status,
+      saved_payment.verification_status;
+    return;
   end if;
 
   insert into public.payments (
@@ -309,10 +486,10 @@ end;
 $$;
 
 revoke all on function public.create_frontend_payment_attempt(
-  text, text, text, uuid, uuid, text, text, text, jsonb, integer, text, text, text, text
+  text, text, text, text, uuid, uuid, text, text, text, jsonb, integer, text, text, text, text
 ) from public;
 grant execute on function public.create_frontend_payment_attempt(
-  text, text, text, uuid, uuid, text, text, text, jsonb, integer, text, text, text, text
+  text, text, text, text, uuid, uuid, text, text, text, jsonb, integer, text, text, text, text
 ) to anon, authenticated;
 
 create or replace function public.record_frontend_payment_event(
@@ -454,14 +631,26 @@ begin
       'payments',
       'payment_attempt_events',
       'profiles',
+      'user_roles',
+      'tutor_profiles',
       'programs',
       'program_levels',
       'enrolments',
       'student_program_preferences',
       'tutor_program_assignments',
+      'timetable_entries',
+      'assignments',
+      'resources',
+      'portal_articles',
+      'support_tickets',
+      'certificates',
       'program_chat_messages',
       'message_read_receipts',
-      'live_class_sessions'
+      'live_class_sessions',
+      'live_class_attendance',
+      'portal_notifications',
+      'announcements',
+      'audit_logs'
     ]
     loop
       if not exists (
@@ -476,3 +665,61 @@ begin
     end loop;
   end if;
 end $$;
+
+create or replace function public.enforce_safe_self_profile_update()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  self_role text;
+begin
+  if auth.uid() = old.id and not public.is_verified_admin_session() then
+    if new.full_name is distinct from old.full_name
+      or new.email is distinct from old.email
+      or new.phone is distinct from old.phone
+      or new.date_of_birth is distinct from old.date_of_birth
+      or new.education_level is distinct from old.education_level
+      or new.address is distinct from old.address
+      or new.title is distinct from old.title
+      or new.account_status is distinct from old.account_status
+      or new.status_changed_at is distinct from old.status_changed_at
+      or new.status_changed_by is distinct from old.status_changed_by
+      or new.status_reason is distinct from old.status_reason
+    then
+      raise exception 'Account credentials are managed by Zentel Insight administration.';
+    end if;
+
+    select coalesce((select role from public.user_roles where user_id = old.id), 'student')
+    into self_role;
+
+    if self_role = 'tutor' then
+      new.profile_completion := (
+        (case when btrim(coalesce(new.full_name, '')) <> '' then 1 else 0 end) +
+        (case when btrim(coalesce(new.email, '')) <> '' then 1 else 0 end) +
+        (case when btrim(coalesce(new.phone, '')) <> '' then 1 else 0 end) +
+        (case when btrim(coalesce(new.avatar_path, '')) <> '' then 1 else 0 end)
+      ) * 100 / 4;
+    else
+      new.profile_completion := round((
+        (case when btrim(coalesce(new.full_name, '')) <> '' then 1 else 0 end) +
+        (case when btrim(coalesce(new.phone, '')) <> '' then 1 else 0 end) +
+        (case when new.date_of_birth is not null then 1 else 0 end) +
+        (case when btrim(coalesce(new.education_level, '')) <> '' then 1 else 0 end) +
+        (case when btrim(coalesce(new.address, '')) <> '' then 1 else 0 end) +
+        (case when btrim(coalesce(new.avatar_path, '')) <> '' then 1 else 0 end)
+      ) * 100.0 / 6)::integer;
+    end if;
+    new.profile_completed := new.profile_completion = 100;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_safe_self_update on public.profiles;
+create trigger profiles_safe_self_update
+  before update on public.profiles
+  for each row execute procedure public.enforce_safe_self_profile_update();
+
+drop policy if exists "Tutors can update professional profile" on public.tutor_profiles;

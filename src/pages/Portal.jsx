@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Link, Outlet } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Award,
   Bell,
@@ -13,23 +13,20 @@ import {
   GraduationCap,
   LayoutDashboard,
   LifeBuoy,
-  LogOut,
   Megaphone,
-  Menu,
   MessageSquare,
   Moon,
   Newspaper,
   Settings,
-  ShieldCheck,
   Sun,
   Trash2,
   Upload,
   UserRound,
-  Video,
-  X
+  Video
 } from "lucide-react";
 import LiveClassCards from "../components/LiveClassCards";
 import ProgramChatPanel from "../components/ProgramChatPanel";
+import PortalShell from "../components/portal/PortalShell";
 import { useAuth } from "../context/authHooks";
 import { useTheme } from "../context/themeHooks";
 import { siteConfig } from "../data/site";
@@ -64,10 +61,8 @@ import {
   updateStudentProfile
 } from "../services/portal/portalRepository";
 import { claimMyEnrolments, requestPasswordReset } from "../services/authService";
-import { readStoredLastActivity, writeStoredLastActivity, clearStoredSessionSecurity } from "../services/sessionSecurity";
-import { formatCurrency, formatDateTime, isValidEmail } from "../utils/format";
+import { formatCurrency, formatDateTime } from "../utils/format";
 import { usePageMeta } from "../utils/usePageMeta";
-import BrandLogo from "../components/BrandLogo";
 
 const portalLinks = [
   ["/portal", "Dashboard", LayoutDashboard],
@@ -103,10 +98,6 @@ const pageMeta = {
   settings: "/portal/settings"
 };
 
-export const PORTAL_IDLE_TIMEOUT_MS = 20 * 60 * 1000;
-export const PORTAL_IDLE_WARNING_MS = 18 * 60 * 1000;
-const PORTAL_ACTIVITY_THROTTLE_MS = 1000;
-const portalChannelName = "zentel-portal-session";
 const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 function formatDate(value) {
@@ -144,16 +135,6 @@ function getInitials(profile, user) {
   const source = profile?.full_name || user?.email || "Learner";
   const words = String(source).replace(/@.*/, "").trim().split(/\s+/).filter(Boolean);
   return (words[0]?.[0] || "L").concat(words[1]?.[0] || "").toUpperCase();
-}
-
-function isValidMeetingUrl(value) {
-  if (!value) return false;
-  try {
-    const url = new URL(value);
-    return ["http:", "https:"].includes(url.protocol);
-  } catch {
-    return false;
-  }
 }
 
 function getProgrammeSummary(enrolments = [], programmePreference = null) {
@@ -302,40 +283,6 @@ function PortalAvatar({ profile, user, size = "md" }) {
   );
 }
 
-function PortalSidebarContent({ profile, user, enrolments, programmePreference, onNavigate, onSignOut }) {
-  const displayName = profile?.full_name || user?.email || "Learner";
-  return (
-    <>
-      <Link className="brand" to="/portal" onClick={onNavigate}>
-        <BrandLogo brand="main" size="portal" />
-        <span>
-          <span className="brand-name">Student Portal</span>
-          <span className="brand-motto">Zentel Insight</span>
-        </span>
-      </Link>
-      <div className="portal-sidebar-profile">
-        <PortalAvatar profile={profile} user={user} />
-        <div>
-          <strong>{displayName}</strong>
-          <span>{getProgrammeSummary(enrolments, programmePreference)}</span>
-        </div>
-      </div>
-      <nav aria-label="Student portal">
-        {portalLinks.map(([href, label, Icon]) => (
-          <NavLink key={href} to={href} end={href === "/portal"} onClick={onNavigate} className={({ isActive }) => isActive ? "portal-link active" : "portal-link"}>
-            <Icon size={18} aria-hidden="true" />
-            {label}
-          </NavLink>
-        ))}
-      </nav>
-      <button className="portal-link signout" type="button" onClick={onSignOut}>
-        <LogOut size={18} aria-hidden="true" />
-        Sign Out
-      </button>
-    </>
-  );
-}
-
 function PortalLoading({ label = "Loading information" }) {
   return (
     <div className="portal-skeleton" role="status" aria-live="polite">
@@ -396,212 +343,14 @@ function PortalPage({ slug, children, actions }) {
   );
 }
 
-function formatCountdown(ms) {
-  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = String(totalSeconds % 60).padStart(2, "0");
-  return `${minutes}:${seconds}`;
-}
-
-function IdleWarningModal({ remainingMs, onStaySignedIn, onSignOutNow }) {
-  const stayButtonRef = useRef(null);
-  const signOutButtonRef = useRef(null);
-
-  useEffect(() => {
-    stayButtonRef.current?.focus();
-  }, []);
-
-  function handleKeyDown(event) {
-    if (event.key !== "Tab") return;
-    const focusable = [stayButtonRef.current, signOutButtonRef.current].filter(Boolean);
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (!first || !last) return;
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
-
-  return createPortal(
-    <div className="idle-modal-backdrop" role="presentation">
-      <section className="idle-modal" role="dialog" aria-modal="true" aria-labelledby="idle-warning-title" onKeyDown={handleKeyDown}>
-        <ShieldCheck size={28} aria-hidden="true" />
-        <div>
-          <p className="eyebrow">Session security</p>
-          <h2 id="idle-warning-title">Are you still there?</h2>
-          <p>For your security, you will be signed out in {formatCountdown(remainingMs)} because there has been no activity.</p>
-        </div>
-        <div className="button-row">
-          <button ref={stayButtonRef} className="button button-primary" type="button" onClick={onStaySignedIn}>
-            Stay Signed In
-          </button>
-          <button ref={signOutButtonRef} className="button button-secondary" type="button" onClick={onSignOutNow}>
-            Sign Out Now
-          </button>
-        </div>
-      </section>
-    </div>,
-    document.body
-  );
-}
-
-function usePortalIdleSession({ enabled, signOut, onBeforeSignOut }) {
-  const navigate = useNavigate();
-  const [warningOpen, setWarningOpen] = useState(false);
-  const [remainingMs, setRemainingMs] = useState(PORTAL_IDLE_TIMEOUT_MS - PORTAL_IDLE_WARNING_MS);
-  const channelRef = useRef(null);
-  const warningTimerRef = useRef(null);
-  const logoutTimerRef = useRef(null);
-  const countdownRef = useRef(null);
-  const lastActivityRef = useRef(Date.now());
-  const logoutAtRef = useRef(Date.now() + PORTAL_IDLE_TIMEOUT_MS);
-  const lastBroadcastRef = useRef(0);
-  const signingOutRef = useRef(false);
-
-  const clearTimers = useCallback(() => {
-    window.clearTimeout(warningTimerRef.current);
-    window.clearTimeout(logoutTimerRef.current);
-    window.clearInterval(countdownRef.current);
-  }, []);
-
-  const broadcast = useCallback((type) => {
-    const message = { type, sentAt: Date.now() };
-    channelRef.current?.postMessage(message);
-    try {
-      localStorage.setItem(`${portalChannelName}:event`, JSON.stringify(message));
-    } catch {
-      // localStorage may be unavailable in private browser modes.
-    }
-  }, []);
-
-  const runLocalSignOut = useCallback(async (shouldBroadcast = true) => {
-    if (signingOutRef.current) return;
-    signingOutRef.current = true;
-    clearTimers();
-    setWarningOpen(false);
-    onBeforeSignOut?.();
-    clearStoredSessionSecurity();
-    if (shouldBroadcast) broadcast("signed_out");
-    await signOut({ scope: "local" });
-    navigate("/login?reason=idle", { replace: true });
-  }, [broadcast, clearTimers, navigate, onBeforeSignOut, signOut]);
-
-  const showWarning = useCallback((shouldBroadcast = true) => {
-    logoutAtRef.current = lastActivityRef.current + PORTAL_IDLE_TIMEOUT_MS;
-    setRemainingMs(Math.max(0, logoutAtRef.current - Date.now()));
-    setWarningOpen(true);
-    window.clearInterval(countdownRef.current);
-    countdownRef.current = window.setInterval(() => {
-      const nextRemaining = Math.max(0, logoutAtRef.current - Date.now());
-      setRemainingMs(nextRemaining);
-      if (nextRemaining <= 0) void runLocalSignOut(true);
-    }, 1000);
-    if (shouldBroadcast) broadcast("warning");
-  }, [broadcast, runLocalSignOut]);
-
-  const resetTimers = useCallback((shouldBroadcast = true) => {
-    if (!enabled || signingOutRef.current) return;
-    clearTimers();
-    lastActivityRef.current = Date.now();
-    writeStoredLastActivity(lastActivityRef.current);
-    logoutAtRef.current = lastActivityRef.current + PORTAL_IDLE_TIMEOUT_MS;
-    setWarningOpen(false);
-    setRemainingMs(PORTAL_IDLE_TIMEOUT_MS - PORTAL_IDLE_WARNING_MS);
-    warningTimerRef.current = window.setTimeout(() => showWarning(true), PORTAL_IDLE_WARNING_MS);
-    logoutTimerRef.current = window.setTimeout(() => void runLocalSignOut(true), PORTAL_IDLE_TIMEOUT_MS);
-    if (shouldBroadcast) broadcast("activity");
-  }, [broadcast, clearTimers, enabled, runLocalSignOut, showWarning]);
-
-  const recordActivity = useCallback(() => {
-    if (!enabled || signingOutRef.current) return;
-    const now = Date.now();
-    if (now - lastBroadcastRef.current < PORTAL_ACTIVITY_THROTTLE_MS) return;
-    lastBroadcastRef.current = now;
-    resetTimers(true);
-  }, [enabled, resetTimers]);
-
-  useEffect(() => {
-    if (!enabled) return undefined;
-    signingOutRef.current = false;
-    const storedActivity = readStoredLastActivity();
-    if (storedActivity && Date.now() - storedActivity >= PORTAL_IDLE_TIMEOUT_MS) {
-      void runLocalSignOut(true);
-      return undefined;
-    }
-    if (storedActivity) {
-      lastActivityRef.current = storedActivity;
-      writeStoredLastActivity(storedActivity);
-      const elapsed = Date.now() - storedActivity;
-      if (elapsed >= PORTAL_IDLE_WARNING_MS) showWarning(false);
-      else resetTimers(false);
-    } else {
-      resetTimers(false);
-    }
-
-    const events = ["pointerdown", "keydown", "touchstart", "scroll", "wheel", "mousemove", "visibilitychange", "focus"];
-    events.forEach((eventName) => window.addEventListener(eventName, recordActivity, { passive: true }));
-
-    if ("BroadcastChannel" in window) {
-      channelRef.current = new BroadcastChannel(portalChannelName);
-      channelRef.current.onmessage = (event) => {
-        if (event.data?.type === "activity" || event.data?.type === "stay_signed_in") resetTimers(false);
-        if (event.data?.type === "warning") showWarning(false);
-        if (event.data?.type === "signed_out") void runLocalSignOut(false);
-      };
-    }
-
-    function handleStorage(event) {
-      if (event.key !== `${portalChannelName}:event` || !event.newValue) return;
-      try {
-        const data = JSON.parse(event.newValue);
-        if (data.type === "activity" || data.type === "stay_signed_in") resetTimers(false);
-        if (data.type === "warning") showWarning(false);
-        if (data.type === "signed_out") void runLocalSignOut(false);
-      } catch {
-        // Ignore malformed cross-tab events.
-      }
-    }
-
-    window.addEventListener("storage", handleStorage);
-
-    return () => {
-      clearTimers();
-      events.forEach((eventName) => window.removeEventListener(eventName, recordActivity));
-      window.removeEventListener("storage", handleStorage);
-      channelRef.current?.close();
-      channelRef.current = null;
-    };
-  }, [clearTimers, enabled, recordActivity, resetTimers, runLocalSignOut, showWarning]);
-
-  const staySignedIn = useCallback(() => {
-    resetTimers(true);
-    broadcast("stay_signed_in");
-  }, [broadcast, resetTimers]);
-
-  const signOutNow = useCallback(() => {
-    void runLocalSignOut(true);
-  }, [runLocalSignOut]);
-
-  return { warningOpen, remainingMs, staySignedIn, signOutNow };
-}
-
 export function PortalLayout() {
-  const { authReady, authLoading, loading, profile, user, signOut } = useAuth();
-  const location = useLocation();
-  const drawerId = useId().replace(/:/g, "");
-  const menuButtonRef = useRef(null);
-  const scrollYRef = useRef(0);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [canUsePortal, setCanUsePortal] = useState(false);
+  const { authReady, authLoading, loading, profile, user } = useAuth();
   const [claimingEnrolments, setClaimingEnrolments] = useState(true);
   const [manualProgrammeModalOpen, setManualProgrammeModalOpen] = useState(false);
   const enrolmentsQuery = useStudentEnrolments(user?.id);
   const programCatalogQuery = useProgramCatalog();
   const programPreferenceQuery = useStudentProgramPreference(user?.id);
+  const notificationsQuery = useStudentNotifications(user?.id);
   const enrolments = enrolmentsQuery.data || [];
   const refetchEnrolments = enrolmentsQuery.refetch;
   const programmePreference = programPreferenceQuery.data;
@@ -611,11 +360,7 @@ export function PortalLayout() {
   const needsProgrammeOnboarding = programmeCheckFinished && !hasActiveOfficialProgramme && !programmePreference?.program_id;
   const showProgrammeModal = needsProgrammeOnboarding || manualProgrammeModalOpen;
   const displayName = profile?.full_name || user?.email || "Learner";
-  const { warningOpen, remainingMs, staySignedIn, signOutNow } = usePortalIdleSession({
-    enabled: Boolean(user?.id),
-    signOut,
-    onBeforeSignOut: () => setMenuOpen(false)
-  });
+  const unreadNotificationCount = (notificationsQuery.data || []).filter((item) => !item.read_at).length;
 
   useEffect(() => {
     let active = true;
@@ -654,51 +399,6 @@ export function PortalLayout() {
     dispatchPortalDataRefresh();
   }
 
-  useEffect(() => {
-    setCanUsePortal(true);
-    document.body.classList.add("portal-route-active");
-    return () => document.body.classList.remove("portal-route-active");
-  }, []);
-
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [location.pathname]);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(min-width: 920.01px)");
-    function handleResize(event) {
-      if (event.matches) setMenuOpen(false);
-    }
-    handleResize(mediaQuery);
-    mediaQuery.addEventListener("change", handleResize);
-    return () => mediaQuery.removeEventListener("change", handleResize);
-  }, []);
-
-  useEffect(() => {
-    if (!menuOpen) return undefined;
-    const restoreFocusTarget = menuButtonRef.current;
-    function handleKeyDown(event) {
-      if (event.key === "Escape") setMenuOpen(false);
-    }
-
-    scrollYRef.current = window.scrollY;
-    document.addEventListener("keydown", handleKeyDown);
-    document.body.classList.add("portal-menu-open");
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollYRef.current}px`;
-    document.body.style.width = "100%";
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.classList.remove("portal-menu-open");
-      document.body.style.position = "";
-      document.body.style.top = "";
-      document.body.style.width = "";
-      window.scrollTo(0, scrollYRef.current);
-      restoreFocusTarget?.focus();
-    };
-  }, [menuOpen]);
-
   usePageMeta({
     path: "/portal",
     title: "Student Portal",
@@ -706,77 +406,49 @@ export function PortalLayout() {
     robots: "noindex,nofollow"
   });
 
-  function closeMenu() {
-    setMenuOpen(false);
-  }
-
-  function handleSignOut() {
-    closeMenu();
-    void signOut();
-  }
-
-  const desktopSidebar = (
-    <aside className="portal-sidebar portal-sidebar-desktop">
-      <PortalSidebarContent
-        profile={profile}
-        user={user}
-        enrolments={enrolments}
-        programmePreference={programmePreference}
-        onNavigate={closeMenu}
-        onSignOut={handleSignOut}
-      />
-    </aside>
-  );
-
-  const mobileDrawer = menuOpen && canUsePortal
-    ? createPortal(
-      <>
-        <button
-          className="portal-drawer-backdrop"
-          type="button"
-          aria-label="Close portal menu"
-          onClick={closeMenu}
-        />
-        <aside id={drawerId} className="portal-sidebar portal-mobile-drawer open" aria-label="Student portal menu">
-          <PortalSidebarContent
-            profile={profile}
-            user={user}
-            enrolments={enrolments}
-            programmePreference={programmePreference}
-            onNavigate={closeMenu}
-            onSignOut={handleSignOut}
-          />
-        </aside>
-      </>,
-      document.body
-    )
-    : null;
-
   return (
-    <section className="portal-shell">
-      {desktopSidebar}
-      {mobileDrawer}
-      <main className="portal-main">
-        <header className="portal-header">
-          <button
-            ref={menuButtonRef}
-            className="icon-button portal-menu-button"
-            type="button"
-            aria-label={menuOpen ? "Close portal menu" : "Open portal menu"}
-            aria-expanded={menuOpen}
-            aria-controls={drawerId}
-            onClick={() => setMenuOpen((current) => !current)}
-          >
-            {menuOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
-          </button>
-          <div>
-            <p className="eyebrow">Welcome back</p>
-            <h1>{displayName}</h1>
-          </div>
-          <PortalAvatar profile={profile} user={user} size="sm" />
-        </header>
+    <PortalShell
+      sidebar={{
+        homeTo: "/portal",
+        brandLabel: "Student Portal",
+        profileName: displayName,
+        profileDetail: getProgrammeSummary(enrolments, programmePreference),
+        avatarUrl: profile?.avatar_url,
+        profileInitial: getInitials(profile, user),
+        navLabel: "Student portal",
+        menuLabel: "portal",
+        items: portalLinks.map(([to, label, Icon]) => ({
+          to,
+          label,
+          Icon,
+          end: to === "/portal",
+          badge: to === "/portal/notifications" ? unreadNotificationCount : 0
+        }))
+      }}
+      header={{
+        eyebrow: "Welcome back",
+        title: displayName,
+        status: <PortalAvatar profile={profile} user={user} size="sm" />
+      }}
+      idleEnabled={Boolean(user?.id)}
+      realtimeTables={[
+        "announcements",
+        "assignments",
+        "certificates",
+        "enrolments",
+        "live_class_sessions",
+        "payments",
+        "portal_articles",
+        "portal_notifications",
+        "program_levels",
+        "resources",
+        "student_program_preferences",
+        "timetable_entries",
+        "tutor_program_assignments"
+      ]}
+      onRealtimeChange={dispatchPortalDataRefresh}
+    >
         <Outlet />
-      </main>
       {showProgrammeModal ? (
         <ProgrammeSelectionModal
           programs={programCatalogQuery.data || []}
@@ -786,8 +458,7 @@ export function PortalLayout() {
           onSave={saveProgrammePreference}
         />
       ) : null}
-      {warningOpen ? <IdleWarningModal remainingMs={remainingMs} onStaySignedIn={staySignedIn} onSignOutNow={signOutNow} /> : null}
-    </section>
+    </PortalShell>
   );
 }
 
@@ -856,7 +527,6 @@ export function PortalOverview() {
                   <>
                     <p>{getCourseName(data.upcomingClass)} on {formatScheduleDay(data.upcomingClass)} from {formatTime(data.upcomingClass.start_time)} to {formatTime(data.upcomingClass.end_time)} {data.upcomingClass.timezone || "Africa/Lagos"}.</p>
                     {data.upcomingClass.meeting_provider ? <span className="portal-tag">{data.upcomingClass.meeting_provider}</span> : null}
-                    {isValidMeetingUrl(data.upcomingClass.meeting_url) ? <a className="button button-secondary" href={data.upcomingClass.meeting_url} target="_blank" rel="noreferrer">Join Class</a> : null}
                   </>
                 ) : (
                   <p>Your next class appears after an approved timetable entry is published for your programme.</p>
@@ -907,7 +577,7 @@ export function PortalOverview() {
               </article>
               <article className="notice-card">
                 <h3>Session security</h3>
-                <p>Your portal warns you after 18 minutes of inactivity and signs out the local browser session after 20 minutes.</p>
+                <p>For your security, your Portal session will automatically sign out after 10 minutes without activity. You will receive a warning shortly before logout.</p>
                 <span className="portal-tag success"><Clock3 size={14} aria-hidden="true" /> Active session</span>
               </article>
             </div>
@@ -1108,7 +778,6 @@ function TimetablePage() {
                     {item.tutor_name || item.instructor_name ? <div><dt>Tutor</dt><dd>{item.tutor_name || item.instructor_name}</dd></div> : null}
                     {item.meeting_provider ? <div><dt>Provider</dt><dd>{item.meeting_provider}</dd></div> : null}
                   </dl>
-                  {isValidMeetingUrl(item.meeting_url) ? <a className="button button-primary" href={item.meeting_url} target="_blank" rel="noreferrer">Join Class</a> : null}
                 </article>
               ))}
             </div>
@@ -1669,17 +1338,11 @@ export function PortalProfile() {
   }, []);
 
   const dirty = useMemo(() => {
-    const profile = query.data || {};
     return Boolean(
       avatarFile ||
-      removeAvatar ||
-      form.full_name !== (profile.full_name || "") ||
-      form.phone !== (profile.phone || "") ||
-      form.date_of_birth !== (profile.date_of_birth || "") ||
-      form.education_level !== (profile.education_level || "") ||
-      form.address !== (profile.address || "")
+      removeAvatar
     );
-  }, [avatarFile, form, query.data, removeAvatar]);
+  }, [avatarFile, removeAvatar]);
 
   useEffect(() => {
     if (!dirty) return undefined;
@@ -1718,8 +1381,8 @@ export function PortalProfile() {
 
   async function submit(event) {
     event.preventDefault();
-    if (form.full_name.trim().length < 2 || !isValidEmail(form.email) || form.phone.trim().length < 7) {
-      setStatus({ type: "warning", message: "Review your name, email and phone number before saving." });
+    if (!avatarFile && !removeAvatar) {
+      setStatus({ type: "warning", message: "Choose a profile picture change before saving." });
       return;
     }
     setSaving(true);
@@ -1736,7 +1399,7 @@ export function PortalProfile() {
       query.refetch();
       setAvatarFile(null);
       setRemoveAvatar(false);
-      setStatus({ type: "success", message: "Profile updated successfully." });
+      setStatus({ type: "success", message: "Profile picture updated successfully." });
     } catch (error) {
       setStatus({ type: "warning", message: error.message || "Profile could not be updated." });
     } finally {
@@ -1773,7 +1436,7 @@ export function PortalProfile() {
               <div className="portal-metric-card">
                 <span>Profile completion</span>
                 <strong>{calculateProfileCompletion({ ...form, avatar_path: removeAvatar ? "" : query.data.avatar_path || avatarPreview })}%</strong>
-                <small>Keep your profile current so support can contact you accurately.</small>
+                 <small>Admin manages your account details; you can keep your profile picture current.</small>
               </div>
               <div className="portal-metric-card">
                 <span>Email verification</span>
@@ -1784,7 +1447,7 @@ export function PortalProfile() {
             <div className="form-grid">
               <label>
                 <span>Full name</span>
-                <input value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} />
+                 <input value={form.full_name} readOnly />
               </label>
               <label>
                 <span>Email address</span>
@@ -1792,23 +1455,24 @@ export function PortalProfile() {
               </label>
               <label>
                 <span>Phone</span>
-                <input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
+                 <input value={form.phone} readOnly />
               </label>
               <label>
                 <span>Date of birth</span>
-                <input type="date" value={form.date_of_birth || ""} onChange={(event) => setForm({ ...form, date_of_birth: event.target.value })} />
+                 <input type="date" value={form.date_of_birth || ""} readOnly />
               </label>
               <label>
                 <span>Level of education</span>
-                <input value={form.education_level || ""} onChange={(event) => setForm({ ...form, education_level: event.target.value })} />
+                 <input value={form.education_level || ""} readOnly />
               </label>
               <label>
                 <span>Residential address</span>
-                <input value={form.address || ""} onChange={(event) => setForm({ ...form, address: event.target.value })} />
+                 <input value={form.address || ""} readOnly />
               </label>
             </div>
             {status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}
-            <button className="button button-primary" type="submit" disabled={saving}>{saving ? "Saving" : "Save Profile"}</button>
+            <span className="portal-tag">Account details are Admin-managed</span>
+            <button className="button button-primary" type="submit" disabled={saving || !dirty}>{saving ? "Saving" : "Save Photo"}</button>
           </form>
         );
       }}

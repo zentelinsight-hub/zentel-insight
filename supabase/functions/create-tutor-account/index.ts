@@ -206,16 +206,12 @@ Deno.serve(async (request) => {
   } catch (error) {
     const message = (error as Error).message || "Tutor account could not be created.";
     console.error("create-tutor-account", failureStep, message);
-    if (createdNewAuthUser && tutorUserId) {
-      const { error: deleteError } = await admin.supabase.auth.admin.deleteUser(tutorUserId);
-      if (deleteError) console.error("create-tutor-account cleanup", deleteError.message);
-    }
     await writeAuditLog(admin.supabase, {
       actorUserId: admin.user?.id,
       action: "tutor_account_create_failed",
       targetTable: "profiles",
       targetId: tutorUserId || null,
-      metadata: { failureStep, message, cleanedUpAuthUser: createdNewAuthUser && Boolean(tutorUserId) }
+      metadata: { failureStep, message, retainedInactiveAuthUser: createdNewAuthUser && Boolean(tutorUserId) }
     });
     return jsonResponse({ ok: false, error: `${message} Failed step: ${failureStep}.` }, 400, request);
   }

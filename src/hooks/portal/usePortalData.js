@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { toSafeErrorMessage, withQueryTimeout } from "../../utils/errors";
 import {
   getProgramCatalog,
   getPortalPageContent,
@@ -20,11 +21,12 @@ import {
   getStudentTimetable
 } from "../../services/portal/portalRepository";
 
-function usePortalQuery(queryFn, deps) {
+function usePortalQuery(queryFn, deps, options = {}) {
   const depsKey = deps.map((item) => String(item ?? "")).join("|");
+  const enabled = options.enabled !== false;
   const [state, setState] = useState({
     data: null,
-    loading: true,
+    loading: enabled,
     error: ""
   });
   const [version, setVersion] = useState(0);
@@ -33,21 +35,31 @@ function usePortalQuery(queryFn, deps) {
 
   useEffect(() => {
     let active = true;
+    if (!enabled) {
+      setState({ data: null, loading: false, error: "" });
+      return () => {
+        active = false;
+      };
+    }
     setState((current) => ({ ...current, loading: true, error: "" }));
-    queryFn()
+    withQueryTimeout(Promise.resolve().then(queryFn), 15000, "This Portal information took too long to load.")
       .then((data) => {
         if (active) setState({ data, loading: false, error: "" });
       })
       .catch((error) => {
         if (import.meta.env.DEV) console.info("Portal query failed", error);
-        if (active) setState({ data: null, loading: false, error: error.message || "We could not load this information" });
+        if (active) setState({
+          data: null,
+          loading: false,
+          error: toSafeErrorMessage(error, "We could not load this Portal information right now.")
+        });
       });
     return () => {
       active = false;
     };
   // queryFn is intentionally recreated by page-specific hooks; depsKey is the stable query identity.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [depsKey, version]);
+  }, [depsKey, enabled, version]);
 
   useEffect(() => {
     const clear = () => setState({ data: null, loading: false, error: "" });
@@ -73,65 +85,65 @@ export function usePortalPageContent(pageSlug) {
 }
 
 export function useStudentDashboard(userId) {
-  return usePortalQuery(() => getStudentDashboard(userId), [userId]);
+  return usePortalQuery(() => getStudentDashboard(userId), [userId], { enabled: Boolean(userId) });
 }
 
 export function useStudentProfile(user) {
-  return usePortalQuery(() => getStudentProfile(user), [user?.id]);
+  return usePortalQuery(() => getStudentProfile(user), [user?.id], { enabled: Boolean(user?.id) });
 }
 
 export function useStudentEnrolments(userId) {
-  return usePortalQuery(() => getStudentEnrolments(userId), [userId]);
+  return usePortalQuery(() => getStudentEnrolments(userId), [userId], { enabled: Boolean(userId) });
 }
 
 export function useStudentTimetable(userId) {
-  return usePortalQuery(() => getStudentTimetable(userId), [userId]);
+  return usePortalQuery(() => getStudentTimetable(userId), [userId], { enabled: Boolean(userId) });
 }
 
 export function useStudentLiveClasses(userId) {
-  return usePortalQuery(() => getStudentLiveClasses(userId), [userId]);
+  return usePortalQuery(() => getStudentLiveClasses(userId), [userId], { enabled: Boolean(userId) });
 }
 
 export function useStudentClassroom(userId) {
-  return usePortalQuery(() => getStudentClassroom(userId), [userId]);
+  return usePortalQuery(() => getStudentClassroom(userId), [userId], { enabled: Boolean(userId) });
 }
 
 export function useStudentAnnouncements(userId) {
-  return usePortalQuery(() => getStudentAnnouncements(userId), [userId]);
+  return usePortalQuery(() => getStudentAnnouncements(userId), [userId], { enabled: Boolean(userId) });
 }
 
 export function useStudentAssignments(userId) {
-  return usePortalQuery(() => getStudentAssignments(userId), [userId]);
+  return usePortalQuery(() => getStudentAssignments(userId), [userId], { enabled: Boolean(userId) });
 }
 
 export function useStudentResources(userId) {
-  return usePortalQuery(() => getStudentResources(userId), [userId]);
+  return usePortalQuery(() => getStudentResources(userId), [userId], { enabled: Boolean(userId) });
 }
 
 export function usePortalArticles(userId) {
-  return usePortalQuery(() => getPortalArticles(userId), [userId]);
+  return usePortalQuery(() => getPortalArticles(userId), [userId], { enabled: Boolean(userId) });
 }
 
 export function useStudentPayments(userId) {
-  return usePortalQuery(() => getStudentPayments(userId), [userId]);
+  return usePortalQuery(() => getStudentPayments(userId), [userId], { enabled: Boolean(userId) });
 }
 
 export function useStudentCertificates(userId) {
-  return usePortalQuery(() => getStudentCertificates(userId), [userId]);
+  return usePortalQuery(() => getStudentCertificates(userId), [userId], { enabled: Boolean(userId) });
 }
 
 export function useStudentNotifications(userId) {
-  return usePortalQuery(() => getStudentNotifications(userId), [userId]);
+  return usePortalQuery(() => getStudentNotifications(userId), [userId], { enabled: Boolean(userId) });
 }
 
 export function useStudentSupportTickets(userId) {
-  return usePortalQuery(() => getStudentSupportTickets(userId), [userId]);
+  return usePortalQuery(() => getStudentSupportTickets(userId), [userId], { enabled: Boolean(userId) });
 }
 
 export function useStudentPreferences(userId) {
-  return usePortalQuery(() => getStudentPreferences(userId), [userId]);
+  return usePortalQuery(() => getStudentPreferences(userId), [userId], { enabled: Boolean(userId) });
 }
 
 export function useStudentProgramPreference(userId) {
-  return usePortalQuery(() => getStudentProgramPreference(userId), [userId]);
+  return usePortalQuery(() => getStudentProgramPreference(userId), [userId], { enabled: Boolean(userId) });
 }

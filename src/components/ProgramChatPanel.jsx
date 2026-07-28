@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ImageUp, MessageSquare, Send, ShieldAlert } from "lucide-react";
 import { useAuth } from "../context/authHooks";
 import { useAsyncData } from "../hooks/useAsyncData";
@@ -7,6 +7,7 @@ import {
   ensureProgramClassroom,
   getProgramChatMessages,
   getProgramChatRooms,
+  getProgramChatUnreadCounts,
   markProgramChatRead,
   moderateProgramChatMessage,
   sendProgramChatMessage,
@@ -30,11 +31,13 @@ export default function ProgramChatPanel({ canModerate = false, programId = "", 
     [programId, trackId]
   );
   const rooms = useMemo(() => roomsQuery.data || [], [roomsQuery.data]);
+  const unreadQuery = useAsyncData(() => getProgramChatUnreadCounts(), [], { enabled: Boolean(user?.id) });
   const [roomId, setRoomId] = useState("");
   const selectedRoom = useMemo(() => rooms.find((room) => room.id === roomId) || rooms[0] || null, [roomId, rooms]);
   const messagesQuery = useAsyncData(
-    () => selectedRoom ? getProgramChatMessages(selectedRoom.id) : Promise.resolve([]),
-    [selectedRoom?.id]
+    () => getProgramChatMessages(selectedRoom.id),
+    [selectedRoom?.id],
+    { enabled: Boolean(selectedRoom?.id) }
   );
   const [messages, setMessages] = useState([]);
   const [body, setBody] = useState("");
@@ -43,6 +46,12 @@ export default function ProgramChatPanel({ canModerate = false, programId = "", 
   const [sending, setSending] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [failedSend, setFailedSend] = useState(null);
+  const imagePreviewUrl = useMemo(() => imageFile ? URL.createObjectURL(imageFile) : "", [imageFile]);
+  const messageListRef = useRef(null);
+
+  useEffect(() => () => {
+    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+  }, [imagePreviewUrl]);
 
   useEffect(() => {
     setMessages(messagesQuery.data || []);
@@ -54,20 +63,29 @@ export default function ProgramChatPanel({ canModerate = false, programId = "", 
     markProgramChatRead(selectedRoom.id, user.id).catch((error) => {
       if (active && import.meta.env.DEV) console.info("Chat read receipts could not be updated", error);
     });
+    unreadQuery.refetch();
     return () => {
       active = false;
     };
+  // unreadQuery.refetch is stable; message changes are the intended read boundary.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRoom?.id, user?.id, messages.length, messagesQuery.loading, messagesQuery.error]);
 
   useEffect(() => {
     if (!selectedRoom?.id) return undefined;
+    let active = true;
     let unsubscribe = () => {};
     subscribeToProgramChat(selectedRoom.id, (message) => {
+      if (!active) return;
       setMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message]);
     }).then((cleanup) => {
-      unsubscribe = cleanup;
+      if (active) unsubscribe = cleanup;
+      else cleanup();
     });
-    return () => unsubscribe();
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [selectedRoom?.id]);
 
   function selectImage(event) {
@@ -122,11 +140,16 @@ export default function ProgramChatPanel({ canModerate = false, programId = "", 
     if (!selectedRoom?.id || !messages.length || loadingOlder) return;
     setLoadingOlder(true);
     setStatus({ type: "", message: "" });
+    const listElement = messageListRef.current;
+    const previousHeight = listElement?.scrollHeight || 0;
     try {
       const older = await getProgramChatMessages(selectedRoom.id, { before: messages[0].created_at, limit: 30 });
       setMessages((current) => {
         const seen = new Set(current.map((item) => item.id));
         return [...older.filter((item) => !seen.has(item.id)), ...current];
+      });
+      window.requestAnimationFrame(() => {
+        if (listElement) listElement.scrollTop += listElement.scrollHeight - previousHeight;
       });
       if (!older.length) setStatus({ type: "success", message: "No older messages." });
     } catch (error) {
@@ -150,7 +173,7 @@ export default function ProgramChatPanel({ canModerate = false, programId = "", 
     return (
       <div className="notice-card portal-state-card">
         <h2>Programme chat could not be loaded</h2>
-        <p>{roomsQuery.error}</p>
+        <p>Refresh this section and try again. If the issue continues, contact Zentel Insight support.</p>
         <button className="button button-secondary" type="button" onClick={roomsQuery.refetch}>Try Again</button>
       </div>
     );
@@ -176,7 +199,8 @@ export default function ProgramChatPanel({ canModerate = false, programId = "", 
             onClick={() => setRoomId(room.id)}
           >
             <MessageSquare size={16} aria-hidden="true" />
-            <span>{room.programs?.title || room.title}</span>
+             <span>{room.programs?.title || room.title}</span>
+            {Number(unreadQuery.data?.[room.id] || 0) > 0 ? <span className="portal-nav-badge">{unreadQuery.data[room.id]}</span> : null}
           </button>
         ))}
       </aside>
@@ -188,8 +212,8 @@ export default function ProgramChatPanel({ canModerate = false, programId = "", 
           </div>
           <span className="portal-tag">Realtime</span>
         </div>
-        <div className="chat-message-list">
-          {messages.length ? (
+        <div className="chat-message-list" ref={messageListRef}>
+          {!messagesQuery.error && messages.length ? (
             <button className="text-link chat-load-older" type="button" onClick={loadOlder} disabled={loadingOlder}>
               {loadingOlder ? "Loading older messages" : "Load older messages"}
             </button>
@@ -201,8 +225,8 @@ export default function ProgramChatPanel({ canModerate = false, programId = "", 
               <button className="text-link" type="button" onClick={messagesQuery.refetch}>Try again</button>
             </div>
           ) : null}
-          {!messagesQuery.loading && !messages.length ? <p>No messages yet.</p> : null}
-          {messages.map((message) => (
+          {!messagesQuery.loading && !messagesQuery.error && !messages.length ? <p>No messages yet.</p> : null}
+          {!messagesQuery.error ? messages.map((message) => (
             <article className={message.sender_id === user?.id ? "chat-message own" : "chat-message"} key={message.id}>
               <div>
                 <strong>{senderName(message)}</strong>
@@ -223,9 +247,9 @@ export default function ProgramChatPanel({ canModerate = false, programId = "", 
                 </button>
               ) : null}
             </article>
-          ))}
+          )) : null}
         </div>
-        <form className="chat-composer" onSubmit={send}>
+        {!messagesQuery.error ? <form className="chat-composer" onSubmit={send}>
           <label>
             <span className="sr-only">Message</span>
             <textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write a message" rows="2" />
@@ -238,8 +262,14 @@ export default function ProgramChatPanel({ canModerate = false, programId = "", 
             {sending ? "Sending" : "Send"}
             <Send size={18} aria-hidden="true" />
           </button>
-        </form>
-        {imageFile ? <small className="muted-line">Attached: {imageFile.name}</small> : null}
+        </form> : null}
+        {imageFile ? (
+          <div className="chat-image-preview">
+            <img src={imagePreviewUrl} alt="Selected chat attachment preview" />
+            <small className="muted-line">Attached: {imageFile.name}</small>
+            <button className="text-link danger" type="button" onClick={() => setImageFile(null)}>Remove</button>
+          </div>
+        ) : null}
         {status.message ? (
           <div className={`form-status ${status.type}`} role="status">
             {status.message}

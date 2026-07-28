@@ -29,3 +29,6 @@ verify_jwt = true
 
 [functions.end-live-class]
 verify_jwt = true
+
+[functions.leave-live-class]
+verify_jwt = true

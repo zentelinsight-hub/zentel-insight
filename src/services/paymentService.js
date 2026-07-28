@@ -1,5 +1,5 @@
-import { getProgramLevel, studyHubPricing } from "../data/programs";
-import { EdgeFunctionError, invokeEdgeFunction } from "./edgeFunctionClient";
+import { studyHubPricing } from "../data/programs";
+import { getSupabaseClient } from "./supabaseClient";
 import { isValidEmail } from "../utils/format";
 import {
   COURSE_PAYMENT_TYPE,
@@ -7,11 +7,12 @@ import {
   STUDYHUB_SUMMER_LESSONS_PAYMENT_TYPE,
   calculateStudyHubPrice,
   nairaToKobo,
-  normalizePaymentReference,
-  resolveCourseCheckout
+  normalizePaymentReference
 } from "../utils/paymentCalculations";
 
 export const PENDING_PAYMENT_STORAGE_KEY = "zentel_pending_payment";
+export const PAYMENT_RETRY_STORAGE_KEY = "zentel_payment_retry_queue";
+const ATTEMPT_WRITE_TIMEOUT_MS = 4500;
 
 function readEnvValue(key) {
   return String(import.meta.env[key] || "").trim();
@@ -120,10 +121,14 @@ export function saveTemporaryPayment(record) {
     createdAt: record.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     temporaryStatus: record.temporaryStatus || "pending",
-    failureReason: record.failureReason || ""
+    failureReason: record.failureReason || "",
+    reportedStatus: record.reportedStatus || record.temporaryStatus || "initiated",
+    verificationStatus: record.verificationStatus || "unverified",
+    attemptPersisted: Boolean(record.attemptPersisted)
   };
   if (record.paymentId) sanitizedRecord.paymentId = record.paymentId;
   if (record.providerMode) sanitizedRecord.providerMode = record.providerMode;
+  if (record.clientEventToken) sanitizedRecord.clientEventToken = record.clientEventToken;
 
   window.sessionStorage.setItem(PENDING_PAYMENT_STORAGE_KEY, JSON.stringify(sanitizedRecord));
   return sanitizedRecord;
@@ -177,28 +182,27 @@ function resolveStudyHubCheckout(item, customer) {
 }
 
 function resolveMainCheckout(item, customer) {
-  const selected = item?.programSlug && item?.levelSlug
-    ? {
-        programSlug: sanitizeText(item.programSlug),
-        levelSlug: sanitizeText(item.levelSlug),
-        programTitle: sanitizeText(item.programTitle || item.productTitle),
-        level: sanitizeText(item.level || item.trackName),
-        priceKobo: Number(item.priceKobo || 0),
-        price: Number(item.price || 0)
-      }
-    : resolveCourseCheckout(item.programSlug, item.levelSlug);
-  const fallbackMatch = getProgramLevel(selected.programSlug, selected.levelSlug);
-  const amountKobo = fallbackMatch?.level?.priceKobo || selected.priceKobo || nairaToKobo(fallbackMatch?.level?.price || selected.price || 0);
-  const programTitle = fallbackMatch?.program?.title || selected.programTitle || "Zentel Insight programme";
-  const trackName = fallbackMatch?.level?.name || selected.level || "Selected track";
+  const selected = {
+    programId: sanitizeText(item?.programId),
+    trackId: sanitizeText(item?.trackId),
+    programSlug: sanitizeText(item?.programSlug),
+    levelSlug: sanitizeText(item?.levelSlug),
+    programTitle: sanitizeText(item?.programTitle || item?.productTitle),
+    level: sanitizeText(item?.level || item?.trackName),
+    priceKobo: Number(item?.priceKobo || 0),
+    price: Number(item?.price || 0)
+  };
+  const amountKobo = selected.priceKobo || nairaToKobo(selected.price || 0);
 
   return {
     brand: "zentel_insight",
     productType: COURSE_PAYMENT_TYPE,
-    productTitle: programTitle,
+    productTitle: selected.programTitle || "Zentel Insight programme",
+    programId: selected.programId,
+    trackId: selected.trackId,
     programSlug: selected.programSlug,
     trackSlug: selected.levelSlug,
-    trackName,
+    trackName: selected.level || "Selected track",
     amountKobo,
     referencePrefix: "ZI-COURSE",
     customerName: customer.name.trim(),
@@ -228,6 +232,12 @@ export function validatePaymentRequest({ item, customer }) {
   }
 
   const trustedCheckout = resolveTrustedCheckout(item, customer);
+  if (
+    (item.paymentType || COURSE_PAYMENT_TYPE) !== STUDYHUB_PAYMENT_TYPE
+    && (!trustedCheckout.programId || !trustedCheckout.trackId || !trustedCheckout.programSlug || !trustedCheckout.trackSlug)
+  ) {
+    throw new Error("This programme or track is invalid. Return to the Programme page and choose a published track.");
+  }
   if (!Number.isInteger(trustedCheckout.amountKobo) || trustedCheckout.amountKobo <= 0) {
     throw new Error("This programme or payment option is unavailable. Return to the programmes page and choose a valid option.");
   }
@@ -258,46 +268,150 @@ function createMetadata(record) {
   };
 }
 
-async function createServerPaymentSession(trustedCheckout, item, customer) {
-  const environment = getPaymentEnvironmentStatus();
+function createClientEventToken() {
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    return Array.from(crypto.getRandomValues(new Uint8Array(24)))
+      .map((value) => value.toString(16).padStart(2, "0"))
+      .join("");
+  }
+  return `${generateRandomReferencePart()}${generateRandomReferencePart()}${generateRandomReferencePart()}${generateRandomReferencePart()}`;
+}
+
+function withBoundedAttemptWrite(promise) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error("attempt_write_timeout")), ATTEMPT_WRITE_TIMEOUT_MS);
+  });
+  return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
+}
+
+function buildAttemptPayload(trustedCheckout, reference, clientEventToken) {
+  return {
+    input_reference: reference,
+    input_client_event_token: clientEventToken,
+    input_brand: trustedCheckout.brand,
+    input_product_type: trustedCheckout.productType,
+    input_program_id: trustedCheckout.programId || null,
+    input_track_id: trustedCheckout.trackId || null,
+    input_program_slug: trustedCheckout.programSlug || "",
+    input_track_slug: trustedCheckout.trackSlug || "",
+    input_class_level: trustedCheckout.classLevel || "",
+    input_subject_names: trustedCheckout.subjectNames || [],
+    input_months: trustedCheckout.months || null,
+    input_customer_name: trustedCheckout.customerName,
+    input_customer_email: trustedCheckout.customerEmail,
+    input_customer_phone: trustedCheckout.customerPhone,
+    input_student_name: trustedCheckout.studentName || ""
+  };
+}
+
+async function createFrontendPaymentAttempt(payload) {
+  const supabase = await getSupabaseClient();
+  if (!supabase) throw new Error("attempt_write_unavailable");
+  const { data, error } = await supabase.rpc("create_frontend_payment_attempt", payload);
+  if (error) throw error;
+  const record = Array.isArray(data) ? data[0] : data;
+  if (!record?.payment_id || !record?.amount_kobo) throw new Error("attempt_write_invalid_response");
+  return record;
+}
+
+async function writeFrontendPaymentEvent(reference, clientEventToken, event) {
+  const supabase = await getSupabaseClient();
+  if (!supabase) throw new Error("attempt_event_unavailable");
+  const { error } = await supabase.rpc("record_frontend_payment_event", {
+    input_reference: reference,
+    input_client_event_token: clientEventToken,
+    input_event_type: event.type,
+    input_provider_transaction_id: event.providerTransactionId || null,
+    input_event_message: event.message || null
+  });
+  if (error) throw error;
+}
+
+function readRetryQueue() {
+  if (typeof window === "undefined") return [];
   try {
-    const data = await invokeEdgeFunction("create-payment-session", {
-      requireSession: false,
-      unavailableMessage: "Payment setup is temporarily unavailable.",
-      failureMessage: "Payment setup could not be completed.",
-      body: {
-      brand: trustedCheckout.brand === "studyhub" ? "studyhub" : "zentel_insight",
-      productType: trustedCheckout.productType,
-      programSlug: trustedCheckout.programSlug || item.programSlug,
-      trackSlug: trustedCheckout.trackSlug || item.levelSlug,
-      levelSlug: trustedCheckout.trackSlug || item.levelSlug,
-      classLevel: trustedCheckout.classLevel || item.studyHub?.classLevel,
-      classGroup: item.studyHub?.classGroup,
-      subjectIds: trustedCheckout.subjectNames || item.studyHub?.subjects || [],
-      subjects: trustedCheckout.subjectNames || item.studyHub?.subjects || [],
-      months: trustedCheckout.months || item.studyHub?.months,
-      parentName: customer.parentName || customer.name,
-      studentName: customer.studentName || trustedCheckout.studentName || customer.name,
-      customer: {
-        fullName: customer.name,
-        email: customer.email,
-        phone: customer.phone,
-        studentName: customer.studentName || "",
-        parentName: customer.parentName || customer.name
-      },
-      paystackPublicKeyMode: environment.paystackMode,
-      paystackPublicKeyConfigured: environment.paystackPublicKeyConfigured
-      }
+    const parsed = JSON.parse(window.sessionStorage.getItem(PAYMENT_RETRY_STORAGE_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeRetryQueue(queue) {
+  if (typeof window === "undefined") return;
+  if (!queue.length) {
+    window.sessionStorage.removeItem(PAYMENT_RETRY_STORAGE_KEY);
+    return;
+  }
+  window.sessionStorage.setItem(PAYMENT_RETRY_STORAGE_KEY, JSON.stringify(queue.slice(-10)));
+}
+
+function queuePaymentRetry({ reference, payload, attemptPersisted = false, event }) {
+  const queue = readRetryQueue();
+  const existing = queue.find((item) => item.reference === reference);
+  const nextEvent = event ? {
+    type: event.type,
+    providerTransactionId: String(event.providerTransactionId || "").slice(0, 120),
+    message: String(event.message || "").slice(0, 500)
+  } : null;
+  if (existing) {
+    existing.payload = existing.payload || payload;
+    existing.attemptPersisted = existing.attemptPersisted || attemptPersisted;
+    if (nextEvent) existing.events.push(nextEvent);
+    existing.updatedAt = new Date().toISOString();
+  } else {
+    queue.push({
+      reference,
+      payload,
+      attemptPersisted,
+      events: nextEvent ? [nextEvent] : [],
+      updatedAt: new Date().toISOString()
     });
+  }
+  writeRetryQueue(queue);
+  window.addEventListener("online", () => void flushQueuedPaymentAttempts(), { once: true });
+  window.setTimeout(() => void flushQueuedPaymentAttempts(), 5000);
+}
 
-    if (!data?.ok) throw new Error(data?.error || "Payment setup could not be completed.");
+let retryFlushPromise = null;
 
-    return data;
-  } catch (error) {
-    const message = error instanceof EdgeFunctionError && error.message
-      ? error.message
-      : error?.message || "Payment setup is temporarily unavailable.";
-    throw new Error(message);
+export async function flushQueuedPaymentAttempts() {
+  if (retryFlushPromise) return retryFlushPromise;
+  retryFlushPromise = (async () => {
+    const queue = readRetryQueue();
+    const remaining = [];
+    for (const item of queue) {
+      try {
+        if (!item.attemptPersisted) await withBoundedAttemptWrite(createFrontendPaymentAttempt(item.payload));
+        for (const event of item.events || []) {
+          await withBoundedAttemptWrite(writeFrontendPaymentEvent(item.reference, item.payload.input_client_event_token, event));
+        }
+      } catch {
+        remaining.push(item);
+      }
+    }
+    writeRetryQueue(remaining);
+    return remaining.length === 0;
+  })().finally(() => {
+    retryFlushPromise = null;
+  });
+  return retryFlushPromise;
+}
+
+async function recordFrontendEvent(attempt, event) {
+  try {
+    if (!attempt.attemptPersisted) throw new Error("attempt_not_persisted");
+    await withBoundedAttemptWrite(writeFrontendPaymentEvent(attempt.reference, attempt.clientEventToken, event));
+    return true;
+  } catch {
+    queuePaymentRetry({
+      reference: attempt.reference,
+      payload: attempt.payload,
+      attemptPersisted: attempt.attemptPersisted,
+      event
+    });
+    return false;
   }
 }
 
@@ -308,18 +422,6 @@ async function createPaystackPopup() {
   } catch {
     throw new Error("Paystack could not be opened. No payment has been charged. Please check your connection and try again.");
   }
-}
-
-function openPaystackWithAccessCode(popup, session) {
-  if (session.accessCode && typeof popup.resumeTransaction === "function") {
-    popup.resumeTransaction(session.accessCode);
-    return true;
-  }
-  if (session.authorizationUrl) {
-    window.location.assign(session.authorizationUrl);
-    return true;
-  }
-  return false;
 }
 
 function makeResultPath(record, status, reason = "") {
@@ -342,78 +444,137 @@ function isDeclinedError(error) {
 
 export async function startPaystackPayment({ item, customer, onSuccess, onCancel, onError }) {
   const trustedCheckout = validatePaymentRequest({ item, customer });
-  const serverSession = await createServerPaymentSession(trustedCheckout, item, customer);
-  const serverAmountKobo = Number(serverSession?.amountKobo || 0);
-  const serverTrustedCheckout = {
-    ...trustedCheckout,
-    amountKobo: Number.isInteger(serverAmountKobo) && serverAmountKobo > 0 ? serverAmountKobo : trustedCheckout.amountKobo
-  };
-  const reference = serverSession.reference || generatePaymentReference(serverTrustedCheckout.referencePrefix);
+  const reference = generatePaymentReference(trustedCheckout.referencePrefix);
+  const clientEventToken = createClientEventToken();
+  const payload = buildAttemptPayload(trustedCheckout, reference, clientEventToken);
+  let attemptResult = null;
+  try {
+    attemptResult = await withBoundedAttemptWrite(createFrontendPaymentAttempt(payload));
+  } catch {
+    queuePaymentRetry({ reference, payload });
+  }
+
+  const recordedAmountKobo = Number(attemptResult?.amount_kobo || 0);
+  const amountKobo = Number.isInteger(recordedAmountKobo) && recordedAmountKobo > 0
+    ? recordedAmountKobo
+    : trustedCheckout.amountKobo;
   const pendingRecord = saveTemporaryPayment({
-    ...serverTrustedCheckout,
+    ...trustedCheckout,
     reference,
-    paymentId: serverSession.paymentId || "",
+    amountKobo,
+    paymentId: attemptResult?.payment_id || "",
+    clientEventToken,
     currency: "NGN",
     createdAt: new Date().toISOString(),
-    temporaryStatus: "pending",
-    providerMode: serverSession.mode || "backend"
+    temporaryStatus: "initiated",
+    reportedStatus: "initiated",
+    verificationStatus: "unverified",
+    attemptPersisted: Boolean(attemptResult?.payment_id),
+    providerMode: "frontend_direct"
   });
-  const popup = await createPaystackPopup();
   const publicKey = getPaystackPublicKey();
   const metadata = createMetadata(pendingRecord);
 
-  if (serverSession.mode === "backend") {
-    if (openPaystackWithAccessCode(popup, serverSession)) return pendingRecord;
-    throw new Error("Payment setup could not be completed. Please try again.");
+  const attempt = {
+    reference,
+    clientEventToken,
+    payload,
+    attemptPersisted: Boolean(attemptResult?.payment_id)
+  };
+
+  let popup;
+  try {
+    popup = await createPaystackPopup();
+  } catch (error) {
+    updateTemporaryPayment(reference, {
+      temporaryStatus: "failed",
+      reportedStatus: "failed",
+      failureReason: "paystack_load_failed"
+    });
+    void recordFrontendEvent(attempt, { type: "failed", message: "paystack_load_failed" });
+    throw error;
   }
 
-  popup.newTransaction({
-    key: publicKey,
-    email: pendingRecord.customerEmail,
-    amount: pendingRecord.amountKobo,
-    currency: "NGN",
-    reference,
-    metadata,
-    onSuccess(transaction) {
-      const callbackReference = normalizePaystackReference(transaction, reference);
-      const updated = updateTemporaryPayment(reference, {
-        reference: callbackReference,
-        temporaryStatus: "success",
-        updatedAt: new Date().toISOString()
-      }) || { ...pendingRecord, reference: callbackReference, temporaryStatus: "success" };
-      if (callbackReference !== reference) saveTemporaryPayment(updated);
-      onSuccess?.({
-        ...updated,
-        reference: callbackReference,
-        status: "success",
-        path: makeResultPath(updated, "success")
-      });
-    },
-    onCancel() {
-      const updated = updateTemporaryPayment(reference, {
-        temporaryStatus: "cancelled",
-        failureReason: "cancelled"
-      }) || { ...pendingRecord, temporaryStatus: "cancelled", failureReason: "cancelled" };
-      onCancel?.("The payment window was closed before completion.", {
-        ...updated,
-        path: makeResultPath(updated, "failed", "cancelled")
-      });
-    },
-    onError(error) {
-      const reason = isDeclinedError(error) ? "declined" : "error";
-      const updated = updateTemporaryPayment(reference, {
-        temporaryStatus: reason,
-        failureReason: reason
-      }) || { ...pendingRecord, temporaryStatus: reason, failureReason: reason };
-      onError?.(
-        new Error(reason === "declined" ? "Payment was declined." : "Paystack reported an error while processing the payment."),
-        {
+  try {
+    popup.newTransaction({
+      key: publicKey,
+      email: pendingRecord.customerEmail,
+      amount: pendingRecord.amountKobo,
+      currency: "NGN",
+      reference,
+      metadata,
+      onLoad(transaction) {
+        const updated = updateTemporaryPayment(reference, {
+          temporaryStatus: "opened",
+          reportedStatus: "opened"
+        }) || { ...pendingRecord, temporaryStatus: "opened", reportedStatus: "opened" };
+        void recordFrontendEvent(attempt, {
+          type: "opened",
+          providerTransactionId: transaction?.id || ""
+        });
+        return updated;
+      },
+      onSuccess(transaction) {
+        const callbackReference = normalizePaystackReference(transaction, reference);
+        const updated = updateTemporaryPayment(reference, {
+          temporaryStatus: "client_success",
+          reportedStatus: "client_success",
+          verificationStatus: "unverified",
+          updatedAt: new Date().toISOString()
+        }) || { ...pendingRecord, temporaryStatus: "client_success", reportedStatus: "client_success" };
+        void recordFrontendEvent(attempt, {
+          type: "client_success",
+          providerTransactionId: transaction?.id || "",
+          message: transaction?.message || ""
+        });
+        onSuccess?.({
           ...updated,
-          path: makeResultPath(updated, "failed", reason)
-        }
-      );
-    }
-  });
+          reference: callbackReference,
+          status: "client_success",
+          verificationStatus: "unverified",
+          path: makeResultPath(updated, "success")
+        });
+      },
+      onCancel() {
+        const updated = updateTemporaryPayment(reference, {
+          temporaryStatus: "closed",
+          reportedStatus: "closed",
+          failureReason: "closed"
+        }) || { ...pendingRecord, temporaryStatus: "closed", reportedStatus: "closed", failureReason: "closed" };
+        void recordFrontendEvent(attempt, { type: "closed", message: "Paystack checkout closed by customer" });
+        onCancel?.("The payment window was closed before completion.", {
+          ...updated,
+          path: makeResultPath(updated, "failed", "closed")
+        });
+      },
+      onError(error) {
+        const declined = isDeclinedError(error);
+        const updated = updateTemporaryPayment(reference, {
+          temporaryStatus: "failed",
+          reportedStatus: "failed",
+          failureReason: declined ? "declined" : "failed"
+        }) || { ...pendingRecord, temporaryStatus: "failed", reportedStatus: "failed", failureReason: declined ? "declined" : "failed" };
+        void recordFrontendEvent(attempt, { type: "failed", message: declined ? "declined" : "paystack_error" });
+        onError?.(
+          new Error(declined ? "Payment was declined." : "Paystack could not complete this payment. Please try again."),
+          {
+            ...updated,
+            path: makeResultPath(updated, "failed", declined ? "declined" : "failed")
+          }
+        );
+      }
+    });
+  } catch {
+    const updated = updateTemporaryPayment(reference, {
+      temporaryStatus: "failed",
+      reportedStatus: "failed",
+      failureReason: "paystack_open_failed"
+    });
+    void recordFrontendEvent(attempt, { type: "failed", message: "paystack_open_failed" });
+    const error = new Error("Paystack could not be opened. No payment has been charged. Please check your connection and try again.");
+    onError?.(error, updated ? { ...updated, path: makeResultPath(updated, "failed", "failed") } : null);
+    throw error;
+  }
 
   return pendingRecord;
 }

@@ -1,4 +1,6 @@
 :root {
+  --portal-header-height: 72px;
+  --portal-sidebar-width: 280px;
   --brand-primary: #ff914d;
   --brand-primary-rgb: 255, 145, 77;
   --brand-primary-dark: #db6c29;
@@ -2148,25 +2150,37 @@ textarea:focus,
 
 .portal-shell {
   --portal-sidebar-width: clamp(236px, 22vw, 280px);
-  min-height: 100vh;
-  display: grid;
-  grid-template-columns: var(--portal-sidebar-width) minmax(0, 1fr);
+  min-height: 100dvh;
+  display: block;
   background: var(--color-bg-alt);
+}
+
+.portal-desktop-sidebar {
+  top: var(--portal-header-height);
+  bottom: auto;
+  height: calc(100dvh - var(--portal-header-height));
+  z-index: 40;
 }
 
 .portal-sidebar {
   position: fixed;
   inset: 0 auto 0 0;
-  z-index: 30;
+  z-index: 50;
   width: var(--portal-sidebar-width);
   height: 100dvh;
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
   padding: var(--space-5);
   overflow: hidden;
   border-right: 1px solid var(--color-border);
   background: var(--color-surface);
+}
+
+.portal-sidebar-header {
+  flex: 0 0 auto;
+  display: grid;
+  gap: var(--space-4);
+  padding-bottom: var(--space-4);
 }
 
 .portal-sidebar .brand {
@@ -2174,13 +2188,23 @@ textarea:focus,
   flex: 0 0 auto;
 }
 
-.portal-sidebar nav {
+.portal-sidebar-navigation {
+  flex: 1 1 auto;
   min-height: 0;
   display: grid;
+  align-content: start;
   gap: var(--space-2);
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
   padding-right: 0.15rem;
+  scrollbar-gutter: stable;
+}
+
+.portal-sidebar-footer {
+  flex: 0 0 auto;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
 }
 
 .portal-link {
@@ -2213,28 +2237,46 @@ textarea:focus,
 }
 
 .portal-link.signout {
-  margin-top: auto;
+  margin: 0;
+  color: var(--color-danger);
   cursor: pointer;
 }
 
+.portal-nav-badge {
+  min-width: 1.5rem;
+  height: 1.5rem;
+  display: inline-grid;
+  place-items: center;
+  margin-left: auto;
+  padding: 0 0.35rem;
+  border-radius: var(--radius-pill);
+  background: var(--brand-primary-dark);
+  color: white;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
 .portal-main {
-  grid-column: 2;
+  margin-left: var(--portal-sidebar-width);
   min-width: 0;
-  width: 100%;
-  min-height: 100vh;
-  padding: var(--space-8);
+  width: calc(100% - var(--portal-sidebar-width));
+  min-height: 100dvh;
+  padding: calc(var(--portal-header-height) + var(--space-8)) var(--space-8) var(--space-8);
 }
 
 .portal-header {
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 35;
+  right: 0;
+  left: var(--portal-sidebar-width);
+  z-index: 45;
+  min-height: var(--portal-header-height);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  margin: calc(var(--space-8) * -1) calc(var(--space-8) * -1) var(--space-8);
-  padding: var(--space-5) var(--space-8);
+  margin: 0;
+  padding: var(--space-3) var(--space-8);
   border-bottom: 1px solid var(--color-border);
   background: color-mix(in srgb, var(--color-bg-alt), transparent 4%);
 }
@@ -2306,6 +2348,120 @@ body.portal-route-active .route-content.page-enter {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.chat-panel {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.chat-room-list {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-right: 1px solid var(--color-border);
+  background: var(--color-bg-alt);
+}
+
+.chat-room-list button {
+  min-height: 44px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-card);
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+}
+
+.chat-room-list button.active,
+.chat-room-list button:hover {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary-soft);
+}
+
+.chat-room-list button > span:not(.portal-nav-badge) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-thread {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.chat-thread-header,
+.chat-composer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.chat-message-list {
+  min-height: 240px;
+  max-height: min(58dvh, 620px);
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.chat-message {
+  max-width: min(82%, 680px);
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-alt);
+  overflow-wrap: anywhere;
+}
+
+.chat-message.own {
+  justify-self: end;
+  background: var(--brand-primary-soft);
+}
+
+.chat-message img,
+.chat-image-preview img {
+  width: auto;
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: var(--radius-small);
+  object-fit: contain;
+}
+
+.chat-composer > label:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.chat-image-preview {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.chat-image-preview img {
+  width: 96px;
+  height: 72px;
 }
 
 .portal-sidebar-profile strong {
@@ -3304,7 +3460,6 @@ body.portal-route-active .route-content.page-enter {
 
   .portal-shell {
     min-height: 100dvh;
-    grid-template-columns: 1fr;
   }
 
   .portal-sidebar-desktop {
@@ -3323,22 +3478,38 @@ body.portal-route-active .route-content.page-enter {
     max-width: calc(100vw - 2rem);
     height: 100dvh;
     max-height: 100dvh;
-    gap: var(--space-4);
     padding:
       max(var(--space-4), env(safe-area-inset-top))
       var(--space-4)
       max(var(--space-4), env(safe-area-inset-bottom));
-    overflow-x: hidden;
-    overflow-y: auto;
+    overflow: hidden;
     overscroll-behavior: contain;
     transform: translateX(-105%);
     transition: transform 180ms ease;
     box-shadow: var(--shadow-soft);
   }
 
-  .portal-sidebar nav {
+  .portal-mobile-drawer {
+    top: 0;
+    bottom: 0;
+    height: 100dvh;
+  }
+
+  .chat-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-room-list {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(150px, 220px);
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .portal-sidebar-navigation {
     gap: var(--space-1);
-    overflow-y: visible;
+    overflow-y: auto;
   }
 
   .portal-sidebar.open {
@@ -3362,17 +3533,21 @@ body.portal-route-active .route-content.page-enter {
   }
 
   .portal-main {
-    grid-column: 1;
+    margin-left: 0;
+    width: 100%;
     max-width: 100vw;
     min-height: 100dvh;
-    padding: var(--space-5);
+    padding: calc(var(--portal-header-height) + var(--space-5)) var(--space-5) var(--space-5);
   }
 
   .portal-header {
-    position: sticky;
+    position: fixed;
     top: 0;
+    right: 0;
+    left: 0;
     z-index: 40;
-    margin: calc(var(--space-5) * -1) calc(var(--space-5) * -1) var(--space-6);
+    min-height: var(--portal-header-height);
+    margin: 0;
     padding: var(--space-4) var(--space-5);
     border-bottom: 1px solid var(--color-border);
     background: color-mix(in srgb, var(--color-bg-alt), transparent 4%);
@@ -3417,6 +3592,63 @@ body.portal-route-active .route-content.page-enter {
   .management-card-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 640px) {
+  .management-table {
+    min-width: 0;
+  }
+
+  .management-table thead {
+    display: none;
+  }
+
+  .management-table,
+  .management-table tbody,
+  .management-table tr,
+  .management-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .management-table tr {
+    margin-bottom: var(--space-4);
+    padding: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    background: var(--color-surface);
+  }
+
+  .management-table td {
+    display: grid;
+    grid-template-columns: minmax(92px, 0.38fr) minmax(0, 1fr);
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    border: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .management-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--color-muted);
+    font-size: 0.78rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .chat-thread,
+  .chat-room-list {
+    padding: var(--space-3);
+  }
+
+  .chat-composer {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .chat-composer > label:first-child {
+    flex-basis: 100%;
   }
 }
 

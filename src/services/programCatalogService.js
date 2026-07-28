@@ -14,10 +14,20 @@ function toPrice(priceKobo) {
   return Math.round(Number(priceKobo || 0) / 100);
 }
 
+export function sortLevelsByNumericPrice(levels = []) {
+  return [...levels].sort((left, right) => {
+    const amountDifference = Number(left.priceKobo ?? left.price_kobo ?? 0) - Number(right.priceKobo ?? right.price_kobo ?? 0);
+    if (amountDifference) return amountDifference;
+    const createdDifference = String(left.createdAt || left.created_at || "").localeCompare(String(right.createdAt || right.created_at || ""));
+    if (createdDifference) return createdDifference;
+    return String(left.id || left.slug || left.name || "").localeCompare(String(right.id || right.slug || right.name || ""));
+  });
+}
+
 function mergeProgramRow(row) {
   const fallback = getProgramBySlug(row.slug) || {};
   const dbLevels = Array.isArray(row.program_levels) ? row.program_levels : [];
-  const levels = dbLevels
+  const levels = sortLevelsByNumericPrice(dbLevels
     .filter((level) => level.active !== false)
     .map((level) => {
       const slug = slugifyProgramValue(level.level_name);
@@ -29,10 +39,11 @@ function mergeProgramRow(row) {
         slug,
         price: toPrice(level.price_kobo),
         priceKobo: Number(level.price_kobo || 0),
+        createdAt: level.created_at || "",
         summary: level.level_description || fallbackLevel.summary || "",
         duration: level.duration_text || fallbackLevel.duration || ""
       };
-    });
+    }));
 
   return {
     ...fallback,
@@ -43,6 +54,7 @@ function mergeProgramRow(row) {
     fullDescription: row.long_description || fallback.fullDescription || row.short_description || "",
     icon: row.icon_name || fallback.icon || "book-open",
     featured: row.featured ?? fallback.featured ?? false,
+    display_order: Number(row.display_order ?? 100),
     enrolmentOpen: row.active !== false,
     duration: fallback.duration || "Flexible instructor-led online schedule. Final timetable is provided after enrolment.",
     deliveryMode: fallback.deliveryMode || "Guided practical training",
@@ -66,28 +78,40 @@ function sortPrograms(items) {
   });
 }
 
-async function fetchProgramsFromSupabase() {
+function sortFallbackPrograms() {
+  return sortPrograms(fallbackPrograms.map((program) => ({
+    ...program,
+    levels: sortLevelsByNumericPrice(program.levels)
+  })));
+}
+
+async function fetchProgramsFromSupabase({ required = false } = {}) {
   const supabase = await getSupabaseClient();
-  if (!supabase) return null;
+  if (!supabase) {
+    if (required) throw new Error("Current programme prices could not be reached. Refresh the page and try again.");
+    return null;
+  }
 
   const { data, error } = await supabase
     .from("programs")
-    .select("id, slug, title, short_description, long_description, category, icon_name, active, featured, display_order, program_levels(id, level_name, price_kobo, duration_text, level_description, active)")
+    .select("id, slug, title, short_description, long_description, category, icon_name, active, featured, display_order, program_levels(id, level_name, price_kobo, duration_text, level_description, active, created_at)")
     .eq("active", true)
     .order("display_order", { ascending: true })
     .order("title", { ascending: true });
 
   if (error) {
     if (import.meta.env.DEV) console.info("Public catalogue Supabase lookup failed", error);
+    if (required) throw new Error("Current programme prices could not be loaded. Refresh the page and try again.");
     return null;
   }
 
   const mapped = sortPrograms((data || []).map(mergeProgramRow).filter((program) => program.levels.length));
+  if (required && !mapped.length) throw new Error("No published programme prices are available for checkout.");
   return mapped.length ? mapped : null;
 }
 
 export async function getPublishedPrograms() {
-  return (await fetchProgramsFromSupabase()) || fallbackPrograms;
+  return (await fetchProgramsFromSupabase()) || sortFallbackPrograms();
 }
 
 export async function getPublishedProgramBySlug(slug) {
@@ -103,6 +127,12 @@ export async function getPublishedProgramLevel(programSlug, levelSlugOrName) {
   const level = program.levels.find((item) => item.slug === normalized || slugifyProgramValue(item.name) === normalized);
   if (!level) return null;
   return { program, level };
+}
+
+export async function getCheckoutProgramBySlug(slug) {
+  const normalizedSlug = normalizeSlug(slug);
+  const programs = await fetchProgramsFromSupabase({ required: true });
+  return programs.find((program) => normalizeSlug(program.slug) === normalizedSlug) || null;
 }
 
 export function getFallbackProgramLevel(programSlug, levelSlugOrName) {

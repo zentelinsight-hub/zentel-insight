@@ -194,6 +194,12 @@ export function AuthProvider({ children }) {
     window.dispatchEvent(new CustomEvent("zentel:portal-cache-clear"));
     window.dispatchEvent(new CustomEvent("zentel:admin-verification-clear"));
     clearStoredSessionSecurity();
+    try {
+      sessionStorage.removeItem("zentel_payment_retry_queue");
+      sessionStorage.removeItem("zentel_pending_payment");
+    } catch {
+      // Session storage may be unavailable in private browser modes.
+    }
     setProfile(null);
     setSession(null);
     setUser(null);

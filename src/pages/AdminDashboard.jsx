@@ -1,5 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Award,
   Bell,
@@ -12,23 +11,19 @@ import {
   ImageUp,
   LayoutDashboard,
   LifeBuoy,
-  LogOut,
   Megaphone,
-  Menu,
   MessageSquare,
   Newspaper,
   Settings,
   ShieldCheck,
   UserRound,
   Users,
-  Video,
-  X
+  Video
 } from "lucide-react";
-import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
-import BrandLogo from "../components/BrandLogo";
-import IdleSessionGuard from "../components/IdleSessionGuard";
+import { NavLink, useNavigate, useParams } from "react-router-dom";
 import LiveClassCards from "../components/LiveClassCards";
 import ProgramChatPanel from "../components/ProgramChatPanel";
+import PortalShell from "../components/portal/PortalShell";
 import { useAuth } from "../context/authHooks";
 import { useAsyncData } from "../hooks/useAsyncData";
 import {
@@ -62,6 +57,7 @@ const sections = [
   ["students", "Students", GraduationCap],
   ["tutors", "Tutors", UserRound],
   ["programmes", "Programmes", GraduationCap],
+  ["enrolments", "Enrolments", FileCheck2],
   ["classrooms", "Classrooms", MessageSquare],
   ["live-classes", "Live Classes", Video],
   ["timetable", "Timetable", CalendarDays],
@@ -106,164 +102,58 @@ function AdminAvatar({ profile, displayName, size = "md" }) {
   );
 }
 
-function AdminSidebarContent({ profile, displayName, onNavigate, onSignOut }) {
-  return (
-    <>
-      <NavLink className="brand" to="/admin" onClick={onNavigate}>
-        <BrandLogo brand="main" size="portal" />
-        <span>
-          <span className="brand-name">Admin Dashboard</span>
-          <span className="brand-motto">Zentel Insight</span>
-        </span>
-      </NavLink>
-      <div className="portal-sidebar-profile">
-        <AdminAvatar profile={profile} displayName={displayName} />
-        <div>
-          <strong>{displayName}</strong>
-          <span>Verified admin session</span>
-        </div>
-      </div>
-      <nav aria-label="Admin dashboard">
-        {sections.map(([slug, label, Icon]) => (
-          <NavLink
-            key={slug}
-            to={slug === "overview" ? "/admin" : `/admin/${slug}`}
-            end={slug === "overview"}
-            onClick={onNavigate}
-            className={({ isActive }) => isActive ? "portal-link active" : "portal-link"}
-          >
-            <Icon size={18} aria-hidden="true" />
-            {label}
-          </NavLink>
-        ))}
-      </nav>
-      <button className="portal-link signout" type="button" onClick={onSignOut}>
-        <LogOut size={18} aria-hidden="true" />
-        Sign Out
-      </button>
-    </>
-  );
-}
-
-function AdminFrame({ data, children }) {
-  const { profile, signOut } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
+function AdminFrame({ data, onRealtimeChange, children }) {
+  const { profile } = useAuth();
   const displayName = "Admin";
-  const drawerId = useId();
-  const menuButtonRef = useRef(null);
-  const scrollYRef = useRef(0);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [canUsePortal, setCanUsePortal] = useState(false);
-
-  useEffect(() => {
-    setCanUsePortal(true);
-    return () => document.body.classList.remove("portal-menu-open");
-  }, []);
-
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [location.pathname]);
-
-  useEffect(() => {
-    if (!window.matchMedia) return undefined;
-    const mediaQuery = window.matchMedia("(min-width: 920.01px)");
-    function handleResize(event) {
-      if (event.matches) setMenuOpen(false);
-    }
-    handleResize(mediaQuery);
-    mediaQuery.addEventListener("change", handleResize);
-    return () => mediaQuery.removeEventListener("change", handleResize);
-  }, []);
-
-  useEffect(() => {
-    if (!menuOpen) return undefined;
-    const restoreFocusTarget = menuButtonRef.current;
-    function handleKeyDown(event) {
-      if (event.key === "Escape") setMenuOpen(false);
-    }
-
-    scrollYRef.current = window.scrollY;
-    document.addEventListener("keydown", handleKeyDown);
-    document.body.classList.add("portal-menu-open");
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollYRef.current}px`;
-    document.body.style.width = "100%";
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.classList.remove("portal-menu-open");
-      document.body.style.position = "";
-      document.body.style.top = "";
-      document.body.style.width = "";
-      window.scrollTo(0, scrollYRef.current);
-      restoreFocusTarget?.focus();
-    };
-  }, [menuOpen]);
-
-  function closeMenu() {
-    setMenuOpen(false);
-  }
-
-  async function handleSignOut() {
-    closeMenu();
-    await signOut();
-    navigate("/login", { replace: true });
-  }
-
-  const desktopSidebar = (
-    <aside className="portal-sidebar portal-sidebar-desktop">
-      <AdminSidebarContent profile={profile} displayName={displayName} onNavigate={closeMenu} onSignOut={handleSignOut} />
-    </aside>
-  );
-
-  const mobileDrawer = menuOpen && canUsePortal
-    ? createPortal(
-      <>
-        <button
-          className="portal-drawer-backdrop"
-          type="button"
-          aria-label="Close admin menu"
-          onClick={closeMenu}
-        />
-        <aside id={drawerId} className="portal-sidebar portal-mobile-drawer open" aria-label="Admin dashboard menu">
-          <AdminSidebarContent profile={profile} displayName={displayName} onNavigate={closeMenu} onSignOut={handleSignOut} />
-        </aside>
-      </>,
-      document.body
-    )
-    : null;
-
   return (
-    <section className="portal-shell management-shell admin-shell">
-      {desktopSidebar}
-      {mobileDrawer}
-      <main className="portal-main">
-        <header className="portal-header">
-          <button
-            ref={menuButtonRef}
-            className="icon-button portal-menu-button"
-            type="button"
-            aria-label={menuOpen ? "Close admin menu" : "Open admin menu"}
-            aria-expanded={menuOpen}
-            aria-controls={drawerId}
-            onClick={() => setMenuOpen((current) => !current)}
-          >
-            {menuOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
-          </button>
-          <div>
-            <p className="eyebrow">Admin</p>
-            <h1>Zentel Insight Admin</h1>
-          </div>
-          <span className="portal-tag success">
-            <ShieldCheck size={14} aria-hidden="true" />
-            Verified
-          </span>
-        </header>
-        {children}
-      </main>
-      <IdleSessionGuard enabled={Boolean(data)} />
-    </section>
+    <PortalShell
+      sidebar={{
+        homeTo: "/admin",
+        brandLabel: "Admin Dashboard",
+        profileName: displayName,
+        profileDetail: "Verified admin session",
+        avatarUrl: profile?.avatar_url,
+        navLabel: "Admin dashboard",
+        menuLabel: "admin",
+        shellClass: "management-shell admin-shell",
+        items: sections.map(([slug, label, Icon]) => ({
+          to: slug === "overview" ? "/admin" : `/admin/${slug}`,
+          label,
+          Icon,
+          end: slug === "overview"
+        }))
+      }}
+      header={{
+        eyebrow: "Admin",
+        title: "Zentel Insight Admin",
+        status: <span className="portal-tag success"><ShieldCheck size={14} aria-hidden="true" />Verified</span>
+      }}
+      idleEnabled={Boolean(data)}
+      realtimeTables={[
+        "announcements",
+        "assignments",
+        "audit_logs",
+        "certificates",
+        "enrolments",
+        "live_class_attendance",
+        "live_class_sessions",
+        "payments",
+        "portal_articles",
+        "portal_notifications",
+        "profiles",
+        "program_levels",
+        "programs",
+        "resources",
+        "support_tickets",
+        "timetable_entries",
+        "tutor_profiles",
+        "tutor_program_assignments",
+        "user_roles"
+      ]}
+      onRealtimeChange={onRealtimeChange}
+    >
+      {children}
+    </PortalShell>
   );
 }
 
@@ -369,7 +259,6 @@ function AccountStatusControls({ profile, profiles, onSaved }) {
 }
 
 function OverviewSection({ data }) {
-  const verifiedPayments = data.payments.filter((payment) => payment.verified_at || ["success", "successful", "paid"].includes(String(payment.status || "").toLowerCase()));
   const tutorMetrics = data.peopleMetrics || {};
   return (
     <div className="portal-page">
@@ -379,17 +268,14 @@ function OverviewSection({ data }) {
       />
       <div className="dashboard-grid">
         {[
-          [Users, "Students", data.students.length, "Registered learner profiles"],
+          [Users, "Total Students", tutorMetrics.totalStudents ?? data.students.length, "Registered learner profiles"],
+          [CheckCircle2, "Active Students", tutorMetrics.activeStudents ?? 0, "Learners with Portal access"],
+          [ShieldCheck, "Inactive Students", tutorMetrics.inactiveStudents ?? 0, "Learners awaiting activation"],
           [GraduationCap, "Total Tutors", tutorMetrics.totalTutors ?? data.tutors.length, "Canonical Tutor accounts"],
-          [CheckCircle2, "Active Tutors", tutorMetrics.activeTutors ?? data.tutors.filter((item) => item.profiles?.account_status === "active").length, "Tutor accounts with portal access"],
-          [ShieldCheck, "Inactive Tutors", tutorMetrics.inactiveTutors ?? data.tutors.filter((item) => item.profiles?.account_status !== "active").length, "Tutor accounts awaiting activation"],
           [UserRound, "Assigned Tutors", tutorMetrics.assignedTutors ?? new Set(data.tutorAssignments.filter((item) => item.active !== false).map((item) => item.tutor_id)).size, "Distinct Tutors with current assignments"],
-          [Users, "Unassigned Tutors", tutorMetrics.unassignedTutors ?? 0, "Tutor accounts without current assignments"],
           [ShieldCheck, "Programmes Without Tutors", tutorMetrics.programmesWithoutTutors ?? 0, "Active programmes missing Tutor coverage"],
-          [BookOpen, "Programmes", data.programs.length, "Programme records"],
-          [CreditCard, "Verified payments", verifiedPayments.length, "Server-confirmed payments"],
-          [Video, "Live classes", data.liveClasses.length, "Scheduled or completed sessions"],
-          [LifeBuoy, "Support tickets", data.supportTickets.length, "Student support records"]
+          [Video, "Upcoming Classes", data.liveClasses.filter((item) => ["scheduled", "live"].includes(item.status)).length, "Scheduled or live sessions"],
+          [LifeBuoy, "Open Support Tickets", data.supportTickets.filter((item) => !["resolved", "closed"].includes(item.status)).length, "Requests awaiting resolution"]
         ].map(([Icon, label, value, detail]) => (
           <article className="dashboard-card" key={label}>
             <Icon size={22} aria-hidden="true" />
@@ -796,11 +682,12 @@ function TutorEditPanel({ tutor, programs, onClose, onSaved }) {
   );
 }
 
-function PeopleSection({ data, onSaved }) {
+function PeopleSection({ data, onSaved, activeSection = "people" }) {
   const [studentSearchInput, setStudentSearchInput] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
   const [studentStatusFilter, setStudentStatusFilter] = useState("all");
   const [studentProgramFilter, setStudentProgramFilter] = useState("");
+  const [studentAssignmentFilter, setStudentAssignmentFilter] = useState("all");
   const [studentPage, setStudentPage] = useState(1);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [tutorSearchInput, setTutorSearchInput] = useState("");
@@ -812,11 +699,13 @@ function PeopleSection({ data, onSaved }) {
     () => searchAdminStudents({
       query: studentSearch,
       status: studentStatusFilter,
+      assignment: studentAssignmentFilter,
       programId: studentProgramFilter,
       page: studentPage,
       pageSize: 25
     }),
-    [studentSearch, studentStatusFilter, studentProgramFilter, studentPage]
+    [studentSearch, studentStatusFilter, studentAssignmentFilter, studentProgramFilter, studentPage],
+    { enabled: activeSection !== "tutors" }
   );
   const tutorsQuery = useAsyncData(
     () => searchAdminTutors({
@@ -825,7 +714,8 @@ function PeopleSection({ data, onSaved }) {
       page: tutorPage,
       pageSize: 25
     }),
-    [tutorSearch, tutorFilter, tutorPage]
+    [tutorSearch, tutorFilter, tutorPage],
+    { enabled: activeSection !== "students" }
   );
   const studentRecords = studentsQuery.data?.records || [];
   const studentTotal = studentsQuery.data?.total || 0;
@@ -852,7 +742,7 @@ function PeopleSection({ data, onSaved }) {
 
   useEffect(() => {
     setStudentPage(1);
-  }, [studentStatusFilter, studentProgramFilter]);
+  }, [studentStatusFilter, studentAssignmentFilter, studentProgramFilter]);
 
   useEffect(() => {
     setTutorPage(1);
@@ -868,11 +758,19 @@ function PeopleSection({ data, onSaved }) {
     onSaved();
   }
 
+  const showStudents = activeSection !== "tutors";
+  const showTutors = activeSection !== "students";
+
   return (
     <div className="portal-page">
       <PageHeading title="Students and tutors." description="Review account records, create tutors securely, and assign official programme access." />
-      <TutorCreationForm programs={data.programs} onSaved={handleTutorsChanged} />
-      <AssignmentForms data={data} onSaved={() => { handleStudentsChanged(); handleTutorsChanged(); }} />
+      <nav className="management-section-tabs" aria-label="People records">
+        <NavLink to="/admin/people">All People</NavLink>
+        <NavLink to="/admin/students">Students</NavLink>
+        <NavLink to="/admin/tutors">Tutors</NavLink>
+      </nav>
+      {activeSection === "people" ? <TutorCreationForm programs={data.programs} onSaved={handleTutorsChanged} /> : null}
+      {activeSection === "people" ? <AssignmentForms data={data} onSaved={() => { handleStudentsChanged(); handleTutorsChanged(); }} /> : null}
       <StudentEditPanel
         student={selectedStudent}
         programs={data.programs}
@@ -886,7 +784,7 @@ function PeopleSection({ data, onSaved }) {
         onSaved={handleTutorsChanged}
       />
       <div className="portal-grid">
-        <article className="notice-card">
+        {showStudents ? <article className="notice-card">
           <div className="management-card-heading">
             <div>
               <h3>Registered students</h3>
@@ -916,6 +814,13 @@ function PeopleSection({ data, onSaved }) {
                 </button>
               ))}
             </div>
+            <div className="segmented-control compact" role="group" aria-label="Student assignment filter">
+              {["all", "assigned", "unassigned"].map((value) => (
+                <button key={value} type="button" className={studentAssignmentFilter === value ? "active" : ""} onClick={() => setStudentAssignmentFilter(value)}>
+                  {value[0].toUpperCase() + value.slice(1)}
+                </button>
+              ))}
+            </div>
           </div>
           {studentsQuery.error ? (
             <div className="form-status warning" role="alert">
@@ -925,23 +830,25 @@ function PeopleSection({ data, onSaved }) {
           ) : null}
           <div className="responsive-table-wrap">
             <table className="management-table">
-              <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Programme</th><th>Status</th><th>Status audit</th><th>Action</th></tr></thead>
+              <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Programme</th><th>Status</th><th>Profile</th><th>Created</th><th>Status audit</th><th>Action</th></tr></thead>
               <tbody>
                 {studentRecords.map((student) => (
                   <tr key={student.id}>
-                    <td>{student.full_name || "Unnamed"}</td>
-                    <td>{student.email}</td>
-                    <td>{student.phone}</td>
-                    <td>{student.program_title ? `${student.program_title}${student.level_name ? ` / ${student.level_name}` : ""}` : "Not assigned"}</td>
-                    <td><AccountStatusBadge status={student.account_status} /></td>
-                    <td>
+                    <td data-label="Name">{student.full_name || "Unnamed"}</td>
+                    <td data-label="Email">{student.email}</td>
+                    <td data-label="Phone">{student.phone}</td>
+                    <td data-label="Programme">{student.program_title ? `${student.program_title}${student.level_name ? ` / ${student.level_name}` : ""}` : "Not assigned"}</td>
+                    <td data-label="Status"><AccountStatusBadge status={student.account_status} /></td>
+                    <td data-label="Profile">{Number(student.profile_completion || 0)}%</td>
+                    <td data-label="Created">{formatDateTime(student.created_at)}</td>
+                    <td data-label="Status audit">
                       <dl className="status-audit-details compact">
                         <div><dt>Changed</dt><dd>{student.status_changed_at ? formatDateTime(student.status_changed_at) : "Not recorded"}</dd></div>
                         <div><dt>By</dt><dd>{getStatusChangedBy(student, data.profiles)}</dd></div>
                         <div><dt>Reason</dt><dd>{student.status_reason || "Not recorded"}</dd></div>
                       </dl>
                     </td>
-                    <td>
+                    <td data-label="Action">
                       <div className="table-action-stack">
                         <button className="button button-secondary" type="button" onClick={() => setSelectedStudent(student)}>Edit</button>
                         <AccountStatusControls profile={student} profiles={data.profiles} onSaved={handleStudentsChanged} />
@@ -949,8 +856,8 @@ function PeopleSection({ data, onSaved }) {
                     </td>
                   </tr>
                 ))}
-                {studentsQuery.loading ? <tr><td colSpan="7">Loading students...</td></tr> : null}
-                {!studentsQuery.loading && !studentsQuery.error && !studentRecords.length ? <tr><td colSpan="7">No students match this search.</td></tr> : null}
+                {studentsQuery.loading ? <tr><td colSpan="9">Loading students...</td></tr> : null}
+                {!studentsQuery.loading && !studentsQuery.error && !studentRecords.length ? <tr><td colSpan="9">No students match this search.</td></tr> : null}
               </tbody>
             </table>
           </div>
@@ -959,8 +866,8 @@ function PeopleSection({ data, onSaved }) {
             <span>Page {studentPage} of {studentPageCount}</span>
             <button className="button button-secondary" type="button" disabled={studentPage >= studentPageCount || studentsQuery.loading} onClick={() => setStudentPage((page) => page + 1)}>Next</button>
           </div>
-        </article>
-        <article className="notice-card">
+        </article> : null}
+        {showTutors ? <article className="notice-card">
           <div className="management-card-heading">
             <div>
               <h3>Tutor directory</h3>
@@ -998,17 +905,19 @@ function PeopleSection({ data, onSaved }) {
           ) : null}
           <div className="responsive-table-wrap">
             <table className="management-table">
-              <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Programme</th><th>Status</th><th>Profile</th><th>Action</th></tr></thead>
+              <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Specialisation</th><th>Programme</th><th>Status</th><th>Profile</th><th>Created</th><th>Action</th></tr></thead>
               <tbody>
                 {tutorRecords.map((tutor) => (
                   <tr key={tutor.user_id}>
-                    <td>{tutor.title} {tutor.full_name || "Tutor"}</td>
-                    <td>{tutor.email}</td>
-                    <td>{tutor.phone || "Not recorded"}</td>
-                    <td>{tutor.program_title ? `${tutor.program_title}${tutor.track_name ? ` / ${tutor.track_name}` : ""}` : "Unassigned"}</td>
-                    <td><AccountStatusBadge status={tutor.account_status} /></td>
-                    <td>{Number(tutor.profile_completion || 0)}%</td>
-                    <td>
+                    <td data-label="Name">{tutor.title} {tutor.full_name || "Tutor"}</td>
+                    <td data-label="Email">{tutor.email}</td>
+                    <td data-label="Phone">{tutor.phone || "Not recorded"}</td>
+                    <td data-label="Specialisation">{tutor.specialisation || "Not recorded"}</td>
+                    <td data-label="Programme">{tutor.program_title ? `${tutor.program_title}${tutor.track_name ? ` / ${tutor.track_name}` : ""}` : "Unassigned"}</td>
+                    <td data-label="Status"><AccountStatusBadge status={tutor.account_status} /></td>
+                    <td data-label="Profile">{Number(tutor.profile_completion || 0)}%</td>
+                    <td data-label="Created">{formatDateTime(tutor.created_at)}</td>
+                    <td data-label="Action">
                       <div className="table-action-stack">
                         <button className="button button-secondary" type="button" onClick={() => setSelectedTutor(tutor)}>Edit</button>
                         <AccountStatusControls profile={tutor} profiles={data.profiles} onSaved={handleTutorsChanged} />
@@ -1016,8 +925,8 @@ function PeopleSection({ data, onSaved }) {
                     </td>
                   </tr>
                 ))}
-                {tutorsQuery.loading ? <tr><td colSpan="7">Loading tutors...</td></tr> : null}
-                {!tutorsQuery.loading && !tutorsQuery.error && !tutorRecords.length ? <tr><td colSpan="7">No Tutors match this search.</td></tr> : null}
+                {tutorsQuery.loading ? <tr><td colSpan="9">Loading tutors...</td></tr> : null}
+                {!tutorsQuery.loading && !tutorsQuery.error && !tutorRecords.length ? <tr><td colSpan="9">No Tutors match this search.</td></tr> : null}
               </tbody>
             </table>
           </div>
@@ -1026,7 +935,7 @@ function PeopleSection({ data, onSaved }) {
             <span>Page {tutorPage} of {tutorPageCount}</span>
             <button className="button button-secondary" type="button" disabled={tutorPage >= tutorPageCount || tutorsQuery.loading} onClick={() => setTutorPage((page) => page + 1)}>Next</button>
           </div>
-        </article>
+        </article> : null}
       </div>
     </div>
   );
@@ -1168,9 +1077,20 @@ function ProgrammesSection({ data, onSaved }) {
   );
 }
 
-function ContentSection({ data, onSaved }) {
+function ContentSection({ data, onSaved, activeSection = "announcements" }) {
   const [status, setStatus] = useState({ type: "", message: "" });
-  const [announcement, setAnnouncement] = useState({ program_id: "", title: "", summary: "", body: "", priority: "normal", category: "General", published: true });
+  const [announcement, setAnnouncement] = useState({
+    program_id: "",
+    program_level_id: "",
+    audience_type: "all_students",
+    audience_user_id: "",
+    title: "",
+    summary: "",
+    body: "",
+    priority: "normal",
+    category: "General",
+    published: true
+  });
   const [timetable, setTimetable] = useState({ program_id: "", title: "", day_of_week: 1, start_time: "17:00", end_time: "18:30", delivery_mode: "online", published: true });
   const [assignment, setAssignment] = useState({ program_id: "", title: "", instructions: "", maximum_score: 100, published: true });
   const [resource, setResource] = useState({ program_id: "", title: "", module_title: "", description: "", external_url: "", resource_type: "link", published: true });
@@ -1186,19 +1106,70 @@ function ContentSection({ data, onSaved }) {
     }
   }
 
+  const sectionTitles = {
+    announcements: ["Announcements.", "Create targeted notices for active students, tutors, programmes, tracks, or an individual account."],
+    timetable: ["Timetable.", "Create and publish programme timetable entries."],
+    assignments: ["Assignments.", "Create learning assignments for a programme and track."],
+    resources: ["Learning resources.", "Publish approved programme resources and external learning links."],
+    articles: ["Learning articles.", "Publish articles for the Portal learning library."]
+  };
+  const [sectionTitle, sectionDescription] = sectionTitles[activeSection] || sectionTitles.announcements;
+
   return (
     <div className="portal-page">
-      <PageHeading title="Portal content management." description="Create, publish and update learning content that appears in student and tutor workspaces." />
+      <PageHeading title={sectionTitle} description={sectionDescription} />
       <div className="portal-grid">
-        <form className="form-card management-form" onSubmit={(event) => { event.preventDefault(); void submit(saveAnnouncement, announcement, "Announcement saved."); }}>
+        {activeSection === "announcements" ? <form className="form-card management-form" onSubmit={(event) => { event.preventDefault(); void submit(saveAnnouncement, announcement, "Announcement saved."); }}>
           <h3>Announcement</h3>
-          <ContentProgramSelect data={data} values={announcement} setValues={setAnnouncement} />
+          <label>
+            <span>Audience</span>
+            <select
+              value={announcement.audience_type}
+              onChange={(event) => setAnnouncement({
+                ...announcement,
+                audience_type: event.target.value,
+                audience_user_id: "",
+                program_id: "",
+                program_level_id: ""
+              })}
+            >
+              <option value="all_students">All active students</option>
+              <option value="all_tutors">All active tutors</option>
+              <option value="all">All active learners and tutors</option>
+              <option value="specific_program">Specific programme</option>
+              <option value="specific_track">Specific track</option>
+              <option value="specific_user">Specific person</option>
+            </select>
+          </label>
+          {["specific_program", "specific_track"].includes(announcement.audience_type) ? (
+            <ContentProgramSelect
+              data={data}
+              values={announcement}
+              setValues={setAnnouncement}
+              required
+              includeTrack={announcement.audience_type === "specific_track"}
+            />
+          ) : null}
+          {announcement.audience_type === "specific_user" ? (
+            <label>
+              <span>Person</span>
+              <select value={announcement.audience_user_id} onChange={(event) => setAnnouncement({ ...announcement, audience_user_id: event.target.value })} required>
+                <option value="">Choose an active student or tutor</option>
+                {data.students.filter((person) => person.account_status === "active").map((person) => (
+                  <option key={person.id} value={person.id}>Student | {person.full_name || person.email}</option>
+                ))}
+                {data.tutors.filter((person) => person.profiles?.account_status === "active").map((person) => (
+                  <option key={person.user_id} value={person.user_id}>Tutor | {person.profiles?.full_name || person.profiles?.email}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label><span>Title</span><input value={announcement.title} onChange={(event) => setAnnouncement({ ...announcement, title: event.target.value })} required /></label>
           <label><span>Summary</span><input value={announcement.summary} onChange={(event) => setAnnouncement({ ...announcement, summary: event.target.value })} /></label>
           <label><span>Body</span><textarea value={announcement.body} onChange={(event) => setAnnouncement({ ...announcement, body: event.target.value })} required /></label>
           <button className="button button-secondary" type="submit">Save Announcement</button>
-        </form>
-        <form className="form-card management-form" onSubmit={(event) => { event.preventDefault(); void submit(saveTimetableEntry, timetable, "Timetable entry saved."); }}>
+        </form> : null}
+        {activeSection === "timetable" ? <form className="form-card management-form" onSubmit={(event) => { event.preventDefault(); void submit(saveTimetableEntry, timetable, "Timetable entry saved."); }}>
           <h3>Timetable Entry</h3>
           <ContentProgramSelect data={data} values={timetable} setValues={setTimetable} required />
           <label><span>Title</span><input value={timetable.title} onChange={(event) => setTimetable({ ...timetable, title: event.target.value })} required /></label>
@@ -1208,45 +1179,57 @@ function ContentSection({ data, onSaved }) {
             <label><span>End</span><input type="time" value={timetable.end_time} onChange={(event) => setTimetable({ ...timetable, end_time: event.target.value })} /></label>
           </div>
           <button className="button button-secondary" type="submit">Save Timetable</button>
-        </form>
-        <form className="form-card management-form" onSubmit={(event) => { event.preventDefault(); void submit(saveAssignment, assignment, "Assignment saved."); }}>
+        </form> : null}
+        {activeSection === "assignments" ? <form className="form-card management-form" onSubmit={(event) => { event.preventDefault(); void submit(saveAssignment, assignment, "Assignment saved."); }}>
           <h3>Assignment</h3>
           <ContentProgramSelect data={data} values={assignment} setValues={setAssignment} required />
           <label><span>Title</span><input value={assignment.title} onChange={(event) => setAssignment({ ...assignment, title: event.target.value })} required /></label>
           <label><span>Instructions</span><textarea value={assignment.instructions} onChange={(event) => setAssignment({ ...assignment, instructions: event.target.value })} required /></label>
           <button className="button button-secondary" type="submit">Save Assignment</button>
-        </form>
-        <form className="form-card management-form" onSubmit={(event) => { event.preventDefault(); void submit(saveResource, resource, "Resource saved."); }}>
+        </form> : null}
+        {activeSection === "resources" ? <form className="form-card management-form" onSubmit={(event) => { event.preventDefault(); void submit(saveResource, resource, "Resource saved."); }}>
           <h3>Learning Resource</h3>
           <ContentProgramSelect data={data} values={resource} setValues={setResource} required />
           <label><span>Title</span><input value={resource.title} onChange={(event) => setResource({ ...resource, title: event.target.value })} required /></label>
           <label><span>External URL</span><input value={resource.external_url} onChange={(event) => setResource({ ...resource, external_url: event.target.value })} /></label>
           <label><span>Description</span><textarea value={resource.description} onChange={(event) => setResource({ ...resource, description: event.target.value })} /></label>
           <button className="button button-secondary" type="submit">Save Resource</button>
-        </form>
-        <form className="form-card management-form" onSubmit={(event) => { event.preventDefault(); void submit(saveArticle, article, "Article saved."); }}>
+        </form> : null}
+        {activeSection === "articles" ? <form className="form-card management-form" onSubmit={(event) => { event.preventDefault(); void submit(saveArticle, article, "Article saved."); }}>
           <h3>Learning Article</h3>
           <ContentProgramSelect data={data} values={article} setValues={setArticle} />
           <label><span>Title</span><input value={article.title} onChange={(event) => setArticle({ ...article, title: event.target.value })} required /></label>
           <label><span>Summary</span><input value={article.summary} onChange={(event) => setArticle({ ...article, summary: event.target.value })} /></label>
           <label><span>Body</span><textarea value={article.body} onChange={(event) => setArticle({ ...article, body: event.target.value })} /></label>
           <button className="button button-secondary" type="submit">Save Article</button>
-        </form>
+        </form> : null}
       </div>
       <StatusMessage status={status} />
     </div>
   );
 }
 
-function ContentProgramSelect({ data, values, setValues, required = false }) {
+function ContentProgramSelect({ data, values, setValues, required = false, includeTrack = false }) {
+  const tracks = getTrackOptions(data.programs, values.program_id);
   return (
-    <label>
-      <span>Programme</span>
-      <select value={values.program_id || ""} onChange={(event) => setValues({ ...values, program_id: event.target.value })} required={required}>
-        <option value="">General or choose programme</option>
-        {data.programs.map((program) => <option key={program.id} value={program.id}>{program.title}</option>)}
-      </select>
-    </label>
+    <>
+      <label>
+        <span>Programme</span>
+        <select value={values.program_id || ""} onChange={(event) => setValues({ ...values, program_id: event.target.value, program_level_id: "" })} required={required}>
+          <option value="">General or choose programme</option>
+          {data.programs.map((program) => <option key={program.id} value={program.id}>{program.title}</option>)}
+        </select>
+      </label>
+      {includeTrack ? (
+        <label>
+          <span>Track</span>
+          <select value={values.program_level_id || ""} onChange={(event) => setValues({ ...values, program_level_id: event.target.value })} required>
+            <option value="">Choose track</option>
+            {tracks.map((track) => <option key={track.id} value={track.id}>{track.level_name}</option>)}
+          </select>
+        </label>
+      ) : null}
+    </>
   );
 }
 
@@ -1291,13 +1274,17 @@ function LiveClassesSection({ data, onSaved }) {
 }
 
 function PaymentsSection({ data }) {
-  const [filters, setFilters] = useState({ status: "", email: "", programme: "", reference: "" });
+  const [filters, setFilters] = useState({ status: "", email: "", programme: "", reference: "", from: "", to: "" });
   const payments = useMemo(() => data.payments.filter((payment) => {
-    const haystack = `${payment.reference || ""} ${payment.customer_email || ""} ${payment.product_name || ""} ${payment.product_key || ""}`.toLowerCase();
-    if (filters.status && String(payment.status || "").toLowerCase() !== filters.status) return false;
+    const haystack = `${payment.reference || ""} ${payment.customer_name || ""} ${payment.customer_email || ""} ${payment.customer_phone || ""} ${payment.product_name || ""} ${payment.product_key || ""} ${payment.selected_level || ""}`.toLowerCase();
+    const reportedStatus = String(payment.reported_status || payment.status || "initiated").toLowerCase();
+    const createdDate = String(payment.created_at || "").slice(0, 10);
+    if (filters.status && reportedStatus !== filters.status) return false;
     if (filters.email && !String(payment.customer_email || "").toLowerCase().includes(filters.email.toLowerCase())) return false;
     if (filters.programme && !haystack.includes(filters.programme.toLowerCase())) return false;
     if (filters.reference && !String(payment.reference || "").toLowerCase().includes(filters.reference.toLowerCase())) return false;
+    if (filters.from && createdDate < filters.from) return false;
+    if (filters.to && createdDate > filters.to) return false;
     return true;
   }), [data.payments, filters]);
 
@@ -1308,24 +1295,27 @@ function PaymentsSection({ data }) {
         <input placeholder="Reference" value={filters.reference} onChange={(event) => setFilters({ ...filters, reference: event.target.value })} />
         <input placeholder="Email" value={filters.email} onChange={(event) => setFilters({ ...filters, email: event.target.value })} />
         <input placeholder="Programme" value={filters.programme} onChange={(event) => setFilters({ ...filters, programme: event.target.value })} />
+        <label><span>From</span><input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} /></label>
+        <label><span>To</span><input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} /></label>
         <select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
           <option value="">All statuses</option>
-          {["initiated", "pending", "initialized", "success", "failed", "declined", "cancelled", "abandoned"].map((status) => <option key={status} value={status}>{status}</option>)}
+          {["initiated", "opened", "client_success", "pending", "success", "failed", "declined", "cancelled", "closed", "abandoned"].map((status) => <option key={status} value={status}>{status.replace(/_/g, " ")}</option>)}
         </select>
       </div>
       <div className="responsive-table-wrap">
         <table className="management-table">
-          <thead><tr><th>Reference</th><th>Email</th><th>Programme</th><th>Amount</th><th>Status</th><th>Verification</th><th>Date</th></tr></thead>
+          <thead><tr><th>Reference</th><th>Customer</th><th>Contact</th><th>Programme / Track</th><th>Amount</th><th>Reported</th><th>Verification</th><th>Updated</th></tr></thead>
           <tbody>
             {payments.map((payment) => (
               <tr key={payment.id}>
-                <td>{payment.reference}</td>
-                <td>{payment.customer_email}</td>
-                <td>{payment.product_name || payment.product_key}</td>
-                <td>{formatAmountKobo(payment.amount_kobo || payment.expected_amount_kobo)}</td>
-                <td>{payment.status}</td>
-                <td>{payment.verified_at ? "server_verified" : "client_reported_or_unverified"}</td>
-                <td>{formatDateTime(payment.created_at)}</td>
+                <td data-label="Reference">{payment.reference}</td>
+                <td data-label="Customer">{payment.customer_name || payment.student_name || "Not recorded"}</td>
+                <td data-label="Contact">{payment.customer_email}<br />{payment.customer_phone || ""}</td>
+                <td data-label="Programme / Track">{payment.product_name || payment.product_key}<br />{payment.selected_level || payment.track_slug || ""}</td>
+                <td data-label="Amount">{formatAmountKobo(payment.amount_kobo || payment.expected_amount_kobo)}</td>
+                <td data-label="Reported">{payment.reported_status || payment.status || "initiated"}</td>
+                <td data-label="Verification">{payment.verified_at ? "verified" : payment.verification_status || "unverified"}</td>
+                <td data-label="Updated">{formatDateTime(payment.updated_at || payment.created_at)}</td>
               </tr>
             ))}
           </tbody>
@@ -1410,7 +1400,7 @@ function renderAdminRecord(kind, item) {
       <div>
         <p className="eyebrow">{kind} | {formatDateTime(item.created_at || item.published_at || item.scheduled_start)}</p>
         <h3>{item.title || item.subject || item.reference || item.name || "Record"}</h3>
-        <p>{item.summary || item.description || item.message || item.status || item.category || "Supabase-backed record."}</p>
+        <p>{item.summary || item.description || item.message || item.status || item.category || "Record details are available in this management section."}</p>
       </div>
       <dl className="portal-mini-details">
         {item.programs?.title ? <div><dt>Programme</dt><dd>{item.programs.title}</dd></div> : null}
@@ -1548,7 +1538,7 @@ function AdminSettingsSection() {
       <div className="portal-grid">
         <article className="notice-card">
           <h3>Session</h3>
-          <p>The current Admin session requires both Supabase authentication and the Admin security-code verification before protected management actions run.</p>
+          <p>For your security, your Portal session will automatically sign out after 10 minutes without activity. You will receive a warning shortly before logout.</p>
           <span className="portal-tag success">Verified session required</span>
         </article>
         <article className="notice-card">
@@ -1590,10 +1580,19 @@ export default function AdminDashboard() {
 
   const data = dataQuery.data;
   return (
-    <AdminFrame data={data}>
+    <AdminFrame data={data} onRealtimeChange={dataQuery.refetch}>
       {activeSection === "overview" ? <OverviewSection data={data} /> : null}
-      {["people", "students", "tutors"].includes(activeSection) ? <PeopleSection data={data} onSaved={dataQuery.refetch} /> : null}
+      {["people", "students", "tutors"].includes(activeSection) ? <PeopleSection data={data} onSaved={dataQuery.refetch} activeSection={activeSection} /> : null}
       {activeSection === "programmes" ? <ProgrammesSection data={data} onSaved={dataQuery.refetch} /> : null}
+      {activeSection === "enrolments" ? (
+        <AdminRecordsSection
+          title="Enrolments."
+          description="Review official Student programme and track assignments."
+          records={data.enrolments}
+          emptyMessage="No official enrolments have been recorded yet."
+          render={(item) => renderAdminRecord("Enrolment", item)}
+        />
+      ) : null}
       {activeSection === "live-classes" ? <LiveClassesSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "classrooms" ? (
         <div className="portal-page">
@@ -1601,11 +1600,9 @@ export default function AdminDashboard() {
           <ProgramChatPanel canModerate />
         </div>
       ) : null}
-      {activeSection === "timetable" ? <ContentSection data={data} onSaved={dataQuery.refetch} /> : null}
-      {activeSection === "announcements" ? <ContentSection data={data} onSaved={dataQuery.refetch} /> : null}
-      {activeSection === "assignments" ? <ContentSection data={data} onSaved={dataQuery.refetch} /> : null}
-      {activeSection === "resources" ? <ContentSection data={data} onSaved={dataQuery.refetch} /> : null}
-      {activeSection === "articles" ? <ContentSection data={data} onSaved={dataQuery.refetch} /> : null}
+      {["timetable", "announcements", "assignments", "resources", "articles"].includes(activeSection)
+        ? <ContentSection data={data} onSaved={dataQuery.refetch} activeSection={activeSection} />
+        : null}
       {activeSection === "payments" ? <PaymentsSection data={data} /> : null}
       {activeSection === "certificates" ? (
         <AdminRecordsSection

@@ -38,35 +38,13 @@ async function uploadAdminAvatar(supabase, userId, file) {
   return path;
 }
 
-async function safeSelect(label, query, fallback = []) {
+async function requiredSelect(label, query, fallback = []) {
   const { data, error } = await query;
   if (error) {
     if (import.meta.env.DEV) console.info(`Admin ${label} query failed`, error);
-    return fallback;
+    throw new Error(`Admin ${label} could not be loaded. Please try again.`);
   }
   return data ?? fallback;
-}
-
-function normalizePeopleRecords(data) {
-  return normalizeList(data?.records);
-}
-
-function toTutorProfileShape(record) {
-  return {
-    ...record,
-    profiles: {
-      id: record.user_id || record.id,
-      full_name: record.full_name,
-      email: record.email,
-      phone: record.phone,
-      title: record.title,
-      avatar_path: record.avatar_path,
-      account_status: record.account_status,
-      status_changed_at: record.status_changed_at,
-      status_changed_by: record.status_changed_by,
-      status_reason: record.status_reason
-    }
-  };
 }
 
 async function listAdminPeople({ role = "all", query = "", status = "all", assignment = "all", programId = "", page = 1, pageSize = 25 } = {}) {
@@ -100,55 +78,66 @@ export async function getAdminDashboardData() {
     certificates,
     auditLogs
   ] = await Promise.all([
-    safeSelect("profiles", supabase.from("profiles").select("*").order("created_at", { ascending: false }).limit(200)),
-    safeSelect("roles", supabase.from("user_roles").select("*").order("created_at", { ascending: false }).limit(300)),
-    safeSelect("tutor profiles", supabase.from("tutor_profiles").select("*, profiles(id, full_name, email, phone, title, account_status, status_changed_at, status_changed_by, status_reason)").order("created_at", { ascending: false }).limit(200)),
-    safeSelect("tutor assignments", supabase.from("tutor_program_assignments").select("*, programs(id, slug, title), program_levels(id, level_name), profiles!tutor_program_assignments_tutor_id_fkey(id, full_name, email, title)").order("created_at", { ascending: false }).limit(300)),
-    safeSelect("programs", supabase.from("programs").select("*, program_levels(*)").order("display_order", { ascending: true }).order("title", { ascending: true })),
-    safeSelect("enrolments", supabase.from("enrolments").select("*, profiles(id, full_name, email, phone), programs(id, slug, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(300)),
-    safeSelect("announcements", supabase.from("announcements").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(100)),
-    safeSelect("timetable", supabase.from("timetable_entries").select("*, programs(id, title), program_levels(id, level_name)").order("day_of_week", { ascending: true }).order("start_time", { ascending: true }).limit(150)),
-    safeSelect("assignments", supabase.from("assignments").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(150)),
-    safeSelect("resources", supabase.from("resources").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(150)),
-    safeSelect("notifications", supabase.from("portal_notifications").select("*").order("created_at", { ascending: false }).limit(100)),
-    safeSelect("articles", supabase.from("portal_articles").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(100)),
-    safeSelect("live classes", supabase.from("live_class_sessions").select("*, programs(id, title), program_levels(id, level_name), profiles!live_class_sessions_tutor_id_fkey(id, full_name, title)").order("scheduled_start", { ascending: false }).limit(150)),
-    safeSelect("support tickets", supabase.from("support_tickets").select("*, profiles(id, full_name, email)").order("created_at", { ascending: false }).limit(200)),
-    safeSelect("payments", supabase.from("payments").select("*").order("created_at", { ascending: false }).limit(300)),
-    safeSelect("certificates", supabase.from("certificates").select("*, profiles(id, full_name, email), programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(200)),
-    safeSelect("audit logs", supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(100))
+    requiredSelect("profiles", supabase.from("profiles").select("*").order("created_at", { ascending: false }).limit(500)),
+    requiredSelect("roles", supabase.from("user_roles").select("*").order("created_at", { ascending: false }).limit(500)),
+    requiredSelect("tutor profiles", supabase.from("tutor_profiles").select("*").order("created_at", { ascending: false }).limit(300)),
+    requiredSelect("tutor assignments", supabase.from("tutor_program_assignments").select("*, programs(id, slug, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(500)),
+    requiredSelect("programs", supabase.from("programs").select("*, program_levels(*)").order("display_order", { ascending: true }).order("title", { ascending: true })),
+    requiredSelect("enrolments", supabase.from("enrolments").select("*, programs(id, slug, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(500)),
+    requiredSelect("announcements", supabase.from("announcements").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(100)),
+    requiredSelect("timetable", supabase.from("timetable_entries").select("*, programs(id, title), program_levels(id, level_name)").order("day_of_week", { ascending: true }).order("start_time", { ascending: true }).limit(150)),
+    requiredSelect("assignments", supabase.from("assignments").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(150)),
+    requiredSelect("resources", supabase.from("resources").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(150)),
+    requiredSelect("notifications", supabase.from("portal_notifications").select("*").order("created_at", { ascending: false }).limit(100)),
+    requiredSelect("articles", supabase.from("portal_articles").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(100)),
+    requiredSelect("live classes", supabase.from("live_class_sessions").select("*, programs(id, title), program_levels(id, level_name)").order("scheduled_start", { ascending: false }).limit(150)),
+    requiredSelect("support tickets", supabase.from("support_tickets").select("*").order("created_at", { ascending: false }).limit(200)),
+    requiredSelect("payments", supabase.from("payments").select("*, payment_attempt_events(*)").order("created_at", { ascending: false }).limit(500)),
+    requiredSelect("certificates", supabase.from("certificates").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(200)),
+    requiredSelect("audit logs", supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(100))
   ]);
-
-  const [peopleSummary, studentDirectory, tutorDirectory] = await Promise.all([
-    listAdminPeople({ role: "all", pageSize: 1 }).catch((error) => ({ records: [], metrics: null, error })),
-    listAdminPeople({ role: "student", pageSize: 200 }).catch((error) => ({ records: [], error })),
-    listAdminPeople({ role: "tutor", pageSize: 200 }).catch((error) => ({ records: [], error }))
-  ]);
-
   const roleByUserId = new Map(normalizeList(roles).map((item) => [item.user_id, item.role]));
-  const fallbackStudents = normalizeList(profiles).filter((profile) => roleByUserId.get(profile.id) !== "tutor" && roleByUserId.get(profile.id) !== "admin");
-  const canonicalStudents = normalizePeopleRecords(studentDirectory);
-  const canonicalTutors = normalizePeopleRecords(tutorDirectory).map(toTutorProfileShape);
+  const profileByUserId = new Map(normalizeList(profiles).map((item) => [item.id, item]));
+  const canonicalStudents = normalizeList(profiles).filter((item) => roleByUserId.get(item.id) === "student");
+  const canonicalTutors = normalizeList(tutors).map((item) => ({ ...item, profiles: profileByUserId.get(item.user_id) || null }));
+  const hydratedTutorAssignments = normalizeList(tutorAssignments).map((item) => ({ ...item, profiles: profileByUserId.get(item.tutor_id) || null }));
+  const hydratedEnrolments = normalizeList(enrolments).map((item) => ({ ...item, profiles: profileByUserId.get(item.user_id) || null }));
+  const hydratedLiveClasses = normalizeList(liveClasses).map((item) => ({ ...item, profiles: profileByUserId.get(item.tutor_id) || null }));
+  const hydratedSupportTickets = normalizeList(supportTickets).map((item) => ({ ...item, profiles: profileByUserId.get(item.user_id) || null }));
+  const hydratedCertificates = normalizeList(certificates).map((item) => ({ ...item, profiles: profileByUserId.get(item.user_id) || null }));
+  const activeTutorIds = new Set(hydratedTutorAssignments.filter((item) => item.active !== false).map((item) => item.tutor_id));
+  const activeTutorProgramIds = new Set(hydratedTutorAssignments.filter((item) => item.active !== false).map((item) => item.program_id));
+  const peopleMetrics = {
+    totalStudents: canonicalStudents.length,
+    activeStudents: canonicalStudents.filter((item) => item.account_status === "active").length,
+    inactiveStudents: canonicalStudents.filter((item) => item.account_status !== "active").length,
+    totalTutors: canonicalTutors.length,
+    activeTutors: canonicalTutors.filter((item) => item.profiles?.account_status === "active").length,
+    inactiveTutors: canonicalTutors.filter((item) => item.profiles?.account_status !== "active").length,
+    assignedTutors: activeTutorIds.size,
+    unassignedTutors: Math.max(0, canonicalTutors.length - activeTutorIds.size),
+    programmesWithoutTutor: normalizeList(programs).filter((item) => item.active !== false && !activeTutorProgramIds.has(item.id)).length
+  };
 
   return {
     profiles: normalizeList(profiles),
     roles: normalizeList(roles),
-    students: canonicalStudents.length ? canonicalStudents : fallbackStudents,
-    tutors: canonicalTutors.length ? canonicalTutors : normalizeList(tutors),
-    peopleMetrics: peopleSummary.metrics || null,
-    tutorAssignments: normalizeList(tutorAssignments),
+    students: canonicalStudents,
+    tutors: canonicalTutors,
+    peopleMetrics,
+    tutorAssignments: hydratedTutorAssignments,
     programs: normalizeList(programs),
-    enrolments: normalizeList(enrolments),
+    enrolments: hydratedEnrolments,
     announcements: normalizeList(announcements),
     timetable: normalizeList(timetable),
     assignments: normalizeList(assignments),
     resources: normalizeList(resources),
     notifications: normalizeList(notifications),
     articles: normalizeList(articles),
-    liveClasses: normalizeList(liveClasses),
-    supportTickets: normalizeList(supportTickets),
+    liveClasses: hydratedLiveClasses,
+    supportTickets: hydratedSupportTickets,
     payments: normalizeList(payments),
-    certificates: normalizeList(certificates),
+    certificates: hydratedCertificates,
     auditLogs: normalizeList(auditLogs)
   };
 }
@@ -196,13 +185,14 @@ export async function updateAdminProfile(userId, values) {
   }
 }
 
-export async function searchAdminStudents({ query = "", status = "all", programId = "", page = 1, pageSize = 25 } = {}) {
+export async function searchAdminStudents({ query = "", status = "all", assignment = "all", programId = "", page = 1, pageSize = 25 } = {}) {
   const safePage = Math.max(1, Number(page) || 1);
   const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 25));
   const data = await listAdminPeople({
     role: "student",
     query,
     status,
+    assignment,
     programId,
     page: safePage,
     pageSize: safePageSize
@@ -380,6 +370,7 @@ export async function saveAnnouncement(values) {
     body: String(values.body || "").trim(),
     category: String(values.category || "General").trim(),
     audience_type: String(values.audience_type || "all_students").trim(),
+    audience_user_id: values.audience_user_id || null,
     priority: values.priority || "normal",
     active: values.active !== false,
     published: values.published !== false,

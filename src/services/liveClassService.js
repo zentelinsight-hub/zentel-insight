@@ -48,3 +48,18 @@ export async function endLiveClass(classSessionId) {
     return { ok: false, message: "Live class could not be ended. Please try again." };
   }
 }
+
+export async function leaveLiveClass(classSessionId) {
+  try {
+    const data = await invokeEdgeFunction("leave-live-class", {
+      body: { classSessionId },
+      unavailableMessage: "Live classes are temporarily unavailable. Please try again.",
+      failureMessage: "Class attendance could not be updated. Please try again."
+    });
+    if (!data?.ok) return { ok: false, message: data?.error || "Class attendance could not be updated. Please try again." };
+    return data;
+  } catch (error) {
+    if (error instanceof EdgeFunctionError) return { ok: false, message: error.message };
+    return { ok: false, message: "Class attendance could not be updated. Please try again." };
+  }
+}

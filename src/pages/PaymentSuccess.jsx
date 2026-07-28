@@ -20,7 +20,7 @@ function getPaymentDetails(searchParams) {
   const reference = normalizePaymentReference(searchParams.get("reference"), searchParams.get("trxref"));
   if (!reference) return null;
   const record = readTemporaryPayment(reference);
-  if (!record || record.reference !== reference || record.temporaryStatus !== "success") return null;
+  if (!record || record.reference !== reference || !["success", "client_success"].includes(record.temporaryStatus)) return null;
   return record;
 }
 

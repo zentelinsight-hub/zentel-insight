@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ExternalLink, Video } from "lucide-react";
-import { canJoinLiveClass, endLiveClass, getLiveClassState, requestLiveClassToken } from "../services/liveClassService";
+import { canJoinLiveClass, endLiveClass, getLiveClassState, leaveLiveClass, requestLiveClassToken } from "../services/liveClassService";
 import { formatDateTime } from "../utils/format";
 
 function getProgramName(item) {
@@ -17,6 +17,7 @@ function getTutorName(item) {
 export default function LiveClassCards({ sessions = [], emptyMessage = "No live classes have been scheduled yet.", audience = "student", onChanged }) {
   const [status, setStatus] = useState({ id: "", type: "", message: "" });
   const [loadingId, setLoadingId] = useState("");
+  const [joinedSessionIds, setJoinedSessionIds] = useState(() => new Set());
   const hostView = audience === "tutor" || audience === "admin";
 
   async function joinClass(session) {
@@ -29,11 +30,42 @@ export default function LiveClassCards({ sessions = [], emptyMessage = "No live 
         return;
       }
       const separator = result.roomUrl.includes("?") ? "&" : "?";
-      window.open(`${result.roomUrl}${separator}t=${encodeURIComponent(result.token)}`, "_blank", "noopener,noreferrer");
+      const openedWindow = window.open(`${result.roomUrl}${separator}t=${encodeURIComponent(result.token)}`, "_blank");
+      if (!openedWindow) {
+        setStatus({ id: session.id, type: "warning", message: "Your browser blocked the class window. Allow pop-ups for Zentel Insight and try again." });
+        return;
+      }
+      try {
+        openedWindow.opener = null;
+      } catch {
+        // Cross-origin browser protections may prevent updating opener.
+      }
+      if (!hostView) setJoinedSessionIds((current) => new Set(current).add(session.id));
       setStatus({ id: session.id, type: "success", message: `Opening live class as ${result.permission}.` });
       onChanged?.();
     } catch (error) {
       setStatus({ id: session.id, type: "warning", message: error.message || "Live-class access could not be prepared." });
+    } finally {
+      setLoadingId("");
+    }
+  }
+
+  async function leaveClass(session) {
+    setLoadingId(`leave:${session.id}`);
+    setStatus({ id: session.id, type: "", message: "" });
+    try {
+      const result = await leaveLiveClass(session.id);
+      if (!result.ok) {
+        setStatus({ id: session.id, type: "warning", message: result.message || "Class attendance could not be updated." });
+        return;
+      }
+      setJoinedSessionIds((current) => {
+        const next = new Set(current);
+        next.delete(session.id);
+        return next;
+      });
+      setStatus({ id: session.id, type: "success", message: "You have left the live class." });
+      onChanged?.();
     } finally {
       setLoadingId("");
     }
@@ -102,6 +134,11 @@ export default function LiveClassCards({ sessions = [], emptyMessage = "No live 
             {hostView && (state === "live" || session.status === "live") ? (
               <button className="button button-secondary" type="button" onClick={() => endClass(session)} disabled={loadingId === `end:${session.id}`}>
                 {loadingId === `end:${session.id}` ? "Ending Class" : "End Class"}
+              </button>
+            ) : null}
+            {!hostView && joinedSessionIds.has(session.id) ? (
+              <button className="button button-secondary" type="button" onClick={() => leaveClass(session)} disabled={loadingId === `leave:${session.id}`}>
+                {loadingId === `leave:${session.id}` ? "Leaving Class" : "Leave Class"}
               </button>
             ) : null}
             {status.id === session.id && status.message ? (

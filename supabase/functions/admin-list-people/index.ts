@@ -178,6 +178,8 @@ Deno.serve(async (request) => {
 
     const metrics = {
       totalStudents: people.filter((person: any) => person.role === "student").length,
+      activeStudents: people.filter((person: any) => person.role === "student" && person.account_status === "active").length,
+      inactiveStudents: people.filter((person: any) => person.role === "student" && person.account_status !== "active").length,
       totalTutors: people.filter((person: any) => person.role === "tutor").length,
       activeTutors: people.filter((person: any) => person.role === "tutor" && person.account_status === "active").length,
       inactiveTutors: people.filter((person: any) => person.role === "tutor" && person.account_status !== "active").length,

@@ -41,7 +41,8 @@ function getPaymentState(searchParams, routeState) {
   const record = readTemporaryPayment(reference);
   if (!reference || !record) return { reference, record: null, reason: "unavailable" };
   const statusReason = record.failureReason || record.temporaryStatus || reason;
-  return { reference, record, reason: statusReason === "success" ? "pending" : statusReason };
+  const normalizedReason = statusReason === "closed" ? "cancelled" : statusReason === "failed" ? "error" : statusReason;
+  return { reference, record, reason: ["success", "client_success"].includes(normalizedReason) ? "pending" : normalizedReason };
 }
 
 export default function PaymentState({ state = "failed" }) {

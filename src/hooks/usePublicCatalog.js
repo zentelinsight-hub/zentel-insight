@@ -1,5 +1,5 @@
 import { useAsyncData } from "./useAsyncData";
-import { getPublishedProgramBySlug, getPublishedPrograms } from "../services/programCatalogService";
+import { getCheckoutProgramBySlug, getPublishedProgramBySlug, getPublishedPrograms } from "../services/programCatalogService";
 
 export function usePublicPrograms() {
   return useAsyncData(() => getPublishedPrograms(), []);
@@ -7,4 +7,8 @@ export function usePublicPrograms() {
 
 export function usePublicProgram(slug) {
   return useAsyncData(() => getPublishedProgramBySlug(slug), [slug]);
+}
+
+export function useCheckoutProgram(slug) {
+  return useAsyncData(() => getCheckoutProgramBySlug(slug), [slug], { enabled: Boolean(slug) });
 }

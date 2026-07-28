@@ -6,6 +6,8 @@ import { loginWithEmail, resendSignupConfirmation, signupWithEmail } from "../..
 import { getHomePathForRole, USER_ROLES } from "../../services/roleService";
 import { isValidEmail } from "../../utils/format";
 import { createProgressState } from "../../utils/authProgress";
+
+const AUTH_FAILURE_PROGRESS_MIN_MS = 450;
 import { safeRedirectPath } from "../../utils/paymentCalculations";
 
 const checkEmailMessage =
@@ -165,6 +167,7 @@ export default function AuthForm({ mode }) {
     submittingRef.current = true;
     setLoading(true);
     if (!isSignup) setAuthProgress(createProgressState("initial", 0, []));
+    const progressStartedAt = Date.now();
     let navigated = false;
     try {
       const payload = { ...values, email: normalizeEmail(values.email) };
@@ -186,6 +189,10 @@ export default function AuthForm({ mode }) {
     } finally {
       submittingRef.current = false;
       if (!navigated && !showCheckEmailModal) {
+        const remainingProgressTime = AUTH_FAILURE_PROGRESS_MIN_MS - (Date.now() - progressStartedAt);
+        if (!isSignup && remainingProgressTime > 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, remainingProgressTime));
+        }
         setLoading(false);
         setAuthProgress(null);
       }
