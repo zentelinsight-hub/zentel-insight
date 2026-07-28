@@ -22,6 +22,7 @@ import {
   Video
 } from "lucide-react";
 import LiveClassCards from "../components/LiveClassCards";
+import PageVisual from "../components/PageVisual";
 import ProgramChatPanel from "../components/ProgramChatPanel";
 import PortalShell from "../components/portal/PortalShell";
 import { useAuth } from "../context/authHooks";
@@ -304,10 +305,11 @@ export function PortalOverview() {
   return (
     <PortalPage slug="dashboard">
       {(content) => {
-        if (dashboard.loading) return <PortalLoading label="Loading dashboard" />;
-        if (dashboard.error) return <PortalError message={dashboard.error} onRetry={dashboard.refetch} />;
+        const dashboardVisual = <PageVisual visualKey="studentDashboard" placement="dashboard" />;
+        if (dashboard.loading) return <>{dashboardVisual}<PortalLoading label="Loading dashboard" /></>;
+        if (dashboard.error) return <>{dashboardVisual}<PortalError message={dashboard.error} onRetry={dashboard.refetch} /></>;
         const data = dashboard.data;
-        if (!data) return <PortalEmpty content={content} />;
+        if (!data) return <>{dashboardVisual}<PortalEmpty content={content} /></>;
         const activeEnrolments = data.activeEnrolments || [];
         const announcements = data.announcements || [];
         const certificates = data.certificates || [];
@@ -319,6 +321,7 @@ export function PortalOverview() {
         const resolvedProgrammeName = data.resolvedProgramme?.title || activeEnrolments[0]?.programs?.title || "Assignment pending";
         return (
           <>
+            {dashboardVisual}
             <section className="portal-welcome-card">
               <PortalAvatar profile={profile} user={user} size="lg" />
               <div>

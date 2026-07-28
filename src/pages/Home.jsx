@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import ProgramCard from "../components/ProgramCard";
+import PageVisual from "../components/PageVisual";
 import SectionHeader from "../components/SectionHeader";
 import { announcements } from "../data/announcements";
 import { programs } from "../data/programs";
@@ -104,6 +105,12 @@ export default function Home() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="page-visual-section" aria-label="Zentel Insight learning platform overview">
+        <div className="container">
+          <PageVisual visualKey="mainHomepage" />
         </div>
       </section>
 

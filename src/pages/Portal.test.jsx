@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthContext } from "../context/authContextCore";
 import { ThemeProvider } from "../context/ThemeContext";
+import { pageVisualMap } from "../data/pageVisuals";
 import { PortalLayout, PortalOverview, PortalProfile, PortalSection } from "./Portal";
 
 const hookMocks = vi.hoisted(() => ({
@@ -228,6 +229,8 @@ describe("Portal routes", () => {
 
   it("does not allow a Student to choose or change a programme", () => {
     renderPortal("/portal");
+    const visual = pageVisualMap.studentDashboard;
+    expect(screen.getByRole("img", { name: visual.alt })).toHaveAttribute("src", visual.src);
     expect(screen.queryByRole("heading", { name: "Choose Your Programme" })).not.toBeInTheDocument();
     expect(screen.getAllByText("Programme assignment pending").length).toBeGreaterThan(0);
   });

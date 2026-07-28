@@ -1,5 +1,6 @@
 import { ArrowRight, BookOpen, Check, Users } from "lucide-react";
 import { Link } from "react-router-dom";
+import PageVisual from "../../components/PageVisual";
 import { siteConfig } from "../../data/site";
 import { studyHubPricing } from "../../data/programs";
 import { usePageMeta } from "../../utils/usePageMeta";
@@ -22,6 +23,12 @@ export default function StudyHubHome() {
         title="Online academic support for JSS and SSS students."
         body="Student-friendly subject support for junior and senior secondary learners, with clear pricing and parent-ready communication."
       />
+
+      <section className="page-visual-section" aria-label="Zentel Insight StudyHub overview">
+        <div className="container">
+          <PageVisual visualKey="studyHubHomepage" />
+        </div>
+      </section>
 
       <section className="page-section">
         <div className="container value-grid">

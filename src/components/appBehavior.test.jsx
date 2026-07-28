@@ -17,8 +17,10 @@ import { AuthContext } from "../context/authContextCore";
 import { ThemeProvider } from "../context/ThemeContext";
 import { studyHubActionItems, studyHubNavItems } from "../data/site";
 import { programs } from "../data/programs";
+import { pageVisualMap } from "../data/pageVisuals";
 import { getProgramBanner, programBannerAliases, programBannerMap } from "../data/programBanners";
 import Checkout from "../pages/Checkout";
+import Home from "../pages/Home";
 import ProgramDetail from "../pages/ProgramDetail";
 import Programs from "../pages/Programs";
 import StudyHub from "../pages/StudyHub";
@@ -250,6 +252,10 @@ describe("StudyHub navigation", () => {
   ])("renders %s as its own page with the correct active item", (path, activeLabel, heading) => {
     renderStudyHub([path]);
     expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
+    if (path === "/studyhub") {
+      const visual = pageVisualMap.studyHubHomepage;
+      expect(screen.getByRole("img", { name: visual.alt })).toHaveAttribute("src", visual.src);
+    }
     const activeLabels = [
       ...new Set(
         screen
@@ -261,6 +267,15 @@ describe("StudyHub navigation", () => {
     expect(activeLabels).toEqual([activeLabel]);
     expect(screen.queryByRole("link", { name: "Login" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Sign Up" })).not.toBeInTheDocument();
+  });
+});
+
+describe("public homepage visuals", () => {
+  it("shows the main Zentel Insight homepage illustration only on the main homepage", () => {
+    renderWithRouter(<Home />);
+    const visual = pageVisualMap.mainHomepage;
+    expect(screen.getByRole("img", { name: visual.alt })).toHaveAttribute("src", visual.src);
+    expect(screen.queryByRole("img", { name: pageVisualMap.studyHubHomepage.alt })).not.toBeInTheDocument();
   });
 });
 

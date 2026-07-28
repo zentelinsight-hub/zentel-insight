@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import LiveClassCards from "../components/LiveClassCards";
+import PageVisual from "../components/PageVisual";
 import ProgramChatPanel from "../components/ProgramChatPanel";
 import PortalShell from "../components/portal/PortalShell";
 import { useAuth } from "../context/authHooks";
@@ -136,6 +137,7 @@ function DashboardSection({ data, onSaved }) {
         title="Tutor workspace."
         description="Review assigned programmes, connected students, upcoming classes and programme communication."
       />
+      <PageVisual visualKey="tutorDashboard" placement="dashboard" />
       <div className="dashboard-grid">
         <article className="dashboard-card">
           <GraduationCap size={22} aria-hidden="true" />

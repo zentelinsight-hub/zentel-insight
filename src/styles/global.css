@@ -1363,6 +1363,58 @@ button.text-link {
   align-items: start;
 }
 
+.page-visual-section {
+  padding: var(--space-8) 0;
+  background: var(--color-bg);
+}
+
+.page-visual {
+  width: 100%;
+  max-width: 1120px;
+  min-width: 0;
+  margin: 0 auto;
+  overflow: hidden;
+  aspect-ratio: 1672 / 941;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.page-visual--dashboard {
+  max-width: none;
+  margin-bottom: var(--space-6);
+}
+
+.page-visual img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
+.page-visual__fallback {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  background: var(--color-bg-alt);
+  color: var(--color-muted);
+  text-align: center;
+}
+
+.page-visual__fallback strong {
+  color: var(--color-heading);
+}
+
+.page-visual__fallback span {
+  font-size: 0.85rem;
+}
+
 .program-card-top,
 .program-card-footer,
 .payment-summary,
@@ -3771,6 +3823,14 @@ body.portal-route-active .site-footer {
 
   .program-banner--card {
     margin-bottom: var(--space-3);
+  }
+
+  .page-visual-section {
+    padding: var(--space-5) 0;
+  }
+
+  .page-visual--dashboard {
+    margin-bottom: var(--space-5);
   }
 
   .nav {
