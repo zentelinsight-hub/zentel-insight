@@ -2238,7 +2238,7 @@ textarea:focus,
 
 .portal-link.signout {
   margin: 0;
-  color: var(--color-danger);
+  color: var(--color-error);
   cursor: pointer;
 }
 
@@ -2311,6 +2311,11 @@ body.portal-menu-open {
 body.portal-route-active .route-content.page-enter {
   animation: none;
   transform: none;
+}
+
+body.portal-route-active .site-header,
+body.portal-route-active .site-footer {
+  display: none;
 }
 
 .portal-mobile-drawer {
@@ -2879,6 +2884,11 @@ body.portal-route-active .route-content.page-enter {
 .portal-tag.warning {
   background: color-mix(in srgb, var(--color-warning), transparent 88%);
   color: var(--color-warning);
+}
+
+.portal-tag.danger {
+  background: color-mix(in srgb, var(--color-error), transparent 88%);
+  color: var(--color-error);
 }
 
 .restricted-account-screen {
@@ -3553,8 +3563,15 @@ body.portal-route-active .route-content.page-enter {
     background: color-mix(in srgb, var(--color-bg-alt), transparent 4%);
   }
 
+  .portal-header > div {
+    overflow: hidden;
+  }
+
   .portal-header h1 {
     font-size: clamp(1.2rem, 5vw, 1.55rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .portal-page-heading {
@@ -3718,7 +3735,21 @@ body.portal-route-active .route-content.page-enter {
   }
 
   .portal-main {
-    padding: var(--space-5);
+    padding: calc(var(--portal-header-height) + var(--space-5)) var(--space-5) var(--space-5);
+  }
+
+  .portal-header {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    height: var(--portal-header-height);
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .portal-header .portal-tag {
+    max-width: 32vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .portal-welcome-card,

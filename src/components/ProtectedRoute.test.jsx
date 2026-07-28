@@ -72,4 +72,16 @@ describe("ProtectedRoute account status", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign Out" }));
     expect(signOut).toHaveBeenCalledWith({ scope: "local" });
   });
+
+  it("shows suspended students that only an Admin can reactivate the account", () => {
+    renderProtected({
+      accountStatus: ACCOUNT_STATUSES.SUSPENDED,
+      profile: { id: "user-1", account_status: ACCOUNT_STATUSES.SUSPENDED }
+    });
+
+    expect(screen.getByRole("heading", { name: "Your account is suspended" })).toBeInTheDocument();
+    expect(screen.getByText("Your account was suspended after five incorrect password attempts.")).toBeInTheDocument();
+    expect(screen.getByText("Please contact Zentel Insight customer service. Only an Admin can reactivate this account.")).toBeInTheDocument();
+    expect(screen.queryByText("Private Portal Data")).not.toBeInTheDocument();
+  });
 });

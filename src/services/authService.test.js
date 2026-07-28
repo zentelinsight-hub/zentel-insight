@@ -9,7 +9,13 @@ vi.mock("./supabaseClient", () => ({
 }));
 
 vi.mock("./edgeFunctionClient", () => ({
-  EdgeFunctionError: class EdgeFunctionError extends Error {},
+  EdgeFunctionError: class EdgeFunctionError extends Error {
+    constructor(message, details = {}) {
+      super(message);
+      this.code = details.code || "";
+      this.unavailable = Boolean(details.unavailable);
+    }
+  },
   invokeEdgeFunction: vi.fn((...args) => mockState.invokeEdgeFunction(...args))
 }));
 
@@ -17,10 +23,18 @@ beforeEach(() => {
   vi.stubEnv("VITE_SITE_URL", "https://zentelinsight.com.ng");
   mockState.role = "student";
   mockState.accountStatus = "active";
-  mockState.invokeEdgeFunction = vi.fn(async () => ({ linked: 0 }));
+  mockState.invokeEdgeFunction = vi.fn(async (functionName) => functionName === "login-with-password"
+    ? { ok: true, accessToken: "access-token", refreshToken: "refresh-token" }
+    : { linked: 0 });
   mockState.supabase = {
     auth: {
-      signInWithPassword: vi.fn(),
+      setSession: vi.fn(async () => ({
+        data: {
+          session: { access_token: "access-token", refresh_token: "refresh-token" },
+          user: { id: "user-1", email: "student@example.com", email_confirmed_at: "2026-07-16T00:00:00Z" }
+        },
+        error: null
+      })),
       signUp: vi.fn(),
       resend: vi.fn(),
       signOut: vi.fn()
@@ -44,47 +58,32 @@ afterEach(() => {
 });
 
 describe("auth service", () => {
-  it("logs in through Supabase once with a normalized email", async () => {
-    mockState.supabase.auth.signInWithPassword.mockResolvedValue({
-      data: {
-        session: { access_token: "token" },
-        user: { id: "user-1", email: "student@example.com", email_confirmed_at: "2026-07-16T00:00:00Z" }
-      },
-      error: null
-    });
-
+  it("logs in through the guarded server endpoint and establishes the returned session", async () => {
     const result = await loginWithEmail({ email: " Student@Example.COM ", password: "password123" });
 
     expect(result.ok).toBe(true);
-    expect(mockState.supabase.auth.signInWithPassword).toHaveBeenCalledOnce();
-    expect(mockState.supabase.auth.signInWithPassword).toHaveBeenCalledWith({
-      email: "student@example.com",
-      password: "password123"
-    });
+    expect(mockState.invokeEdgeFunction).toHaveBeenCalledWith("login-with-password", expect.objectContaining({
+      body: { email: "student@example.com", password: "password123" },
+      requireSession: false
+    }));
+    expect(mockState.supabase.auth.setSession).toHaveBeenCalledWith({ access_token: "access-token", refresh_token: "refresh-token" });
     expect(mockState.invokeEdgeFunction).toHaveBeenCalledWith("claim-my-enrolments", expect.objectContaining({ body: {} }));
   });
 
   it("allows inactive students to authenticate without claiming portal enrolments", async () => {
     mockState.accountStatus = "inactive";
-    mockState.supabase.auth.signInWithPassword.mockResolvedValue({
-      data: {
-        session: { access_token: "token" },
-        user: { id: "user-1", email: "student@example.com", email_confirmed_at: "2026-07-16T00:00:00Z" }
-      },
-      error: null
-    });
-
     const result = await loginWithEmail({ email: "student@example.com", password: "password123" });
 
     expect(result.ok).toBe(true);
     expect(result.accountStatus).toBe("inactive");
-    expect(mockState.invokeEdgeFunction).not.toHaveBeenCalled();
+    expect(mockState.invokeEdgeFunction).toHaveBeenCalledTimes(1);
+    expect(mockState.invokeEdgeFunction).toHaveBeenCalledWith("login-with-password", expect.any(Object));
   });
 
   it("blocks unverified login before the portal and signs out locally", async () => {
-    mockState.supabase.auth.signInWithPassword.mockResolvedValue({
+    mockState.supabase.auth.setSession.mockResolvedValue({
       data: {
-        session: { access_token: "token" },
+        session: { access_token: "token", refresh_token: "refresh" },
         user: { id: "user-1", email: "student@example.com" }
       },
       error: null
@@ -96,7 +95,7 @@ describe("auth service", () => {
     expect(result.unverified).toBe(true);
     expect(result.message).toBe("Your email address has not been verified. Open your verification email or request a new one.");
     expect(mockState.supabase.auth.signOut).toHaveBeenCalledWith({ scope: "local" });
-    expect(mockState.invokeEdgeFunction).not.toHaveBeenCalled();
+    expect(mockState.invokeEdgeFunction).toHaveBeenCalledTimes(1);
   });
 
   it("signs up through Supabase once with profile metadata and a confirmation-link redirect", async () => {
@@ -151,25 +150,37 @@ describe("auth service", () => {
   });
 
   it("maps login network failures without exposing raw Failed to fetch", async () => {
-    mockState.supabase.auth.signInWithPassword.mockRejectedValue(new TypeError("Failed to fetch"));
+    mockState.invokeEdgeFunction.mockRejectedValue(new TypeError("Failed to fetch"));
 
     const result = await loginWithEmail({ email: "student@example.com", password: "password123" });
 
     expect(result.ok).toBe(false);
     expect(result.message).toBe("We could not connect to the authentication service. Check your internet connection and try again.");
-    expect(mockState.supabase.auth.signInWithPassword).toHaveBeenCalledOnce();
+    expect(mockState.supabase.auth.setSession).not.toHaveBeenCalled();
   });
 
   it("maps invalid login credentials to a readable message", async () => {
-    mockState.supabase.auth.signInWithPassword.mockResolvedValue({
-      data: null,
-      error: { message: "Invalid login credentials" }
-    });
+    mockState.invokeEdgeFunction.mockRejectedValue(new Error("The email or password is incorrect."));
 
     const result = await loginWithEmail({ email: "student@example.com", password: "wrong-password" });
 
     expect(result.ok).toBe(false);
     expect(result.message).toBe("The email or password is incorrect.");
+  });
+
+  it("returns the server suspension message without creating a browser session", async () => {
+    const { EdgeFunctionError } = await import("./edgeFunctionClient");
+    mockState.invokeEdgeFunction.mockRejectedValue(new EdgeFunctionError(
+      "Your account has been suspended after five incorrect password attempts. Please contact Zentel Insight customer service. Only an Admin can reactivate this account.",
+      { code: "account_suspended" }
+    ));
+
+    const result = await loginWithEmail({ email: "student@example.com", password: "wrong-password" });
+
+    expect(result.ok).toBe(false);
+    expect(result.suspended).toBe(true);
+    expect(result.message).toContain("Only an Admin can reactivate this account");
+    expect(mockState.supabase.auth.setSession).not.toHaveBeenCalled();
   });
 
   it("maps signup network failures without exposing raw Failed to fetch", async () => {

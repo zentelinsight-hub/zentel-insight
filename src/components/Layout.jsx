@@ -12,20 +12,25 @@ function getActiveBrand(location) {
   return isStudyHubPayment ? "studyhub" : "main";
 }
 
+function isProtectedPortalPath(pathname) {
+  return /^\/(portal|tutor|admin)(\/|$)/.test(pathname);
+}
+
 export default function Layout() {
   const location = useLocation();
   const activeBrand = getActiveBrand(location);
+  const protectedPortal = isProtectedPortalPath(location.pathname);
 
   return (
     <div className="site-shell">
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
-      <Navbar brand={activeBrand} />
+      {!protectedPortal ? <Navbar brand={activeBrand} /> : null}
       <main id="main-content" tabIndex="-1" className="site-main" key={location.pathname}>
         <Outlet />
       </main>
-      <Footer brand={activeBrand} />
+      {!protectedPortal ? <Footer brand={activeBrand} /> : null}
     </div>
   );
 }

@@ -226,48 +226,71 @@ export async function updateAdminProfile(userId, values) {
 export async function searchAdminStudents({ query = "", status = "all", assignment = "all", programId = "", page = 1, pageSize = 25 } = {}) {
   const safePage = Math.max(1, Number(page) || 1);
   const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 25));
-  const data = await listAdminPeople({
-    role: "student",
-    query,
-    status,
-    assignment,
-    programId,
-    page: safePage,
-    pageSize: safePageSize
-  });
-  const rows = normalizeList(data.records);
-  const total = Number(data.total || 0);
-  return {
-    records: rows,
-    total,
-    page: safePage,
-    pageSize: safePageSize,
-    pageCount: Number(data.pageCount || Math.max(1, Math.ceil(total / safePageSize)))
-  };
+  try {
+    const supabase = await getClient();
+    const { data, error } = await supabase.rpc("admin_search_people_v2", {
+      role_filter: "student",
+      search_text: String(query || "").trim(),
+      status_filter: ["active", "inactive", "suspended"].includes(status) ? status : "all",
+      assignment_filter: ["assigned", "unassigned"].includes(assignment) ? assignment : "all",
+      program_filter: programId || null,
+      page_limit: safePageSize,
+      page_offset: (safePage - 1) * safePageSize
+    });
+    if (error) throw error;
+    const rows = normalizeList(data).map((item) => ({ ...item, role: item.role_name || "student" }));
+    const total = Number(rows[0]?.total_count || 0);
+    return { records: rows, total, page: safePage, pageSize: safePageSize, pageCount: Math.max(1, Math.ceil(total / safePageSize)) };
+  } catch (rpcError) {
+    if (import.meta.env.DEV) console.info("Admin Student search RPC failed; using secure function fallback", rpcError);
+    const data = await listAdminPeople({ role: "student", query, status, assignment, programId, page: safePage, pageSize: safePageSize });
+    const rows = normalizeList(data.records);
+    const total = Number(data.total || 0);
+    return { records: rows, total, page: safePage, pageSize: safePageSize, pageCount: Number(data.pageCount || Math.max(1, Math.ceil(total / safePageSize))) };
+  }
 }
 
 export async function searchAdminTutors({ query = "", filter = "all", page = 1, pageSize = 25 } = {}) {
   const safePage = Math.max(1, Number(page) || 1);
   const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 25));
-  const status = ["active", "inactive"].includes(filter) ? filter : "all";
+  const status = ["active", "inactive", "suspended"].includes(filter) ? filter : "all";
   const assignment = ["assigned", "unassigned"].includes(filter) ? filter : "all";
-  const data = await listAdminPeople({
-    role: "tutor",
-    query,
-    status,
-    assignment,
-    page: safePage,
-    pageSize: safePageSize
+  try {
+    const supabase = await getClient();
+    const { data, error } = await supabase.rpc("admin_search_people_v2", {
+      role_filter: "tutor",
+      search_text: String(query || "").trim(),
+      status_filter: status,
+      assignment_filter: assignment,
+      program_filter: null,
+      page_limit: safePageSize,
+      page_offset: (safePage - 1) * safePageSize
+    });
+    if (error) throw error;
+    const rows = normalizeList(data).map((item) => ({ ...item, role: item.role_name || "tutor" }));
+    const total = Number(rows[0]?.total_count || 0);
+    return { records: rows, total, page: safePage, pageSize: safePageSize, pageCount: Math.max(1, Math.ceil(total / safePageSize)) };
+  } catch (rpcError) {
+    if (import.meta.env.DEV) console.info("Admin Tutor search RPC failed; using secure function fallback", rpcError);
+    const data = await listAdminPeople({ role: "tutor", query, status, assignment, page: safePage, pageSize: safePageSize });
+    const rows = normalizeList(data.records);
+    const total = Number(data.total || 0);
+    return { records: rows, total, page: safePage, pageSize: safePageSize, pageCount: Number(data.pageCount || Math.max(1, Math.ceil(total / safePageSize))) };
+  }
+}
+
+async function updateAccountCredentials(values) {
+  const data = await invokeEdgeFunction("admin-update-account-credentials", {
+    body: {
+      userId: values.user_id || values.id,
+      email: String(values.email || "").trim().toLowerCase(),
+      newPassword: values.new_password || ""
+    },
+    unavailableMessage: "Account credentials are temporarily unavailable. Please try again.",
+    failureMessage: "Account credentials could not be updated. Please review the details and try again."
   });
-  const rows = normalizeList(data.records);
-  const total = Number(data.total || 0);
-  return {
-    records: rows,
-    total,
-    page: safePage,
-    pageSize: safePageSize,
-    pageCount: Number(data.pageCount || Math.max(1, Math.ceil(total / safePageSize)))
-  };
+  if (!data?.ok) throw new Error(data?.error || "Account credentials could not be updated.");
+  return data;
 }
 
 export async function updateStudentProfile(values) {
@@ -285,6 +308,7 @@ export async function updateStudentProfile(values) {
     next_status_reason: values.status_reason || null
   });
   if (error) throw error;
+  await updateAccountCredentials(values);
   return data;
 }
 
@@ -306,6 +330,7 @@ export async function updateTutorProfile(values) {
     next_track_id: values.track_id || null
   });
   if (error) throw error;
+  await updateAccountCredentials(values);
   return data;
 }
 

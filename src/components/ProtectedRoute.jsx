@@ -9,19 +9,26 @@ function isEmailVerified(user) {
   return Boolean(user?.email_confirmed_at || user?.confirmed_at);
 }
 
-function AccountRestrictedScreen({ email, phone, onSignOut }) {
+function AccountRestrictedScreen({ accountStatus, email, phone, onSignOut }) {
+  const suspended = accountStatus === ACCOUNT_STATUSES.SUSPENDED;
   return (
     <section className="restricted-account-screen">
       <div className="restricted-account-card">
         <ShieldAlert size={34} aria-hidden="true" />
         <div>
-          <p className="eyebrow">Account Access Restricted</p>
-          <h1>Account Access Restricted</h1>
-          <p>
-            Your Zentel Insight account is currently inactive. Access to classes and learning information has been
-            temporarily restricted.
-          </p>
-          <p>Please contact the Zentel Insight support team so your account can be reviewed and activated.</p>
+          <p className="eyebrow">{suspended ? "Account Suspended" : "Account Access Restricted"}</p>
+          <h1>{suspended ? "Your account is suspended" : "Account Access Restricted"}</h1>
+          {suspended ? (
+            <>
+              <p>Your account was suspended after five incorrect password attempts.</p>
+              <p>Please contact Zentel Insight customer service. Only an Admin can reactivate this account.</p>
+            </>
+          ) : (
+            <>
+              <p>Your Zentel Insight account is currently inactive. Access to classes and learning information has been temporarily restricted.</p>
+              <p>Please contact the Zentel Insight support team so your account can be reviewed and activated.</p>
+            </>
+          )}
         </div>
         <dl className="restricted-contact-list">
           <div>
@@ -104,6 +111,7 @@ export default function ProtectedRoute({
     if (accountStatus !== ACCOUNT_STATUSES.ACTIVE) {
       return (
         <AccountRestrictedScreen
+          accountStatus={accountStatus}
           email={siteConfig.contact.email}
           phone={siteConfig.contact.phone}
           onSignOut={async () => {

@@ -176,10 +176,11 @@ function StatusMessage({ status }) {
 
 function AccountStatusBadge({ status }) {
   const active = status === "active";
+  const suspended = status === "suspended";
   return (
-    <span className={active ? "portal-tag success" : "portal-tag warning"}>
+    <span className={active ? "portal-tag success" : suspended ? "portal-tag danger" : "portal-tag warning"}>
       {active ? <CheckCircle2 size={14} aria-hidden="true" /> : null}
-      {active ? "Active" : "Inactive"}
+      {active ? "Active" : suspended ? "Suspended" : "Inactive"}
     </span>
   );
 }
@@ -191,7 +192,7 @@ function getStatusChangedBy(profile, profiles = []) {
 }
 
 function AccountStatusControls({ profile, profiles, onSaved }) {
-  const currentStatus = profile?.account_status === "active" ? "active" : "inactive";
+  const currentStatus = ["active", "suspended"].includes(profile?.account_status) ? profile.account_status : "inactive";
   const nextStatus = currentStatus === "active" ? "inactive" : "active";
   const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState("");
@@ -480,6 +481,8 @@ function buildStudentEditForm(student = {}) {
   return {
     id: student.id || "",
     full_name: student.full_name || "",
+    email: student.email || "",
+    new_password: "",
     phone: student.phone || "",
     date_of_birth: student.date_of_birth || "",
     education_level: student.education_level || "",
@@ -517,9 +520,11 @@ function StudentEditPanel({ student, programs, onClose, onSaved }) {
     try {
       await updateStudentProfile({
         ...form,
+        account_status: form.account_status === (student.account_status || "inactive") ? "" : form.account_status,
         program_id: programChanged ? form.program_id : "",
         program_level_id: programChanged ? form.program_level_id : ""
       });
+      setForm((current) => ({ ...current, new_password: "" }));
       setStatus({ type: "success", message: "Student record saved." });
       onSaved();
     } catch (error) {
@@ -540,6 +545,8 @@ function StudentEditPanel({ student, programs, onClose, onSaved }) {
       </div>
       <div className="form-grid">
         <label><span>Full name</span><input value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} /></label>
+        <label><span>Email address</span><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label>
+        <label><span>New password</span><input type="password" autoComplete="new-password" value={form.new_password} onChange={(event) => setForm({ ...form, new_password: event.target.value })} /></label>
         <label><span>Phone</span><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
         <label><span>Date of birth</span><input type="date" value={form.date_of_birth || ""} onChange={(event) => setForm({ ...form, date_of_birth: event.target.value })} /></label>
         <label><span>Education level</span><input value={form.education_level} onChange={(event) => setForm({ ...form, education_level: event.target.value })} /></label>
@@ -562,6 +569,7 @@ function StudentEditPanel({ student, programs, onClose, onSaved }) {
           <select value={form.account_status} onChange={(event) => setForm({ ...form, account_status: event.target.value })}>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
+            {form.account_status === "suspended" ? <option value="suspended" disabled>Suspended</option> : null}
           </select>
         </label>
       </div>
@@ -578,6 +586,8 @@ function buildTutorEditForm(tutor = {}) {
     user_id: tutor.user_id || "",
     title: tutor.title || "Mr",
     full_name: tutor.full_name || "",
+    email: tutor.email || "",
+    new_password: "",
     phone: tutor.phone || "",
     specialisation: tutor.specialisation || "",
     professional_bio: tutor.professional_bio || "",
@@ -617,9 +627,11 @@ function TutorEditPanel({ tutor, programs, onClose, onSaved }) {
     try {
       await updateTutorProfile({
         ...form,
+        account_status: form.account_status === (tutor.account_status || "inactive") ? "" : form.account_status,
         program_id: assignmentChanged ? form.program_id : "",
         track_id: assignmentChanged ? form.track_id : ""
       });
+      setForm((current) => ({ ...current, new_password: "" }));
       setStatus({ type: "success", message: "Tutor record saved." });
       onSaved();
     } catch (error) {
@@ -647,6 +659,8 @@ function TutorEditPanel({ tutor, programs, onClose, onSaved }) {
           </select>
         </label>
         <label><span>Full name</span><input value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} /></label>
+        <label><span>Email address</span><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label>
+        <label><span>New password</span><input type="password" autoComplete="new-password" value={form.new_password} onChange={(event) => setForm({ ...form, new_password: event.target.value })} /></label>
         <label><span>Phone</span><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
         <label><span>Specialisation</span><input value={form.specialisation} onChange={(event) => setForm({ ...form, specialisation: event.target.value })} /></label>
         <label>
@@ -668,6 +682,7 @@ function TutorEditPanel({ tutor, programs, onClose, onSaved }) {
           <select value={form.account_status} onChange={(event) => setForm({ ...form, account_status: event.target.value })}>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
+            {form.account_status === "suspended" ? <option value="suspended" disabled>Suspended</option> : null}
           </select>
         </label>
       </div>
@@ -808,7 +823,7 @@ function PeopleSection({ data, onSaved, activeSection = "people" }) {
               </select>
             </label>
             <div className="segmented-control compact" role="group" aria-label="Student account status filter">
-              {["all", "active", "inactive"].map((status) => (
+              {["all", "active", "inactive", "suspended"].map((status) => (
                 <button key={status} type="button" className={studentStatusFilter === status ? "active" : ""} onClick={() => setStudentStatusFilter(status)}>
                   {status === "all" ? "All" : status[0].toUpperCase() + status.slice(1)}
                 </button>
@@ -838,7 +853,10 @@ function PeopleSection({ data, onSaved, activeSection = "people" }) {
                     <td data-label="Email">{student.email}</td>
                     <td data-label="Phone">{student.phone}</td>
                     <td data-label="Programme">{student.program_title ? `${student.program_title}${student.level_name ? ` / ${student.level_name}` : ""}` : "Not assigned"}</td>
-                    <td data-label="Status"><AccountStatusBadge status={student.account_status} /></td>
+                    <td data-label="Status">
+                      <AccountStatusBadge status={student.account_status} />
+                      {student.account_status === "suspended" ? <small>{Number(student.failed_login_attempts || 5)} failed attempts</small> : null}
+                    </td>
                     <td data-label="Profile">{Number(student.profile_completion || 0)}%</td>
                     <td data-label="Created">{formatDateTime(student.created_at)}</td>
                     <td data-label="Status audit">
@@ -888,6 +906,7 @@ function PeopleSection({ data, onSaved, activeSection = "people" }) {
                 ["all", "All"],
                 ["active", "Active"],
                 ["inactive", "Inactive"],
+                ["suspended", "Suspended"],
                 ["assigned", "Assigned"],
                 ["unassigned", "Unassigned"]
               ].map(([value, label]) => (
@@ -914,7 +933,10 @@ function PeopleSection({ data, onSaved, activeSection = "people" }) {
                     <td data-label="Phone">{tutor.phone || "Not recorded"}</td>
                     <td data-label="Specialisation">{tutor.specialisation || "Not recorded"}</td>
                     <td data-label="Programme">{tutor.program_title ? `${tutor.program_title}${tutor.track_name ? ` / ${tutor.track_name}` : ""}` : "Unassigned"}</td>
-                    <td data-label="Status"><AccountStatusBadge status={tutor.account_status} /></td>
+                    <td data-label="Status">
+                      <AccountStatusBadge status={tutor.account_status} />
+                      {tutor.account_status === "suspended" ? <small>{Number(tutor.failed_login_attempts || 5)} failed attempts</small> : null}
+                    </td>
                     <td data-label="Profile">{Number(tutor.profile_completion || 0)}%</td>
                     <td data-label="Created">{formatDateTime(tutor.created_at)}</td>
                     <td data-label="Action">

@@ -27,6 +27,12 @@ verify_jwt = true
 [functions.admin-list-people]
 verify_jwt = true
 
+[functions.login-with-password]
+verify_jwt = false
+
+[functions.admin-update-account-credentials]
+verify_jwt = true
+
 [functions.end-live-class]
 verify_jwt = true
 

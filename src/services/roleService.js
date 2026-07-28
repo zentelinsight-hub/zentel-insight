@@ -9,7 +9,8 @@ export const USER_ROLES = {
 
 export const ACCOUNT_STATUSES = {
   ACTIVE: "active",
-  INACTIVE: "inactive"
+  INACTIVE: "inactive",
+  SUSPENDED: "suspended"
 };
 
 export function normalizeRole(role) {
@@ -17,7 +18,9 @@ export function normalizeRole(role) {
 }
 
 export function normalizeAccountStatus(status) {
-  return status === ACCOUNT_STATUSES.ACTIVE ? ACCOUNT_STATUSES.ACTIVE : ACCOUNT_STATUSES.INACTIVE;
+  if (status === ACCOUNT_STATUSES.ACTIVE) return ACCOUNT_STATUSES.ACTIVE;
+  if (status === ACCOUNT_STATUSES.SUSPENDED) return ACCOUNT_STATUSES.SUSPENDED;
+  return ACCOUNT_STATUSES.INACTIVE;
 }
 
 export function getHomePathForRole(role, adminVerified = false) {

@@ -12,7 +12,7 @@ function normalizeRole(value: unknown) {
 
 function normalizeStatus(value: unknown) {
   const status = clean(value).toLowerCase();
-  return ["all", "active", "inactive"].includes(status) ? status : "all";
+  return ["all", "active", "inactive", "suspended"].includes(status) ? status : "all";
 }
 
 function normalizeAssignment(value: unknown) {
@@ -82,7 +82,7 @@ Deno.serve(async (request) => {
       levelsResult,
       authUsers
     ] = await Promise.all([
-      admin.supabase.from("profiles").select("id, full_name, email, phone, title, avatar_path, account_status, status_changed_at, status_changed_by, status_reason, profile_completion, created_at, updated_at"),
+      admin.supabase.from("profiles").select("id, full_name, email, phone, title, avatar_path, account_status, status_changed_at, status_changed_by, status_reason, profile_completion, failed_login_attempts, created_at, updated_at"),
       admin.supabase.from("user_roles").select("user_id, role"),
       admin.supabase.from("tutor_profiles").select("user_id, title, specialisation, professional_bio, qualifications, teaching_experience, availability"),
       admin.supabase.from("tutor_program_assignments").select("id, tutor_id, program_id, track_id, active, created_at, updated_at").eq("active", true),
@@ -145,6 +145,7 @@ Deno.serve(async (request) => {
         status_changed_by: profile.status_changed_by || null,
         status_reason: profile.status_reason || "",
         profile_completion: Number(profile.profile_completion || 0),
+        failed_login_attempts: Number(profile.failed_login_attempts || 0),
         created_at: authUser.created_at || profile.created_at,
         last_sign_in_at: authUser.last_sign_in_at || null,
         program_id: primaryAssignment?.program_id || null,

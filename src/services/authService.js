@@ -73,20 +73,43 @@ export async function loginWithEmail({ email, password }, options = {}) {
     };
   }
 
+  let guardedLogin;
+  try {
+    guardedLogin = await invokeEdgeFunction("login-with-password", {
+      body: { email: normalizeEmail(email), password },
+      requireSession: false,
+      timeoutMs: authTimeoutMs,
+      unavailableMessage: "We could not connect to the authentication service. Check your internet connection and try again.",
+      failureMessage: "Login failed. Please try again.",
+      timeoutMessage: "Login timed out. Check your connection and try again."
+    });
+  } catch (requestError) {
+    if (requestError instanceof EdgeFunctionError && requestError.code === "account_suspended") {
+      return { ok: false, suspended: true, message: requestError.message };
+    }
+    if (requestError instanceof EdgeFunctionError && requestError.code === "email_unverified") {
+      return { ok: false, unverified: true, message: requestError.message };
+    }
+    return { ok: false, message: getSafeAuthError(requestError, "Login failed.") };
+  }
+  if (!guardedLogin?.ok || !guardedLogin.accessToken || !guardedLogin.refreshToken) {
+    return { ok: false, message: guardedLogin?.error || "Login did not return a valid session. Please try again." };
+  }
+
   let data;
   let error;
   try {
     ({ data, error } = await withTimeout(
-      supabase.auth.signInWithPassword({ email: normalizeEmail(email), password }),
-      "Login timed out. Check your connection and try again."
+      supabase.auth.setSession({
+        access_token: guardedLogin.accessToken,
+        refresh_token: guardedLogin.refreshToken
+      }),
+      "Login session setup timed out. Please try again."
     ));
-  } catch (requestError) {
-    return { ok: false, message: getSafeAuthError(requestError, "Login failed.") };
+  } catch (sessionError) {
+    return { ok: false, message: getSafeAuthError(sessionError, "Login session could not be established.") };
   }
-  if (error) {
-    return { ok: false, message: getSafeAuthError(error, "Login failed.") };
-  }
-
+  if (error) return { ok: false, message: getSafeAuthError(error, "Login failed.") };
   if (!data?.session || !data?.user) {
     return { ok: false, message: "Login did not return a valid session. Please try again." };
   }

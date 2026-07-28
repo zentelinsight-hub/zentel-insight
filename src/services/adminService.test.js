@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getAdminDashboardData } from "./adminService";
+import { getAdminDashboardData, searchAdminStudents, searchAdminTutors } from "./adminService";
 
 const serviceMocks = vi.hoisted(() => ({
-  getSupabaseClient: vi.fn()
+  getSupabaseClient: vi.fn(),
+  invokeEdgeFunction: vi.fn()
 }));
 
 vi.mock("./supabaseClient", () => ({
@@ -10,7 +11,7 @@ vi.mock("./supabaseClient", () => ({
 }));
 
 vi.mock("./edgeFunctionClient", () => ({
-  invokeEdgeFunction: vi.fn()
+  invokeEdgeFunction: serviceMocks.invokeEdgeFunction
 }));
 
 vi.mock("./portal/portalRepository", () => ({
@@ -19,7 +20,7 @@ vi.mock("./portal/portalRepository", () => ({
   PROFILE_AVATAR_MAX_BYTES: 3 * 1024 * 1024
 }));
 
-function createSupabaseMock(rowsByTable = {}) {
+function createSupabaseMock(rowsByTable = {}, rpcResponse = { data: [], error: null }) {
   const queries = [];
   const from = vi.fn((table) => {
     const state = { table, select: "" };
@@ -43,11 +44,13 @@ function createSupabaseMock(rowsByTable = {}) {
     return builder;
   });
 
-  return { client: { from }, from, queries };
+  const rpc = vi.fn(async () => rpcResponse);
+  return { client: { from, rpc }, from, rpc, queries };
 }
 
 beforeEach(() => {
   serviceMocks.getSupabaseClient.mockReset();
+  serviceMocks.invokeEdgeFunction.mockReset();
 });
 
 describe("Admin dashboard data loading", () => {
@@ -113,5 +116,40 @@ describe("Admin dashboard data loading", () => {
     expect(data.certificates[0].profiles.full_name).toBe("Learner");
     expect(data.certificates[0].programs.title).toBe("Data Analysis");
     expect(data.certificates[0].program_levels.level_name).toBe("Professional");
+  });
+
+  it("loads Student records from the verified Admin database search", async () => {
+    const supabase = createSupabaseMock({}, {
+      data: [{ id: "student-1", role_name: "student", full_name: "Student One", total_count: 1 }],
+      error: null
+    });
+    serviceMocks.getSupabaseClient.mockResolvedValue(supabase.client);
+
+    const result = await searchAdminStudents({ status: "suspended", assignment: "assigned" });
+
+    expect(result.records[0]).toMatchObject({ id: "student-1", role: "student" });
+    expect(supabase.rpc).toHaveBeenCalledWith("admin_search_people_v2", expect.objectContaining({
+      role_filter: "student",
+      status_filter: "suspended",
+      assignment_filter: "assigned"
+    }));
+    expect(serviceMocks.invokeEdgeFunction).not.toHaveBeenCalled();
+  });
+
+  it("loads Tutor records from the verified Admin database search", async () => {
+    const supabase = createSupabaseMock({}, {
+      data: [{ id: "tutor-1", user_id: "tutor-1", role_name: "tutor", full_name: "Tutor One", total_count: 1 }],
+      error: null
+    });
+    serviceMocks.getSupabaseClient.mockResolvedValue(supabase.client);
+
+    const result = await searchAdminTutors({ filter: "suspended" });
+
+    expect(result.records[0]).toMatchObject({ user_id: "tutor-1", role: "tutor" });
+    expect(supabase.rpc).toHaveBeenCalledWith("admin_search_people_v2", expect.objectContaining({
+      role_filter: "tutor",
+      status_filter: "suspended"
+    }));
+    expect(serviceMocks.invokeEdgeFunction).not.toHaveBeenCalled();
   });
 });
