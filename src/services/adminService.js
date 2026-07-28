@@ -49,9 +49,9 @@ async function requiredSelect(label, query, fallback = []) {
 
 const adminSectionData = {
   overview: ["profiles", "roles", "tutors", "tutorAssignments", "programs", "liveClasses", "supportTickets", "payments"],
-  people: ["profiles", "roles", "tutors", "tutorAssignments", "programs"],
-  students: ["profiles", "programs"],
-  tutors: ["profiles", "tutors", "tutorAssignments", "programs"],
+  people: ["profiles", "roles", "tutors", "tutorAssignments", "programs", "enrolments"],
+  students: ["profiles", "roles", "programs", "enrolments"],
+  tutors: ["profiles", "roles", "tutors", "tutorAssignments", "programs"],
   programmes: ["programs"],
   enrolments: ["profiles", "programs", "enrolments"],
   classrooms: [],
@@ -70,9 +70,20 @@ const adminSectionData = {
   settings: []
 };
 
-function sectionSelect(requiredData, key, label, queryFactory, fallback = []) {
+async function optionalSelect(label, query, fallback = []) {
+  const { data, error } = await query;
+  if (error) {
+    if (import.meta.env.DEV) console.info(`Admin optional ${label} query failed`, error);
+    return fallback;
+  }
+  return data ?? fallback;
+}
+
+function sectionSelect(requiredData, key, label, queryFactory, fallback = [], tolerateFailure = false) {
   if (!requiredData.has(key)) return Promise.resolve(fallback);
-  return requiredSelect(label, queryFactory(), fallback);
+  return tolerateFailure
+    ? optionalSelect(label, queryFactory(), fallback)
+    : requiredSelect(label, queryFactory(), fallback);
 }
 
 async function listAdminPeople({ role = "all", query = "", status = "all", assignment = "all", programId = "", page = 1, pageSize = 25 } = {}) {
@@ -88,6 +99,7 @@ async function listAdminPeople({ role = "all", query = "", status = "all", assig
 export async function getAdminDashboardData(section = "overview") {
   const supabase = await getClient();
   const requiredData = new Set(adminSectionData[section] || adminSectionData.overview);
+  const isPeopleDirectory = ["people", "students", "tutors"].includes(section);
   const [
     profiles,
     roles,
@@ -107,12 +119,12 @@ export async function getAdminDashboardData(section = "overview") {
     certificates,
     auditLogs
   ] = await Promise.all([
-    sectionSelect(requiredData, "profiles", "profiles", () => supabase.from("profiles").select("*").order("created_at", { ascending: false }).limit(500)),
-    sectionSelect(requiredData, "roles", "roles", () => supabase.from("user_roles").select("*").order("created_at", { ascending: false }).limit(500)),
-    sectionSelect(requiredData, "tutors", "tutor profiles", () => supabase.from("tutor_profiles").select("*").order("created_at", { ascending: false }).limit(300)),
-    sectionSelect(requiredData, "tutorAssignments", "tutor assignments", () => supabase.from("tutor_program_assignments").select("*, programs(id, slug, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(500)),
-    sectionSelect(requiredData, "programs", "programs", () => supabase.from("programs").select("*, program_levels(*)").order("display_order", { ascending: true }).order("title", { ascending: true })),
-    sectionSelect(requiredData, "enrolments", "enrolments", () => supabase.from("enrolments").select("*, programs(id, slug, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(500)),
+    sectionSelect(requiredData, "profiles", "profiles", () => supabase.from("profiles").select("*").order("created_at", { ascending: false }).limit(500), [], isPeopleDirectory),
+    sectionSelect(requiredData, "roles", "roles", () => supabase.from("user_roles").select("*").order("created_at", { ascending: false }).limit(500), [], isPeopleDirectory),
+    sectionSelect(requiredData, "tutors", "tutor profiles", () => supabase.from("tutor_profiles").select("*").order("created_at", { ascending: false }).limit(300), [], isPeopleDirectory),
+    sectionSelect(requiredData, "tutorAssignments", "tutor assignments", () => supabase.from("tutor_program_assignments").select("*, programs(id, slug, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(500), [], isPeopleDirectory),
+    sectionSelect(requiredData, "programs", "programs", () => supabase.from("programs").select("*, program_levels(*)").order("display_order", { ascending: true }).order("title", { ascending: true }), [], isPeopleDirectory),
+    sectionSelect(requiredData, "enrolments", "enrolments", () => supabase.from("enrolments").select("*, programs(id, slug, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(500), [], isPeopleDirectory),
     sectionSelect(requiredData, "announcements", "announcements", () => supabase.from("announcements").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(100)),
     sectionSelect(requiredData, "timetable", "timetable", () => supabase.from("timetable_entries").select("*, programs(id, title), program_level:program_levels!timetable_entries_program_level_id_fkey(id, level_name), track_level:program_levels!timetable_entries_track_id_fkey(id, level_name)").order("day_of_week", { ascending: true }).order("start_time", { ascending: true }).limit(150)),
     sectionSelect(requiredData, "assignments", "assignments", () => supabase.from("assignments").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(150)),
@@ -127,10 +139,36 @@ export async function getAdminDashboardData(section = "overview") {
   ]);
   const roleByUserId = new Map(normalizeList(roles).map((item) => [item.user_id, item.role]));
   const profileByUserId = new Map(normalizeList(profiles).map((item) => [item.id, item]));
-  const canonicalStudents = normalizeList(profiles).filter((item) => roleByUserId.get(item.id) === "student");
   const canonicalTutors = normalizeList(tutors).map((item) => ({ ...item, profiles: profileByUserId.get(item.user_id) || null }));
   const hydratedTutorAssignments = normalizeList(tutorAssignments).map((item) => ({ ...item, profiles: profileByUserId.get(item.tutor_id) || null }));
   const hydratedEnrolments = normalizeList(enrolments).map((item) => ({ ...item, profiles: profileByUserId.get(item.user_id) || null }));
+  const activeEnrolmentsByStudent = new Map();
+  hydratedEnrolments
+    .filter((item) => item.status === "active")
+    .forEach((item) => {
+      const current = activeEnrolmentsByStudent.get(item.user_id) || [];
+      current.push(item);
+      activeEnrolmentsByStudent.set(item.user_id, current);
+    });
+  const canonicalStudents = normalizeList(profiles)
+    .filter((item) => (roleByUserId.get(item.id) || "student") === "student")
+    .map((item) => {
+      const studentEnrolments = activeEnrolmentsByStudent.get(item.id) || [];
+      const enrolment = studentEnrolments[0] || null;
+      return {
+        ...item,
+        program_id: enrolment?.program_id || null,
+        program_level_id: enrolment?.program_level_id || null,
+        track_id: enrolment?.program_level_id || null,
+        assignment_id: enrolment?.id || null,
+        program_title: enrolment?.programs?.title || "",
+        level_name: enrolment?.program_levels?.level_name || "",
+        track_name: enrolment?.program_levels?.level_name || "",
+        assignment_count: studentEnrolments.length,
+        assignment_status: studentEnrolments.length ? "assigned" : "unassigned",
+        role: "student"
+      };
+    });
   const hydratedLiveClasses = normalizeList(liveClasses).map((item) => ({ ...item, profiles: profileByUserId.get(item.tutor_id) || null }));
   const hydratedSupportTickets = normalizeList(supportTickets).map((item) => ({ ...item, profiles: profileByUserId.get(item.user_id) || null }));
   const hydratedTimetable = normalizeList(timetable).map((item) => ({

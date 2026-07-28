@@ -732,12 +732,56 @@ function PeopleSection({ data, onSaved, activeSection = "people" }) {
     [tutorSearch, tutorFilter, tutorPage],
     { enabled: activeSection !== "students" }
   );
-  const studentRecords = studentsQuery.data?.records || [];
-  const studentTotal = studentsQuery.data?.total || 0;
-  const studentPageCount = studentsQuery.data?.pageCount || 1;
-  const tutorRecords = tutorsQuery.data?.records || [];
-  const tutorTotal = tutorsQuery.data?.total || 0;
-  const tutorPageCount = tutorsQuery.data?.pageCount || 1;
+  const localStudents = useMemo(() => {
+    const search = studentSearch.trim().toLowerCase();
+    return (data.students || []).filter((student) => {
+      const assignmentCount = Number(student.assignment_count || 0);
+      const haystack = [student.full_name, student.email, student.phone, student.account_status, student.program_title, student.level_name]
+        .map((value) => String(value || "").toLowerCase())
+        .join(" ");
+      return (!search || haystack.includes(search))
+        && (studentStatusFilter === "all" || student.account_status === studentStatusFilter)
+        && (!studentProgramFilter || student.program_id === studentProgramFilter)
+        && (studentAssignmentFilter === "all"
+          || (studentAssignmentFilter === "assigned" ? assignmentCount > 0 : assignmentCount === 0));
+    });
+  }, [data.students, studentAssignmentFilter, studentProgramFilter, studentSearch, studentStatusFilter]);
+  const localTutors = useMemo(() => {
+    const search = tutorSearch.trim().toLowerCase();
+    return (data.tutors || []).map((tutor) => {
+      const assignment = (data.tutorAssignments || []).find((item) => item.tutor_id === tutor.user_id && item.active !== false);
+      return {
+        ...(tutor.profiles || {}),
+        ...tutor,
+        id: tutor.user_id,
+        user_id: tutor.user_id,
+        program_id: assignment?.program_id || null,
+        track_id: assignment?.track_id || null,
+        program_title: assignment?.programs?.title || "",
+        track_name: assignment?.program_levels?.level_name || "",
+        assignment_count: (data.tutorAssignments || []).filter((item) => item.tutor_id === tutor.user_id && item.active !== false).length,
+        role: "tutor"
+      };
+    }).filter((tutor) => {
+      const assignmentCount = Number(tutor.assignment_count || 0);
+      const haystack = [tutor.full_name, tutor.email, tutor.phone, tutor.account_status, tutor.program_title, tutor.track_name, tutor.specialisation]
+        .map((value) => String(value || "").toLowerCase())
+        .join(" ");
+      return (!search || haystack.includes(search))
+        && (tutorFilter === "all"
+          || (tutorFilter === "assigned" ? assignmentCount > 0
+            : tutorFilter === "unassigned" ? assignmentCount === 0
+              : tutor.account_status === tutorFilter));
+    });
+  }, [data.tutorAssignments, data.tutors, tutorFilter, tutorSearch]);
+  const studentFallbackRecords = localStudents.slice((studentPage - 1) * 25, studentPage * 25);
+  const tutorFallbackRecords = localTutors.slice((tutorPage - 1) * 25, tutorPage * 25);
+  const studentRecords = studentsQuery.error ? studentFallbackRecords : studentsQuery.data?.records || [];
+  const studentTotal = studentsQuery.error ? localStudents.length : studentsQuery.data?.total || 0;
+  const studentPageCount = Math.max(1, studentsQuery.error ? Math.ceil(localStudents.length / 25) : studentsQuery.data?.pageCount || 1);
+  const tutorRecords = tutorsQuery.error ? tutorFallbackRecords : tutorsQuery.data?.records || [];
+  const tutorTotal = tutorsQuery.error ? localTutors.length : tutorsQuery.data?.total || 0;
+  const tutorPageCount = Math.max(1, tutorsQuery.error ? Math.ceil(localTutors.length / 25) : tutorsQuery.data?.pageCount || 1);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -839,7 +883,7 @@ function PeopleSection({ data, onSaved, activeSection = "people" }) {
           </div>
           {studentsQuery.error ? (
             <div className="form-status warning" role="alert">
-              Student records could not be loaded.
+              Live Student search is unavailable. Showing the securely loaded directory records.
               <button className="text-link" type="button" onClick={studentsQuery.refetch}>Try again</button>
             </div>
           ) : null}
@@ -875,7 +919,7 @@ function PeopleSection({ data, onSaved, activeSection = "people" }) {
                   </tr>
                 ))}
                 {studentsQuery.loading ? <tr><td colSpan="9">Loading students...</td></tr> : null}
-                {!studentsQuery.loading && !studentsQuery.error && !studentRecords.length ? <tr><td colSpan="9">No students match this search.</td></tr> : null}
+                {!studentsQuery.loading && !studentRecords.length ? <tr><td colSpan="9">No students match this search.</td></tr> : null}
               </tbody>
             </table>
           </div>
@@ -918,7 +962,7 @@ function PeopleSection({ data, onSaved, activeSection = "people" }) {
           </div>
           {tutorsQuery.error ? (
             <div className="form-status warning" role="alert">
-              Tutor records could not be loaded.
+              Live Tutor search is unavailable. Showing the securely loaded directory records.
               <button className="text-link" type="button" onClick={tutorsQuery.refetch}>Try again</button>
             </div>
           ) : null}
@@ -948,7 +992,7 @@ function PeopleSection({ data, onSaved, activeSection = "people" }) {
                   </tr>
                 ))}
                 {tutorsQuery.loading ? <tr><td colSpan="9">Loading tutors...</td></tr> : null}
-                {!tutorsQuery.loading && !tutorsQuery.error && !tutorRecords.length ? <tr><td colSpan="9">No Tutors match this search.</td></tr> : null}
+                {!tutorsQuery.loading && !tutorRecords.length ? <tr><td colSpan="9">No Tutors match this search.</td></tr> : null}
               </tbody>
             </table>
           </div>

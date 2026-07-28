@@ -65,7 +65,8 @@ describe("Admin dashboard data loading", () => {
       "user_roles",
       "tutor_profiles",
       "tutor_program_assignments",
-      "programs"
+      "programs",
+      "enrolments"
     ]);
     expect(data.students).toEqual([]);
     expect(data.tutors).toEqual([]);
@@ -90,6 +91,37 @@ describe("Admin dashboard data loading", () => {
     expect(timetableQuery.select).toContain("timetable_entries_program_level_id_fkey");
     expect(timetableQuery.select).toContain("timetable_entries_track_id_fkey");
     expect(data.timetable[0].program_levels.level_name).toBe("Advanced");
+  });
+
+  it("keeps the Student directory available when an optional people dependency fails", async () => {
+    const supabase = createSupabaseMock({
+      profiles: { data: [{ id: "student-1", full_name: "Student One", account_status: "active" }], error: null },
+      user_roles: { data: [{ user_id: "student-1", role: "student" }], error: null },
+      programs: { data: [], error: new Error("temporary programmes failure") },
+      enrolments: {
+        data: [{
+          id: "enrolment-1",
+          user_id: "student-1",
+          program_id: "program-1",
+          program_level_id: "level-1",
+          status: "active",
+          programs: { title: "Data Analysis" },
+          program_levels: { level_name: "Professional" }
+        }],
+        error: null
+      }
+    });
+    serviceMocks.getSupabaseClient.mockResolvedValue(supabase.client);
+
+    const data = await getAdminDashboardData("students");
+
+    expect(data.students).toHaveLength(1);
+    expect(data.students[0]).toMatchObject({
+      id: "student-1",
+      program_title: "Data Analysis",
+      level_name: "Professional",
+      assignment_status: "assigned"
+    });
   });
 
   it("loads certificate programme details through the enrolment relationship", async () => {
