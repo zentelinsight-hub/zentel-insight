@@ -1,6 +1,5 @@
-import { createPortal } from "react-dom";
 import { Link, Outlet } from "react-router-dom";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Award,
   Bell,
@@ -19,8 +18,6 @@ import {
   Newspaper,
   Settings,
   Sun,
-  Trash2,
-  Upload,
   UserRound,
   Video
 } from "lucide-react";
@@ -31,7 +28,6 @@ import { useAuth } from "../context/authHooks";
 import { useTheme } from "../context/themeHooks";
 import { siteConfig } from "../data/site";
 import {
-  useProgramCatalog,
   usePortalPageContent,
   usePortalArticles,
   useStudentAnnouncements,
@@ -42,9 +38,8 @@ import {
   useStudentEnrolments,
   useStudentLiveClasses,
   useStudentNotifications,
-  useStudentPayments,
+  useStudentActivePayments,
   useStudentPreferences,
-  useStudentProgramPreference,
   useStudentProfile,
   useStudentResources,
   useStudentSupportTickets,
@@ -53,15 +48,13 @@ import {
 import {
   createSupportTicket,
   calculateProfileCompletion,
-  hasReliablePaymentStatus,
   markAllNotificationsRead,
   markNotificationRead,
-  saveStudentProgramPreference,
+  replyToSupportTicket,
   updateStudentPreferences,
-  updateStudentProfile
 } from "../services/portal/portalRepository";
-import { claimMyEnrolments, requestPasswordReset } from "../services/authService";
-import { formatCurrency, formatDateTime } from "../utils/format";
+import { claimMyEnrolments } from "../services/authService";
+import { formatDateTime } from "../utils/format";
 import { usePageMeta } from "../utils/usePageMeta";
 
 const portalLinks = [
@@ -73,7 +66,7 @@ const portalLinks = [
   ["/portal/announcements", "Announcements", Megaphone],
   ["/portal/assignments", "Assignments", FileCheck2],
   ["/portal/resources", "Resources", BookOpen],
-  ["/portal/payments", "Payments", CreditCard],
+  ["/portal/payments", "Active Payment", CreditCard],
   ["/portal/certificates", "Certificates", Award],
   ["/portal/notifications", "Notifications", Bell],
   ["/portal/articles", "Learning Articles", Newspaper],
@@ -137,18 +130,16 @@ function getInitials(profile, user) {
   return (words[0]?.[0] || "L").concat(words[1]?.[0] || "").toUpperCase();
 }
 
-function getProgrammeSummary(enrolments = [], programmePreference = null) {
+function getProgrammeSummary(enrolments = []) {
   const active = enrolments.filter((item) => item.status === "active");
   if (active.length) return `${active.length} active programme${active.length === 1 ? "" : "s"}`;
-  if (programmePreference?.programs?.title) return programmePreference.programs.title;
   if (enrolments.length) return "Programme records pending activation";
-  return "No programme linked yet";
+  return "Programme assignment pending";
 }
 
 function getProgrammeSourceLabel(source) {
   if (source === "official") return "Official enrolment";
-  if (source === "self_selected") return "Self-selected preference";
-  return "Not selected";
+  return "Admin assignment pending";
 }
 
 function formatClassSummary(item) {
@@ -158,120 +149,6 @@ function formatClassSummary(item) {
 
 function dispatchPortalDataRefresh() {
   window.dispatchEvent(new Event("zentel:portal-data-refresh"));
-}
-
-function openProgrammeSelector() {
-  window.dispatchEvent(new Event("zentel:portal-open-programme-selector"));
-}
-
-function ProgrammeSelector({ programs = [], value, onChange, disabled = false }) {
-  const [search, setSearch] = useState("");
-  const filteredPrograms = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return programs;
-    return programs.filter((program) => {
-      const haystack = `${program.title || ""} ${program.short_description || ""} ${program.category || ""}`.toLowerCase();
-      return haystack.includes(query);
-    });
-  }, [programs, search]);
-
-  return (
-    <div className="programme-selector">
-      <label>
-        <span>Search programmes</span>
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Type a programme name"
-          disabled={disabled}
-        />
-      </label>
-      <div className="programme-option-list" role="listbox" aria-label="Available programmes">
-        {filteredPrograms.map((program) => {
-          const active = value === program.id;
-          return (
-            <button
-              key={program.id}
-              className={active ? "active" : ""}
-              type="button"
-              role="option"
-              aria-selected={active}
-              disabled={disabled}
-              onClick={() => onChange(program.id)}
-            >
-              <span>{program.title}</span>
-              {program.short_description ? <small>{program.short_description}</small> : null}
-            </button>
-          );
-        })}
-        {!filteredPrograms.length ? <p>No programme matches your search.</p> : null}
-      </div>
-    </div>
-  );
-}
-
-function ProgrammeSelectionModal({ programs, programsLoading, programsError, onRetryPrograms, onSave }) {
-  const [selectedProgramId, setSelectedProgramId] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState({ type: "", message: "" });
-  const saveButtonRef = useRef(null);
-
-  useEffect(() => {
-    saveButtonRef.current?.focus();
-  }, []);
-
-  async function submit(event) {
-    event.preventDefault();
-    if (!selectedProgramId) {
-      setStatus({ type: "warning", message: "Select your programme before saving." });
-      return;
-    }
-    setSaving(true);
-    setStatus({ type: "", message: "" });
-    try {
-      await onSave(selectedProgramId);
-      setStatus({ type: "success", message: "Programme saved." });
-    } catch (error) {
-      setStatus({ type: "warning", message: error.message || "Programme could not be saved." });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return createPortal(
-    <div className="programme-modal-backdrop" role="presentation">
-      <form className="programme-modal" role="dialog" aria-modal="true" aria-labelledby="programme-modal-title" onSubmit={submit}>
-        <div>
-          <p className="eyebrow">Student Portal</p>
-          <h2 id="programme-modal-title">Choose Your Programme</h2>
-          <p>Select the Zentel Insight programme you are currently studying so your timetable, announcements and learning information can be personalised.</p>
-        </div>
-        {programsLoading ? <PortalLoading label="Loading programmes" /> : null}
-        {programsError ? (
-          <div className="form-status warning" role="alert">
-            Programme list could not be loaded.
-            <button className="text-link" type="button" onClick={onRetryPrograms}>Try again</button>
-          </div>
-        ) : null}
-        {!programsLoading && !programsError ? (
-          <ProgrammeSelector
-            programs={programs}
-            value={selectedProgramId}
-            onChange={(programId) => {
-              setSelectedProgramId(programId);
-              setStatus({ type: "", message: "" });
-            }}
-            disabled={saving}
-          />
-        ) : null}
-        {status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}
-        <button ref={saveButtonRef} className="button button-primary" type="submit" disabled={saving || programsLoading || Boolean(programsError)}>
-          {saving ? "Saving Programme" : "Save Programme"}
-        </button>
-      </form>
-    </div>,
-    document.body
-  );
 }
 
 function PortalAvatar({ profile, user, size = "md" }) {
@@ -344,27 +221,15 @@ function PortalPage({ slug, children, actions }) {
 }
 
 export function PortalLayout() {
-  const { authReady, authLoading, loading, profile, user } = useAuth();
-  const [claimingEnrolments, setClaimingEnrolments] = useState(true);
-  const [manualProgrammeModalOpen, setManualProgrammeModalOpen] = useState(false);
+  const { profile, user } = useAuth();
   const enrolmentsQuery = useStudentEnrolments(user?.id);
-  const programCatalogQuery = useProgramCatalog();
-  const programPreferenceQuery = useStudentProgramPreference(user?.id);
   const notificationsQuery = useStudentNotifications(user?.id);
   const enrolments = enrolmentsQuery.data || [];
   const refetchEnrolments = enrolmentsQuery.refetch;
-  const programmePreference = programPreferenceQuery.data;
-  const hasActiveOfficialProgramme = enrolments.some((item) => item.status === "active");
-  const authFinished = Boolean(user?.id) && authReady !== false && !authLoading && !loading;
-  const programmeCheckFinished = authFinished && !claimingEnrolments && !enrolmentsQuery.loading && !programPreferenceQuery.loading;
-  const needsProgrammeOnboarding = programmeCheckFinished && !hasActiveOfficialProgramme && !programmePreference?.program_id;
-  const showProgrammeModal = needsProgrammeOnboarding || manualProgrammeModalOpen;
   const displayName = profile?.full_name || user?.email || "Learner";
   const unreadNotificationCount = (notificationsQuery.data || []).filter((item) => !item.read_at).length;
 
   useEffect(() => {
-    let active = true;
-    setClaimingEnrolments(true);
     claimMyEnrolments()
       .then(() => {
         refetchEnrolments();
@@ -372,32 +237,10 @@ export function PortalLayout() {
       })
       .catch((error) => {
         if (import.meta.env.DEV) console.info("Portal enrolment claim failed", error);
-      })
-      .finally(() => {
-        if (active) setClaimingEnrolments(false);
       });
-    return () => {
-      active = false;
-    };
   // Refetch functions are stable in the real hook; user id is the intended claim boundary.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
-
-  useEffect(() => {
-    function handleOpenProgrammeSelector() {
-      setManualProgrammeModalOpen(true);
-    }
-    window.addEventListener("zentel:portal-open-programme-selector", handleOpenProgrammeSelector);
-    return () => window.removeEventListener("zentel:portal-open-programme-selector", handleOpenProgrammeSelector);
-  }, []);
-
-  async function saveProgrammePreference(programId) {
-    await saveStudentProgramPreference(user.id, { program_id: programId });
-    setManualProgrammeModalOpen(false);
-    programPreferenceQuery.refetch();
-    refetchEnrolments();
-    dispatchPortalDataRefresh();
-  }
 
   usePageMeta({
     path: "/portal",
@@ -412,7 +255,7 @@ export function PortalLayout() {
         homeTo: "/portal",
         brandLabel: "Student Portal",
         profileName: displayName,
-        profileDetail: getProgrammeSummary(enrolments, programmePreference),
+        profileDetail: getProgrammeSummary(enrolments),
         avatarUrl: profile?.avatar_url,
         profileInitial: getInitials(profile, user),
         navLabel: "Student portal",
@@ -437,27 +280,18 @@ export function PortalLayout() {
         "certificates",
         "enrolments",
         "live_class_sessions",
-        "payments",
         "portal_articles",
         "portal_notifications",
         "program_levels",
         "resources",
-        "student_program_preferences",
+        "support_ticket_messages",
+        "support_tickets",
         "timetable_entries",
         "tutor_program_assignments"
       ]}
       onRealtimeChange={dispatchPortalDataRefresh}
     >
         <Outlet />
-      {showProgrammeModal ? (
-        <ProgrammeSelectionModal
-          programs={programCatalogQuery.data || []}
-          programsLoading={programCatalogQuery.loading}
-          programsError={programCatalogQuery.error}
-          onRetryPrograms={programCatalogQuery.refetch}
-          onSave={saveProgrammePreference}
-        />
-      ) : null}
     </PortalShell>
   );
 }
@@ -477,12 +311,12 @@ export function PortalOverview() {
         const activeEnrolments = data.activeEnrolments || [];
         const announcements = data.announcements || [];
         const certificates = data.certificates || [];
-        const payments = data.payments || [];
+        const activePayments = data.activePayments || [];
         const pendingAssignments = data.pendingAssignments || [];
         const resources = data.resources || [];
         const timetable = data.timetable || [];
         const unreadNotifications = data.unreadNotifications || [];
-        const resolvedProgrammeName = data.resolvedProgramme?.title || activeEnrolments[0]?.programs?.title || "Choose programme";
+        const resolvedProgrammeName = data.resolvedProgramme?.title || activeEnrolments[0]?.programs?.title || "Assignment pending";
         return (
           <>
             <section className="portal-welcome-card">
@@ -504,7 +338,7 @@ export function PortalOverview() {
                 <Clock3 size={22} aria-hidden="true" />
                 <span>Next Class</span>
                 <strong>{data.upcomingClass ? formatTime(data.upcomingClass.start_time) : "Not published"}</strong>
-                <small>{data.upcomingClass ? `${formatScheduleDay(data.upcomingClass)} - ${getCourseName(data.upcomingClass)}` : data.needsProgrammeSelection ? "Choose your programme first." : "No timetable yet."}</small>
+                <small>{data.upcomingClass ? `${formatScheduleDay(data.upcomingClass)} - ${getCourseName(data.upcomingClass)}` : data.needsProgrammeSelection ? "Admin programme assignment pending." : "No timetable yet."}</small>
               </article>
               <article className="dashboard-card">
                 <CalendarDays size={22} aria-hidden="true" />
@@ -556,13 +390,13 @@ export function PortalOverview() {
                 <Link className="text-link" to="/portal/announcements">Read notices</Link>
               </article>
               <article className="notice-card">
-                <h3>Payment summary</h3>
-                {payments.length ? (
-                  <p>{payments.filter(hasReliablePaymentStatus).length} trusted payment record{payments.filter(hasReliablePaymentStatus).length === 1 ? "" : "s"} linked to your student account.</p>
+                <h3>Active Payment</h3>
+                {activePayments.length ? (
+                  <p>Active Payment is confirmed for your assigned programme.</p>
                 ) : (
-                  <p>Verified payment records linked to your account will appear after confirmation.</p>
+                  <p>Active Payment appears after Admin assigns and activates your programme.</p>
                 )}
-                <Link className="text-link" to="/portal/payments">View Payments</Link>
+                <Link className="text-link" to="/portal/payments">View Active Payment</Link>
               </article>
               <article className="notice-card">
                 <h3>Quick links</h3>
@@ -572,7 +406,7 @@ export function PortalOverview() {
                   <Link to="/portal/assignments">View Assignments</Link>
                   <Link to="/portal/resources">Browse Resources</Link>
                   <Link to="/portal/support">Contact Support</Link>
-                  <Link to="/portal/profile">Edit Profile</Link>
+                  <Link to="/portal/profile">View Profile</Link>
                 </div>
               </article>
               <article className="notice-card">
@@ -603,8 +437,8 @@ function StudentClassroomPage() {
             <PortalEmpty
               content={{
                 ...content,
-                empty_title: "Choose a programme to open Classroom",
-                empty_message: "Your Classroom appears after an active enrolment is assigned or a programme preference is selected."
+                empty_title: "Programme assignment pending",
+                empty_message: "Your Classroom appears after Admin assigns and activates your official programme enrolment."
               }}
             />
           );
@@ -620,11 +454,9 @@ function StudentClassroomPage() {
               <div>
                 <p className="eyebrow">Classroom</p>
                 <h2>{classroom.data.program_title}</h2>
-                <p>{classroom.data.is_verified_enrolment ? "Official programme classroom." : "Self-selected programme classroom preview. Enrolment remains unverified until Admin assignment or payment confirmation."}</p>
+                <p>Official programme classroom.</p>
               </div>
-              <span className={classroom.data.is_verified_enrolment ? "portal-tag success" : "portal-tag warning"}>
-                {classroom.data.is_verified_enrolment ? "Official" : "Unverified"}
-              </span>
+              <span className="portal-tag success">Official</span>
             </div>
             <div className="dashboard-grid">
               <article className="dashboard-card">
@@ -734,10 +566,10 @@ function TimetablePage() {
             <PortalEmpty
               content={{
                 ...content,
-                empty_title: "Choose your programme",
-                empty_message: "Select your current programme so your timetable can be personalised."
+                empty_title: "Programme assignment pending",
+                empty_message: "Admin must assign and activate your programme before a timetable can be shown."
               }}
-              action={<button className="button button-primary" type="button" onClick={openProgrammeSelector}>Choose Programme</button>}
+              action={<Link className="button button-primary" to="/portal/support">Contact Support</Link>}
             />
           );
         }
@@ -920,32 +752,29 @@ function ArticlesPage() {
 
 function PaymentsPage() {
   const { user } = useAuth();
-  const query = useStudentPayments(user?.id);
+  const query = useStudentActivePayments(user?.id);
   return (
     <PortalPage slug="payments">
       {(content) => {
-        if (query.loading) return <PortalLoading label="Loading payments" />;
+        if (query.loading) return <PortalLoading label="Loading Active Payment" />;
         if (query.error) return <PortalError message={query.error} onRetry={query.refetch} />;
         const records = query.data || [];
         if (!records.length) return <PortalEmpty content={content} />;
         return (
           <div className="portal-list">
             {records.map((item) => {
-              const reliable = hasReliablePaymentStatus(item);
-              const amount = Number(item.amount_kobo || item.paid_amount_kobo || item.expected_amount_kobo || 0) / 100;
               return (
                 <article className="portal-record-card" key={item.id}>
                   <div>
-                    <p className="eyebrow">{item.reference}</p>
-                    <h3>{item.product_name || item.product_type}</h3>
-                    <p>{formatCurrency(amount)} {item.currency || "NGN"}</p>
+                    <p className="eyebrow">Active Payment</p>
+                    <h3>{item.programs?.title || "Assigned programme"}</h3>
+                    <p>{item.program_levels?.level_name || "Programme track"}</p>
                   </div>
                   <dl className="portal-mini-details">
-                    <div><dt>Status</dt><dd>{item.status}</dd></div>
-                    <div><dt>Date</dt><dd>{formatDateTime(item.paid_at || item.created_at)}</dd></div>
-                    <div><dt>Method</dt><dd>{item.payment_channel || item.payment_method || item.provider || "Paystack"}</dd></div>
+                    <div><dt>Status</dt><dd>Active Payment</dd></div>
+                    <div><dt>Programme activated</dt><dd>{formatDateTime(item.activated_at)}</dd></div>
                   </dl>
-                  {reliable ? <span className="portal-tag success">Reliable record</span> : <span className="portal-tag">Awaiting confirmation</span>}
+                  <span className="portal-tag success">Active</span>
                 </article>
               );
             })}
@@ -1039,8 +868,10 @@ function SupportPage() {
   const { user } = useAuth();
   const query = useStudentSupportTickets(user?.id);
   const [form, setForm] = useState({ subject: "", category: "general", message: "" });
+  const [replies, setReplies] = useState({});
   const [status, setStatus] = useState({ type: "", message: "" });
   const [loading, setLoading] = useState(false);
+  const [replyingTicketId, setReplyingTicketId] = useState("");
 
   async function submit(event) {
     event.preventDefault();
@@ -1059,6 +890,26 @@ function SupportPage() {
       setStatus({ type: "warning", message: error.message || "Support ticket could not be created." });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function submitReply(ticket) {
+    const message = String(replies[ticket.id] || "").trim();
+    if (message.length < 2) {
+      setStatus({ type: "warning", message: "Enter a reply before sending." });
+      return;
+    }
+    setReplyingTicketId(ticket.id);
+    setStatus({ type: "", message: "" });
+    try {
+      await replyToSupportTicket(ticket.id, message);
+      setReplies((current) => ({ ...current, [ticket.id]: "" }));
+      setStatus({ type: "success", message: "Your reply was sent to support." });
+      query.refetch();
+    } catch (error) {
+      setStatus({ type: "warning", message: error.message || "Your reply could not be sent." });
+    } finally {
+      setReplyingTicketId("");
     }
   }
 
@@ -1098,12 +949,27 @@ function SupportPage() {
             {!query.loading && !query.error && !(query.data || []).length ? <PortalEmpty content={content} /> : null}
             <div className="portal-list">
               {(query.data || []).map((item) => (
-                <article className="portal-record-card" key={item.id}>
-                  <p className="eyebrow">{item.status}</p>
+                <article className={`portal-record-card ${item.unread_reply_count ? "unread" : ""}`} key={item.id}>
+                  <p className="eyebrow">{item.status}{item.unread_reply_count ? ` | ${item.unread_reply_count} unread` : ""}</p>
                   <h3>{item.subject}</h3>
                   <p>{item.message}</p>
-                  {item.response ? <p><strong>Response:</strong> {item.response}</p> : null}
+                  <div className="support-thread" aria-label={`Messages for ${item.subject}`}>
+                    {(item.support_ticket_messages || []).map((message) => (
+                      <div className={`support-message ${message.sender_role}`} key={message.id}>
+                        <strong>{message.sender_role === "admin" ? "Zentel Insight Support" : "You"}</strong>
+                        <p>{message.message}</p>
+                        <small>{formatDateTime(message.created_at)}</small>
+                      </div>
+                    ))}
+                    {!(item.support_ticket_messages || []).length && item.response ? <div className="support-message admin"><strong>Zentel Insight Support</strong><p>{item.response}</p></div> : null}
+                  </div>
                   <small>{formatDateTime(item.created_at)}</small>
+                  {["open", "in_progress"].includes(item.status) ? (
+                    <div className="support-reply-form">
+                      <label><span>Reply to this ticket</span><textarea value={replies[item.id] || ""} onChange={(event) => setReplies({ ...replies, [item.id]: event.target.value })} /></label>
+                      <button className="button button-secondary" type="button" disabled={replyingTicketId === item.id} onClick={() => submitReply(item)}>{replyingTicketId === item.id ? "Sending" : "Send Reply"}</button>
+                    </div>
+                  ) : <p className="form-status success">This ticket is resolved. Contact support with a new ticket if you need more help.</p>}
                 </article>
               ))}
             </div>
@@ -1118,18 +984,14 @@ function SettingsPage() {
   const { user, signOut } = useAuth();
   const { theme, setTheme } = useTheme();
   const preferencesQuery = useStudentPreferences(user?.id);
-  const programCatalogQuery = useProgramCatalog();
-  const programPreferenceQuery = useStudentProgramPreference(user?.id);
   const enrolmentsQuery = useStudentEnrolments(user?.id);
   const [preferences, setPreferences] = useState({
     email_notifications: true,
     portal_reminders: true,
     session_security_warnings: true
   });
-  const [selectedProgramId, setSelectedProgramId] = useState("");
   const [status, setStatus] = useState({ type: "", message: "" });
   const [loading, setLoading] = useState(false);
-  const [programmeSaving, setProgrammeSaving] = useState(false);
   const activeOfficialProgramme = (enrolmentsQuery.data || []).find((item) => item.status === "active");
 
   useEffect(() => {
@@ -1140,21 +1002,6 @@ function SettingsPage() {
       session_security_warnings: preferencesQuery.data.session_security_warnings !== false
     });
   }, [preferencesQuery.data]);
-
-  useEffect(() => {
-    setSelectedProgramId(programPreferenceQuery.data?.program_id || "");
-  }, [programPreferenceQuery.data]);
-
-  async function sendPasswordReset() {
-    setLoading(true);
-    setStatus({ type: "", message: "" });
-    try {
-      const result = await requestPasswordReset(user.email);
-      setStatus({ type: result.ok ? "success" : "warning", message: result.message });
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function savePreferences() {
     setLoading(true);
@@ -1170,25 +1017,6 @@ function SettingsPage() {
     }
   }
 
-  async function saveProgrammePreferenceSetting() {
-    if (!selectedProgramId) {
-      setStatus({ type: "warning", message: "Select your programme before saving." });
-      return;
-    }
-    setProgrammeSaving(true);
-    setStatus({ type: "", message: "" });
-    try {
-      await saveStudentProgramPreference(user.id, { program_id: selectedProgramId });
-      programPreferenceQuery.refetch();
-      dispatchPortalDataRefresh();
-      setStatus({ type: "success", message: "Programme preference saved." });
-    } catch (error) {
-      setStatus({ type: "warning", message: error.message || "Programme preference could not be saved." });
-    } finally {
-      setProgrammeSaving(false);
-    }
-  }
-
   return (
     <PortalPage slug="settings">
       {() => (
@@ -1199,9 +1027,9 @@ function SettingsPage() {
             <span className="portal-tag success"><CheckCircle2 size={14} aria-hidden="true" /> Verified</span>
           </article>
           <article className="portal-record-card">
-            <h3>Password recovery</h3>
-            <p>Send a secure password reset link to your verified email address.</p>
-            <button className="button button-secondary" type="button" onClick={sendPasswordReset} disabled={loading}>{loading ? "Sending" : "Send password reset link"}</button>
+            <h3>Account management</h3>
+            <p>Your password and account credentials are managed by Zentel Insight Admin. Contact support when a credential change is required.</p>
+            <Link className="button button-secondary" to="/portal/support">Contact Support</Link>
           </article>
           <article className="portal-record-card">
             <h3>Theme preference</h3>
@@ -1212,36 +1040,15 @@ function SettingsPage() {
             </div>
           </article>
           <article className="portal-record-card">
-            <h3>Programme preference</h3>
-            <p>Select the programme used for timetable personalisation when no active enrolment is assigned.</p>
+            <h3>Assigned programme</h3>
+            <p>Your programme and track are assigned only by Zentel Insight Admin and cannot be changed from the Student Portal.</p>
             {activeOfficialProgramme ? (
-              <span className="portal-tag success"><CheckCircle2 size={14} aria-hidden="true" /> Official enrolment takes priority</span>
-            ) : null}
-            {programCatalogQuery.loading ? <PortalLoading label="Loading programmes" /> : null}
-            {programCatalogQuery.error ? (
-              <div className="form-status warning" role="alert">
-                Programme list could not be loaded.
-                <button className="text-link" type="button" onClick={programCatalogQuery.refetch}>Try again</button>
-              </div>
-            ) : null}
-            {!programCatalogQuery.loading && !programCatalogQuery.error ? (
-              <>
-                <ProgrammeSelector
-                  programs={programCatalogQuery.data || []}
-                  value={selectedProgramId}
-                  onChange={setSelectedProgramId}
-                  disabled={programmeSaving}
-                />
-                <button
-                  className="button button-secondary"
-                  type="button"
-                  onClick={saveProgrammePreferenceSetting}
-                  disabled={programmeSaving}
-                >
-                  {programmeSaving ? "Saving Programme" : "Save Programme"}
-                </button>
-              </>
-            ) : null}
+              <dl className="portal-mini-details">
+                <div><dt>Programme</dt><dd>{activeOfficialProgramme.programs?.title || "Assigned programme"}</dd></div>
+                <div><dt>Track</dt><dd>{activeOfficialProgramme.program_levels?.level_name || "Assigned track"}</dd></div>
+                <div><dt>Status</dt><dd><span className="portal-tag success"><CheckCircle2 size={14} aria-hidden="true" /> Active</span></dd></div>
+              </dl>
+            ) : <span className="portal-tag">Admin assignment pending</span>}
           </article>
           <article className="portal-record-card">
             <h3>Portal preferences</h3>
@@ -1305,107 +1112,8 @@ export function PortalSection({ page }) {
 }
 
 export function PortalProfile() {
-  const { user, refreshProfile } = useAuth();
+  const { user } = useAuth();
   const query = useStudentProfile(user);
-  const [form, setForm] = useState({ full_name: "", email: "", phone: "", date_of_birth: "", education_level: "", address: "" });
-  const [avatarFile, setAvatarFile] = useState(null);
-  const [avatarPreview, setAvatarPreview] = useState("");
-  const [removeAvatar, setRemoveAvatar] = useState(false);
-  const avatarObjectUrlRef = useRef("");
-  const [status, setStatus] = useState({ type: "", message: "" });
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    const profile = query.data;
-    if (!profile && !user) return;
-    setForm({
-      full_name: profile?.full_name || "",
-      email: user?.email || profile?.email || "",
-      phone: profile?.phone || "",
-      date_of_birth: profile?.date_of_birth || "",
-      education_level: profile?.education_level || "",
-      address: profile?.address || ""
-    });
-    setAvatarPreview(profile?.avatar_url || "");
-    if (avatarObjectUrlRef.current) URL.revokeObjectURL(avatarObjectUrlRef.current);
-    avatarObjectUrlRef.current = "";
-    setAvatarFile(null);
-    setRemoveAvatar(false);
-  }, [query.data, user]);
-
-  useEffect(() => () => {
-    if (avatarObjectUrlRef.current) URL.revokeObjectURL(avatarObjectUrlRef.current);
-  }, []);
-
-  const dirty = useMemo(() => {
-    return Boolean(
-      avatarFile ||
-      removeAvatar
-    );
-  }, [avatarFile, removeAvatar]);
-
-  useEffect(() => {
-    if (!dirty) return undefined;
-    function handleBeforeUnload(event) {
-      event.preventDefault();
-      event.returnValue = "";
-    }
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [dirty]);
-
-  function selectAvatar(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      setStatus({ type: "warning", message: "Upload a JPEG, PNG or WebP image for your profile picture." });
-      return;
-    }
-    if (file.size > 3 * 1024 * 1024) {
-      setStatus({ type: "warning", message: "Profile picture must be 3 MB or smaller." });
-      return;
-    }
-    setAvatarFile(file);
-    setRemoveAvatar(false);
-    if (avatarObjectUrlRef.current) URL.revokeObjectURL(avatarObjectUrlRef.current);
-    avatarObjectUrlRef.current = URL.createObjectURL(file);
-    setAvatarPreview(avatarObjectUrlRef.current);
-    setStatus({ type: "", message: "" });
-  }
-
-  function clearAvatar() {
-    setAvatarFile(null);
-    setAvatarPreview("");
-    setRemoveAvatar(Boolean(query.data?.avatar_path));
-  }
-
-  async function submit(event) {
-    event.preventDefault();
-    if (!avatarFile && !removeAvatar) {
-      setStatus({ type: "warning", message: "Choose a profile picture change before saving." });
-      return;
-    }
-    setSaving(true);
-    setStatus({ type: "", message: "" });
-    try {
-      await updateStudentProfile(user.id, {
-        ...form,
-        avatarFile,
-        removeAvatar,
-        avatar_path: query.data?.avatar_path || "",
-        previous_avatar_path: query.data?.avatar_path || ""
-      });
-      await refreshProfile();
-      query.refetch();
-      setAvatarFile(null);
-      setRemoveAvatar(false);
-      setStatus({ type: "success", message: "Profile picture updated successfully." });
-    } catch (error) {
-      setStatus({ type: "warning", message: error.message || "Profile could not be updated." });
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <PortalPage slug="profile">
@@ -1413,67 +1121,51 @@ export function PortalProfile() {
         if (query.loading) return <PortalLoading label="Loading profile" />;
         if (query.error) return <PortalError message={query.error} onRetry={query.refetch} />;
         if (!query.data) return <PortalEmpty content={content} />;
+        const profile = query.data;
         return (
-          <form className="form-card portal-profile-form" onSubmit={submit}>
+          <article className="form-card portal-profile-form">
             <div className="portal-profile-summary">
-              <div className="portal-avatar-uploader">
-                <PortalAvatar profile={{ ...query.data, avatar_url: avatarPreview }} user={user} size="xl" />
-                <div>
-                  <label className="button button-secondary">
-                    <Upload size={16} aria-hidden="true" />
-                    Change Photo
-                    <input type="file" accept="image/jpeg,image/png,image/webp" onChange={selectAvatar} />
-                  </label>
-                  {avatarPreview ? (
-                    <button className="button button-secondary" type="button" onClick={clearAvatar}>
-                      <Trash2 size={16} aria-hidden="true" />
-                      Remove Photo
-                    </button>
-                  ) : null}
-                  <small>JPEG, PNG or WebP, up to 3 MB.</small>
-                </div>
-              </div>
+              <PortalAvatar profile={profile} user={user} size="xl" />
               <div className="portal-metric-card">
                 <span>Profile completion</span>
-                <strong>{calculateProfileCompletion({ ...form, avatar_path: removeAvatar ? "" : query.data.avatar_path || avatarPreview })}%</strong>
-                 <small>Admin manages your account details; you can keep your profile picture current.</small>
+                <strong>{calculateProfileCompletion(profile)}%</strong>
+                <small>All profile and credential changes are managed by Admin.</small>
               </div>
               <div className="portal-metric-card">
                 <span>Email verification</span>
                 <strong>{user?.email_confirmed_at || user?.confirmed_at ? "Verified" : "Pending"}</strong>
-                <small>Account created {formatDateTime(user?.created_at || query.data.created_at)}</small>
+                <small>Account created {formatDateTime(user?.created_at || profile.created_at)}</small>
               </div>
             </div>
             <div className="form-grid">
               <label>
                 <span>Full name</span>
-                 <input value={form.full_name} readOnly />
+                <input value={profile.full_name || ""} readOnly />
               </label>
               <label>
                 <span>Email address</span>
-                <input value={form.email} readOnly />
+                <input value={user?.email || profile.email || ""} readOnly />
               </label>
               <label>
                 <span>Phone</span>
-                 <input value={form.phone} readOnly />
+                <input value={profile.phone || ""} readOnly />
               </label>
               <label>
                 <span>Date of birth</span>
-                 <input type="date" value={form.date_of_birth || ""} readOnly />
+                <input type="date" value={profile.date_of_birth || ""} readOnly />
               </label>
               <label>
                 <span>Level of education</span>
-                 <input value={form.education_level || ""} readOnly />
+                <input value={profile.education_level || ""} readOnly />
               </label>
               <label>
                 <span>Residential address</span>
-                 <input value={form.address || ""} readOnly />
+                <input value={profile.address || ""} readOnly />
               </label>
             </div>
-            {status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}
             <span className="portal-tag">Account details are Admin-managed</span>
-            <button className="button button-primary" type="submit" disabled={saving || !dirty}>{saving ? "Saving" : "Save Photo"}</button>
-          </form>
+            <Link className="button button-secondary" to="/portal/support">Request a Change</Link>
+          </article>
         );
       }}
     </PortalPage>

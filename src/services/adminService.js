@@ -132,7 +132,7 @@ export async function getAdminDashboardData(section = "overview") {
     sectionSelect(requiredData, "notifications", "notifications", () => supabase.from("portal_notifications").select("*").order("created_at", { ascending: false }).limit(100)),
     sectionSelect(requiredData, "articles", "articles", () => supabase.from("portal_articles").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(100)),
     sectionSelect(requiredData, "liveClasses", "live classes", () => supabase.from("live_class_sessions").select("*, programs(id, title), program_levels(id, level_name)").order("scheduled_start", { ascending: false }).limit(150)),
-    sectionSelect(requiredData, "supportTickets", "support tickets", () => supabase.from("support_tickets").select("*").order("created_at", { ascending: false }).limit(200)),
+    sectionSelect(requiredData, "supportTickets", "support tickets", () => supabase.from("support_tickets").select("*, support_ticket_messages(*)").order("created_at", { ascending: false }).limit(200)),
     sectionSelect(requiredData, "payments", "payments", () => supabase.from("payments").select("*, payment_attempt_events(*)").order("created_at", { ascending: false }).limit(500)),
     sectionSelect(requiredData, "certificates", "certificates", () => supabase.from("certificates").select("*, enrolments(id, programs(id, slug, title), program_levels(id, level_name))").order("created_at", { ascending: false }).limit(200)),
     sectionSelect(requiredData, "auditLogs", "audit logs", () => supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(100))
@@ -322,7 +322,10 @@ async function updateAccountCredentials(values) {
     body: {
       userId: values.user_id || values.id,
       email: String(values.email || "").trim().toLowerCase(),
-      newPassword: values.new_password || ""
+      newPassword: values.new_password || "",
+      dateOfBirth: values.date_of_birth || null,
+      educationLevel: String(values.education_level || "").trim(),
+      address: String(values.address || "").trim()
     },
     unavailableMessage: "Account credentials are temporarily unavailable. Please try again.",
     failureMessage: "Account credentials could not be updated. Please review the details and try again."
@@ -601,15 +604,11 @@ export async function scheduleLiveClass(values) {
 
 export async function respondToSupportTicket(values) {
   const supabase = await getClient();
-  const { data, error } = await supabase
-    .from("support_tickets")
-    .update({
-      response: String(values.response || "").trim(),
-      status: values.status || "in_progress"
-    })
-    .eq("id", values.id)
-    .select("*")
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("admin_reply_to_support_ticket", {
+    target_ticket_id: values.id,
+    reply_message: String(values.response || "").trim(),
+    next_status: values.status || "in_progress"
+  });
   if (error) throw error;
   return data;
 }

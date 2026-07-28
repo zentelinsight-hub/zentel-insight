@@ -3,12 +3,6 @@ import { getSupabaseClient } from "../supabaseClient";
 export const PROFILE_AVATAR_BUCKET = "profile-avatars";
 export const PROFILE_AVATAR_MAX_BYTES = 3 * 1024 * 1024;
 
-const avatarContentTypes = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp"
-};
-
 const defaultPageContent = {
   dashboard: {
     title: "Student Dashboard",
@@ -53,10 +47,10 @@ const defaultPageContent = {
     empty_message: "Learning materials will appear here when they are published for your programme."
   },
   payments: {
-    title: "Payment Records",
-    description: "View trusted payment records and enrolment transactions connected to your Zentel Insight student account.",
-    empty_title: "No payment records available",
-    empty_message: "Verified payment records linked to your student account will appear here."
+    title: "Active Payment",
+    description: "Review the active payment status connected to your assigned Zentel Insight programme.",
+    empty_title: "No active payment",
+    empty_message: "An Active Payment status appears after Admin assigns and activates your programme."
   },
   certificates: {
     title: "Certificates",
@@ -174,67 +168,6 @@ export async function attachProfileAvatarUrl(profile) {
   return withProfileAvatarUrl(profile, supabase);
 }
 
-function getAvatarExtension(file) {
-  return avatarContentTypes[file?.type] || "";
-}
-
-function validateAvatarFile(file) {
-  if (!file) return;
-  if (!getAvatarExtension(file)) {
-    throw new Error("Upload a JPEG, PNG or WebP image for your profile picture.");
-  }
-  if (file.size > PROFILE_AVATAR_MAX_BYTES) {
-    throw new Error("Profile picture must be 3 MB or smaller.");
-  }
-}
-
-async function uploadAvatarFile(supabase, userId, file) {
-  validateAvatarFile(file);
-  const extension = getAvatarExtension(file);
-  const path = `${userId}/avatar-${Date.now()}.${extension}`;
-  const { error } = await supabase.storage.from(PROFILE_AVATAR_BUCKET).upload(path, file, {
-    cacheControl: "3600",
-    contentType: file.type,
-    upsert: false
-  });
-  if (error) throw error;
-  return path;
-}
-
-export async function updateStudentProfile(userId, values) {
-  const supabase = await getClient();
-  let uploadedAvatarPath = "";
-  try {
-    const nextAvatarPath = values.avatarFile
-      ? await uploadAvatarFile(supabase, userId, values.avatarFile)
-      : values.removeAvatar
-        ? null
-        : values.avatar_path || null;
-
-    uploadedAvatarPath = values.avatarFile ? nextAvatarPath : "";
-
-    const payload = {
-      avatar_path: nextAvatarPath,
-      profile_completed: calculateProfileCompletion({ ...values, avatar_path: nextAvatarPath }) === 100,
-      profile_completion: calculateProfileCompletion({ ...values, avatar_path: nextAvatarPath })
-    };
-    const { data, error } = await supabase.from("profiles").update(payload).eq("id", userId).select("*").maybeSingle();
-    if (error) throw error;
-
-    const previousAvatarPath = values.previous_avatar_path || "";
-    if (previousAvatarPath && previousAvatarPath !== nextAvatarPath) {
-      await supabase.storage.from(PROFILE_AVATAR_BUCKET).remove([previousAvatarPath]);
-    }
-
-    return data ? withProfileAvatarUrl(data, supabase) : data;
-  } catch (error) {
-    if (uploadedAvatarPath) {
-      await supabase.storage.from(PROFILE_AVATAR_BUCKET).remove([uploadedAvatarPath]);
-    }
-    throw error;
-  }
-}
-
 export function calculateProfileCompletion(profile = {}) {
   const fields = ["full_name", "phone", "date_of_birth", "education_level", "address", "avatar_path"];
   const completed = fields.filter((field) => String(profile[field] || "").trim()).length;
@@ -262,37 +195,6 @@ export async function getProgramCatalog() {
     .order("title", { ascending: true });
   if (error) throw error;
   return normalizeList(data);
-}
-
-export async function getStudentProgramPreference(userId) {
-  if (!userId) return null;
-  const supabase = await getClient();
-  const { data, error } = await supabase
-    .from("student_program_preferences")
-    .select("*, programs(id, slug, title, short_description)")
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (error) throw error;
-  return data || null;
-}
-
-export async function saveStudentProgramPreference(userId, values) {
-  if (!userId) throw new Error("A signed-in learner is required.");
-  if (!values?.program_id) throw new Error("Choose a programme before saving.");
-  const supabase = await getClient();
-  const payload = {
-    user_id: userId,
-    program_id: values.program_id,
-    track_id: values.track_id || null,
-    selection_source: "self_selected"
-  };
-  const { data, error } = await supabase
-    .from("student_program_preferences")
-    .upsert(payload, { onConflict: "user_id" })
-    .select("*, programs(id, slug, title, short_description)")
-    .maybeSingle();
-  if (error) throw error;
-  return data;
 }
 
 async function getActiveEnrolmentScope(userId) {
@@ -330,21 +232,6 @@ async function getResolvedProgrammeScope(userId) {
       resolvedProgramme: primary?.programs || null,
       resolvedTrack: primary?.program_levels || null,
       preference: null
-    };
-  }
-
-  const preference = await withPortalFallback("programme preference", () => getStudentProgramPreference(userId), null);
-  if (preference?.program_id) {
-    return {
-      source: "self_selected",
-      needsProgrammeSelection: false,
-      enrolments,
-      activeEnrolments: [],
-      programIds: [preference.program_id],
-      trackIds: preference.track_id ? [preference.track_id] : [],
-      resolvedProgramme: preference.programs || null,
-      resolvedTrack: preference.program_levels || null,
-      preference
     };
   }
 
@@ -545,15 +432,17 @@ export async function getPortalArticles(userId) {
   });
 }
 
-export async function getStudentPayments(userId) {
-  const supabase = await getClient();
-  const { data, error } = await supabase
-    .from("payments")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return normalizeList(data);
+export async function getStudentActivePayments(userId) {
+  const enrolments = await getStudentEnrolments(userId);
+  return enrolments
+    .filter((item) => item.status === "active")
+    .map((item) => ({
+      id: item.id,
+      status: "active_payment",
+      programs: item.programs || null,
+      program_levels: item.program_levels || null,
+      activated_at: item.updated_at || item.created_at || null
+    }));
 }
 
 export async function getStudentCertificates(userId) {
@@ -600,13 +489,36 @@ export async function markAllNotificationsRead(userId) {
 
 export async function getStudentSupportTickets(userId) {
   const supabase = await getClient();
-  const { data, error } = await supabase
+  const { data: tickets, error } = await supabase
     .from("support_tickets")
     .select("*")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return normalizeList(data);
+  const ticketRecords = normalizeList(tickets);
+  if (!ticketRecords.length) return [];
+  const ticketIds = ticketRecords.map((ticket) => ticket.id);
+  const [{ data: messages, error: messagesError }, { data: notifications, error: notificationsError }] = await Promise.all([
+    supabase.from("support_ticket_messages").select("*").in("ticket_id", ticketIds).order("created_at", { ascending: true }),
+    supabase.from("portal_notifications").select("id, support_ticket_id, read_at").eq("user_id", userId).in("support_ticket_id", ticketIds)
+  ]);
+  if (messagesError) throw messagesError;
+  if (notificationsError) throw notificationsError;
+  return ticketRecords.map((ticket) => ({
+    ...ticket,
+    support_ticket_messages: normalizeList(messages).filter((message) => message.ticket_id === ticket.id),
+    unread_reply_count: normalizeList(notifications).filter((notification) => notification.support_ticket_id === ticket.id && !notification.read_at).length
+  }));
+}
+
+export async function replyToSupportTicket(ticketId, message) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("student_reply_to_support_ticket", {
+    target_ticket_id: ticketId,
+    reply_message: String(message || "").trim()
+  });
+  if (error) throw error;
+  return data;
 }
 
 export async function getStudentPreferences(userId) {
@@ -660,14 +572,14 @@ export async function createSupportTicket(userId, values) {
 }
 
 export async function getStudentDashboard(userId) {
-  const [enrolments, timetableResult, liveClasses, announcements, assignments, resources, payments, certificates, notifications] = await Promise.all([
+  const [enrolments, timetableResult, liveClasses, announcements, assignments, resources, activePayments, certificates, notifications] = await Promise.all([
     withPortalFallback("dashboard enrolments", () => getStudentEnrolments(userId), []),
     withPortalFallback("dashboard timetable", () => getStudentTimetable(userId), getEmptyTimetableResult()),
     withPortalFallback("dashboard live classes", () => getStudentLiveClasses(userId), []),
     withPortalFallback("dashboard announcements", () => getStudentAnnouncements(userId), []),
     withPortalFallback("dashboard assignments", () => getStudentAssignments(userId), []),
     withPortalFallback("dashboard resources", () => getStudentResources(userId), []),
-    withPortalFallback("dashboard payments", () => getStudentPayments(userId), []),
+    withPortalFallback("dashboard active payments", () => getStudentActivePayments(userId), []),
     withPortalFallback("dashboard certificates", () => getStudentCertificates(userId), []),
     withPortalFallback("dashboard notifications", () => getStudentNotifications(userId), [])
   ]);
@@ -692,14 +604,9 @@ export async function getStudentDashboard(userId) {
       const submission = normalizeList(item.assignment_submissions).find((entry) => entry.user_id === userId);
       return !submission || !["submitted", "graded"].includes(submission.status);
     }),
-    payments,
+    activePayments,
     certificates,
     notifications: notifications.slice(0, 5),
     unreadNotifications: notifications.filter((item) => !item.read_at)
   };
-}
-
-export function hasReliablePaymentStatus(payment) {
-  return ["success", "verified", "paid"].includes(String(payment?.status || payment?.provider_status || "").toLowerCase())
-    || Boolean(payment?.verified_at);
 }

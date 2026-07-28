@@ -82,7 +82,7 @@ Deno.serve(async (request) => {
       levelsResult,
       authUsers
     ] = await Promise.all([
-      admin.supabase.from("profiles").select("id, full_name, email, phone, title, avatar_path, account_status, status_changed_at, status_changed_by, status_reason, profile_completion, failed_login_attempts, created_at, updated_at"),
+      admin.supabase.from("profiles").select("id, full_name, email, phone, title, avatar_path, date_of_birth, education_level, address, account_status, status_changed_at, status_changed_by, status_reason, profile_completion, failed_login_attempts, created_at, updated_at"),
       admin.supabase.from("user_roles").select("user_id, role"),
       admin.supabase.from("tutor_profiles").select("user_id, title, specialisation, professional_bio, qualifications, teaching_experience, availability"),
       admin.supabase.from("tutor_program_assignments").select("id, tutor_id, program_id, track_id, active, created_at, updated_at").eq("active", true),
@@ -140,6 +140,9 @@ Deno.serve(async (request) => {
         email: profile.email || authUser.email || "",
         phone: profile.phone || "",
         avatar_path: profile.avatar_path || "",
+        date_of_birth: profile.date_of_birth || null,
+        education_level: profile.education_level || "",
+        address: profile.address || "",
         account_status: profile.account_status || "inactive",
         status_changed_at: profile.status_changed_at || null,
         status_changed_by: profile.status_changed_by || null,

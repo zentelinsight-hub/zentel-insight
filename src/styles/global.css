@@ -2296,6 +2296,10 @@ textarea:focus,
   gap: var(--space-5);
 }
 
+.admin-people-directory-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .portal-menu-button {
   display: none;
 }
@@ -2842,6 +2846,33 @@ body.portal-route-active .site-footer {
 
 .portal-record-card p {
   margin: 0;
+}
+
+.support-thread,
+.support-reply-form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.support-message {
+  display: grid;
+  gap: var(--space-1);
+  max-width: min(100%, 680px);
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--color-border-strong);
+  background: var(--color-bg-alt);
+}
+
+.support-message.admin {
+  border-left-color: var(--brand-primary);
+}
+
+.support-message.student {
+  border-left-color: var(--color-success);
+}
+
+.support-message small {
+  color: var(--color-muted);
 }
 
 .portal-mini-details {

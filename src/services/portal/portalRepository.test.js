@@ -79,13 +79,14 @@ describe("portal repository fallbacks", () => {
     expect(content.page_slug).toBe("dashboard");
   });
 
-  it("keeps the dashboard usable when a saved programme timetable query fails", async () => {
+  it("keeps the dashboard usable while an Admin programme assignment is pending", async () => {
     const dashboard = await getStudentDashboard("user-1");
 
-    expect(dashboard.resolvedProgramme.title).toBe("Graphic Design");
-    expect(dashboard.programmeSource).toBe("self_selected");
-    expect(dashboard.needsProgrammeSelection).toBe(false);
+    expect(dashboard.resolvedProgramme).toBeNull();
+    expect(dashboard.programmeSource).toBe("none");
+    expect(dashboard.needsProgrammeSelection).toBe(true);
     expect(dashboard.timetable).toEqual([]);
     expect(dashboard.upcomingClass).toBeNull();
+    expect(supabaseMocks.from).not.toHaveBeenCalledWith("student_program_preferences");
   });
 });

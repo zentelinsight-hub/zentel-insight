@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   Bell,
   BookOpen,
@@ -11,8 +11,6 @@ import {
   MessageSquare,
   Newspaper,
   Settings,
-  Trash2,
-  Upload,
   UserRound,
   Users,
   Video
@@ -27,8 +25,7 @@ import { getTutorDashboardData } from "../services/tutorService";
 import {
   calculateProfileCompletion,
   markAllNotificationsRead,
-  markNotificationRead,
-  updateStudentProfile as updateOwnProfilePicture
+  markNotificationRead
 } from "../services/portal/portalRepository";
 import { formatDateTime } from "../utils/format";
 import { usePageMeta } from "../utils/usePageMeta";
@@ -149,8 +146,8 @@ function DashboardSection({ data, onSaved }) {
         <article className="dashboard-card">
           <Users size={22} aria-hidden="true" />
           <span>Students</span>
-          <strong>{data.officialStudents.length + data.preferenceStudents.length}</strong>
-          <small>Official and preference-based connections</small>
+          <strong>{data.officialStudents.length}</strong>
+          <small>Official Admin-assigned enrolments</small>
         </article>
         <article className="dashboard-card">
           <Video size={22} aria-hidden="true" />
@@ -170,93 +167,23 @@ function DashboardSection({ data, onSaved }) {
   );
 }
 
-function ProfileSection({ data, onSaved }) {
-  const { profile, refreshProfile, user } = useAuth();
-  const [avatarFile, setAvatarFile] = useState(null);
-  const [avatarPreview, setAvatarPreview] = useState(profile?.avatar_url || "");
-  const [removeAvatar, setRemoveAvatar] = useState(false);
-  const [status, setStatus] = useState({ type: "", message: "" });
-  const [saving, setSaving] = useState(false);
-  const avatarObjectUrlRef = useRef("");
-
-  useEffect(() => {
-    setAvatarPreview(profile?.avatar_url || "");
-    setAvatarFile(null);
-    setRemoveAvatar(false);
-    if (avatarObjectUrlRef.current) URL.revokeObjectURL(avatarObjectUrlRef.current);
-    avatarObjectUrlRef.current = "";
-  }, [profile]);
-
-  useEffect(() => () => {
-    if (avatarObjectUrlRef.current) URL.revokeObjectURL(avatarObjectUrlRef.current);
-  }, []);
-
-  function selectAvatar(event) {
-    const file = event.target.files?.[0] || null;
-    if (!file) return;
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 3 * 1024 * 1024) {
-      setStatus({ type: "warning", message: "Upload a JPEG, PNG or WebP image no larger than 3 MB." });
-      return;
-    }
-    if (avatarObjectUrlRef.current) URL.revokeObjectURL(avatarObjectUrlRef.current);
-    avatarObjectUrlRef.current = URL.createObjectURL(file);
-    setAvatarPreview(avatarObjectUrlRef.current);
-    setAvatarFile(file);
-    setRemoveAvatar(false);
-    setStatus({ type: "", message: "" });
-  }
-
-  async function submit(event) {
-    event.preventDefault();
-    if (!avatarFile && !removeAvatar) return;
-    setSaving(true);
-    setStatus({ type: "", message: "" });
-    try {
-      await updateOwnProfilePicture(user.id, {
-        ...data.profile,
-        avatarFile,
-        removeAvatar,
-        avatar_path: profile?.avatar_path || data.profile?.avatar_path || "",
-        previous_avatar_path: profile?.avatar_path || data.profile?.avatar_path || ""
-      });
-      await refreshProfile();
-      setStatus({ type: "success", message: "Profile picture updated." });
-      onSaved();
-    } catch (error) {
-      setStatus({ type: "warning", message: error.message || "Professional profile could not be saved." });
-    } finally {
-      setSaving(false);
-    }
-  }
-
+function ProfileSection({ data }) {
+  const { profile, user } = useAuth();
   return (
     <div className="portal-page">
       <PageHeading
         title="My professional profile."
-        description="Review approved teaching information and manage your profile picture. Professional credentials and programme assignments are Admin-managed."
+        description="Review approved teaching information. All credentials, profile details and programme assignments are Admin-managed."
       />
-      <form className="form-card management-form" onSubmit={submit}>
+      <article className="form-card management-form">
         <div className="portal-profile-summary">
-          <div className="portal-avatar-uploader">
-            <span className="portal-avatar xl">
-              {avatarPreview ? <img src={avatarPreview} alt="" /> : <span>{tutorDisplayName(data.profile).slice(0, 1).toUpperCase()}</span>}
-            </span>
-            <div>
-              <label className="button button-secondary">
-                <Upload size={16} aria-hidden="true" />Change Photo
-                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={selectAvatar} />
-              </label>
-              {avatarPreview ? (
-                <button className="button button-secondary" type="button" onClick={() => { setAvatarFile(null); setAvatarPreview(""); setRemoveAvatar(Boolean(profile?.avatar_path)); }}>
-                  <Trash2 size={16} aria-hidden="true" />Remove Photo
-                </button>
-              ) : null}
-            </div>
-          </div>
+          <span className="portal-avatar xl">
+            {profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : <span>{tutorDisplayName(data.profile).slice(0, 1).toUpperCase()}</span>}
+          </span>
           <div className="portal-metric-card">
             <span>Profile completion</span>
             <strong>{Number(data.profile?.profile_completion || calculateProfileCompletion(data.profile))}%</strong>
-            <small>Admin-managed credentials and your profile picture contribute to completion.</small>
+            <small>Admin-managed profile and credential completion.</small>
           </div>
         </div>
         <dl className="portal-mini-details">
@@ -267,10 +194,8 @@ function ProfileSection({ data, onSaved }) {
           <div><dt>Qualifications</dt><dd>{data.tutorProfile?.qualifications || "Not recorded"}</dd></div>
           <div><dt>Availability</dt><dd>{data.tutorProfile?.availability || "Not recorded"}</dd></div>
         </dl>
-        <span className="portal-tag">Professional details are Admin-managed</span>
-        {status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}
-        <button className="button button-primary" type="submit" disabled={saving || (!avatarFile && !removeAvatar)}>{saving ? "Saving" : "Save Photo"}</button>
-      </form>
+        <span className="portal-tag">All account details are Admin-managed</span>
+      </article>
     </div>
   );
 }
@@ -296,7 +221,7 @@ function ProgrammeSection({ data }) {
 function StudentsSection({ data }) {
   return (
     <div className="portal-page">
-      <PageHeading title="My students." description="Official enrolments are separated from self-selected programme preferences." />
+      <PageHeading title="My students." description="Students appear here only after an official Admin-managed enrolment is assigned to your programme." />
       <div className="portal-list">
         {data.officialStudents.map((student) => (
           <article className="portal-record-card" key={`official-${student.id}`}>
@@ -305,14 +230,7 @@ function StudentsSection({ data }) {
             <p>{student.programs?.title || "Programme"} {student.program_levels?.level_name ? `| ${student.program_levels.level_name}` : ""}</p>
           </article>
         ))}
-        {data.preferenceStudents.map((student) => (
-          <article className="portal-record-card" key={`preference-${student.id}`}>
-            <p className="eyebrow">Programme preference - enrolment not verified</p>
-            <h3>{student.profiles?.full_name || "Student"}</h3>
-            <p>{student.programs?.title || "Programme"} {student.program_levels?.level_name ? `| ${student.program_levels.level_name}` : ""}</p>
-          </article>
-        ))}
-        {!data.officialStudents.length && !data.preferenceStudents.length ? <EmptyState message="No students are connected to your assigned programme yet." /> : null}
+        {!data.officialStudents.length ? <EmptyState message="No officially enrolled students are connected to your assigned programme yet." /> : null}
       </div>
     </div>
   );
@@ -320,7 +238,6 @@ function StudentsSection({ data }) {
 
 function TutorClassroomSection({ data, onSaved }) {
   const officialCount = data.officialStudents.length;
-  const preferenceCount = data.preferenceStudents.length;
   const primaryAssignment = data.assignments[0] || null;
 
   return (
@@ -339,8 +256,8 @@ function TutorClassroomSection({ data, onSaved }) {
         <article className="dashboard-card">
           <Users size={22} aria-hidden="true" />
           <span>Students</span>
-          <strong>{officialCount + preferenceCount}</strong>
-          <small>{officialCount} official, {preferenceCount} self-selected</small>
+          <strong>{officialCount}</strong>
+          <small>{officialCount} official Admin-assigned enrolment{officialCount === 1 ? "" : "s"}</small>
         </article>
         <article className="dashboard-card">
           <Video size={22} aria-hidden="true" />
@@ -366,14 +283,7 @@ function TutorClassroomSection({ data, onSaved }) {
                 <span className="portal-tag success">Official</span>
               </div>
             ))}
-            {data.preferenceStudents.slice(0, 4).map((student) => (
-              <div className="portal-record-card" key={student.id}>
-                <h3>{student.profiles?.full_name || "Student"}</h3>
-                <p>{student.programs?.title || "Programme"} {student.program_levels?.level_name ? `/ ${student.program_levels.level_name}` : ""}</p>
-                <span className="portal-tag warning">Self-selected</span>
-              </div>
-            ))}
-            {!officialCount && !preferenceCount ? <EmptyState message="No students are connected to your assigned programme yet." /> : null}
+            {!officialCount ? <EmptyState message="No officially enrolled students are connected to your assigned programme yet." /> : null}
           </div>
         </article>
         <article className="notice-card">
@@ -537,7 +447,7 @@ export default function TutorDashboard() {
   return (
     <TutorFrame data={data} onRealtimeChange={dataQuery.refetch}>
       {activeSection === "dashboard" ? <DashboardSection data={data} onSaved={dataQuery.refetch} /> : null}
-      {activeSection === "profile" ? <ProfileSection data={data} onSaved={dataQuery.refetch} /> : null}
+      {activeSection === "profile" ? <ProfileSection data={data} /> : null}
       {activeSection === "programme" ? <ProgrammeSection data={data} /> : null}
       {activeSection === "students" ? <StudentsSection data={data} /> : null}
       {activeSection === "classroom" ? <TutorClassroomSection data={data} onSaved={dataQuery.refetch} /> : null}

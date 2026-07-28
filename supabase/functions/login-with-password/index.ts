@@ -64,7 +64,23 @@ Deno.serve(async (request) => {
     const profile = await getProfileByEmail(service, email);
     const profileRole = profile?.id ? await getRole(service, profile.id) : "student";
 
-    if (profile?.account_status === "suspended") {
+    if (profileRole === "admin" && profile?.id) {
+      const { error: adminStatusError } = await service
+        .from("profiles")
+        .update({
+          account_status: "active",
+          failed_login_attempts: 0,
+          last_failed_login_at: null,
+          suspended_at: null,
+          status_reason: null
+        })
+        .eq("id", profile.id);
+      if (adminStatusError) throw adminStatusError;
+      profile.account_status = "active";
+      profile.failed_login_attempts = 0;
+    }
+
+    if (profileRole !== "admin" && profile?.account_status === "suspended") {
       return jsonResponse({ ok: false, code: "account_suspended", error: suspendedMessage }, 423, request);
     }
 
@@ -117,7 +133,7 @@ Deno.serve(async (request) => {
     }
     const authenticatedRole = await getRole(service, data.user.id);
 
-    if (authenticatedProfile?.account_status === "suspended") {
+    if (authenticatedRole !== "admin" && authenticatedProfile?.account_status === "suspended") {
       await passwordClient.auth.signOut();
       return jsonResponse({ ok: false, code: "account_suspended", error: suspendedMessage }, 423, request);
     }

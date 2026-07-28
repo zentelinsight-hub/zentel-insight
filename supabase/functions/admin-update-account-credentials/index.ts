@@ -26,6 +26,9 @@ Deno.serve(async (request) => {
     const userId = clean(body.userId || body.user_id);
     const email = normalizeEmail(body.email);
     const newPassword = String(body.newPassword || body.new_password || "");
+    const dateOfBirth = clean(body.dateOfBirth || body.date_of_birth) || null;
+    const educationLevel = clean(body.educationLevel || body.education_level);
+    const address = clean(body.address);
 
     if (!userId) throw new Error("Select a Student or Tutor account before saving.");
     if (!isEmail(email)) throw new Error("Enter a valid account email address.");
@@ -63,7 +66,12 @@ Deno.serve(async (request) => {
 
     const { error: profileError } = await admin.supabase
       .from("profiles")
-      .update({ email })
+      .update({
+        email,
+        date_of_birth: dateOfBirth,
+        education_level: educationLevel,
+        address
+      })
       .eq("id", userId);
     if (profileError) {
       if (email !== previousEmail) {
@@ -80,7 +88,8 @@ Deno.serve(async (request) => {
       metadata: {
         role: targetRole,
         emailChanged: email !== previousEmail,
-        passwordChanged: Boolean(newPassword)
+        passwordChanged: Boolean(newPassword),
+        profileFieldsChanged: true
       }
     });
 

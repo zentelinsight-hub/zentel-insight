@@ -1,15 +1,13 @@
 /** @vitest-environment jsdom */
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthContext } from "../context/authContextCore";
 import { ThemeProvider } from "../context/ThemeContext";
 import { PortalLayout, PortalOverview, PortalProfile, PortalSection } from "./Portal";
-import { saveStudentProgramPreference } from "../services/portal/portalRepository";
 
 const hookMocks = vi.hoisted(() => ({
-  useProgramCatalog: vi.fn(),
   usePortalPageContent: vi.fn(),
   useStudentDashboard: vi.fn(),
   useStudentProfile: vi.fn(),
@@ -19,11 +17,10 @@ const hookMocks = vi.hoisted(() => ({
   useStudentAssignments: vi.fn(),
   useStudentResources: vi.fn(),
   usePortalArticles: vi.fn(),
-  useStudentPayments: vi.fn(),
+  useStudentActivePayments: vi.fn(),
   useStudentCertificates: vi.fn(),
   useStudentNotifications: vi.fn(),
   useStudentPreferences: vi.fn(),
-  useStudentProgramPreference: vi.fn(),
   useStudentSupportTickets: vi.fn()
 }));
 
@@ -31,7 +28,6 @@ vi.mock("../hooks/portal/usePortalData", () => hookMocks);
 
 vi.mock("../services/authService", () => ({
   claimMyEnrolments: vi.fn(async () => ({ ok: true })),
-  requestPasswordReset: vi.fn(async () => ({ ok: true, message: "sent" }))
 }));
 
 vi.mock("../services/portal/portalRepository", async () => {
@@ -41,8 +37,7 @@ vi.mock("../services/portal/portalRepository", async () => {
     createSupportTicket: vi.fn(),
     markAllNotificationsRead: vi.fn(),
     markNotificationRead: vi.fn(),
-    saveStudentProgramPreference: vi.fn(),
-    updateStudentProfile: vi.fn()
+    replyToSupportTicket: vi.fn()
   };
 });
 
@@ -127,7 +122,7 @@ beforeEach(() => {
       announcements: "Announcements",
       assignments: "Assignments",
       resources: "Learning Resources",
-      payments: "Payments",
+      payments: "Active Payment",
       certificates: "Certificates",
       notifications: "Notifications",
       articles: "Learning Articles",
@@ -138,22 +133,17 @@ beforeEach(() => {
     empty_title: "No records",
     empty_message: "Records are listed after they are available."
   }));
-  saveStudentProgramPreference.mockResolvedValue({
-    id: "preference-1",
-    user_id: user.id,
-    program_id: "program-1"
-  });
   hookMocks.useStudentDashboard.mockReturnValue(query({
     activeEnrolments: [],
     pendingAssignments: [],
     resources: [],
-    payments: [],
+    activePayments: [],
     certificates: [],
     unreadNotifications: [],
     timetable: [],
     resolvedProgramme: { id: "program-1", title: "Graphic Design" },
     resolvedTrack: null,
-    programmeSource: "self_selected",
+    programmeSource: "official",
     needsProgrammeSelection: false,
     upcomingClass: null,
     todayClass: null,
@@ -161,14 +151,11 @@ beforeEach(() => {
   }));
   hookMocks.useStudentProfile.mockReturnValue(query(profile));
   hookMocks.useStudentEnrolments.mockReturnValue(query([]));
-  hookMocks.useProgramCatalog.mockReturnValue(query([
-    { id: "program-1", title: "Graphic Design", short_description: "Design foundations" }
-  ]));
   hookMocks.useStudentTimetable.mockReturnValue(query({
     records: [],
     resolvedProgramme: { id: "program-1", title: "Graphic Design" },
     resolvedTrack: null,
-    source: "self_selected",
+    source: "official",
     needsProgrammeSelection: false,
     todayClass: null,
     nextClass: null
@@ -177,20 +164,13 @@ beforeEach(() => {
   hookMocks.useStudentAssignments.mockReturnValue(query([]));
   hookMocks.useStudentResources.mockReturnValue(query([]));
   hookMocks.usePortalArticles.mockReturnValue(query([]));
-  hookMocks.useStudentPayments.mockReturnValue(query([]));
+  hookMocks.useStudentActivePayments.mockReturnValue(query([]));
   hookMocks.useStudentCertificates.mockReturnValue(query([]));
   hookMocks.useStudentNotifications.mockReturnValue(query([]));
   hookMocks.useStudentPreferences.mockReturnValue(query({
     email_notifications: true,
     portal_reminders: true,
     session_security_warnings: true
-  }));
-  hookMocks.useStudentProgramPreference.mockReturnValue(query({
-    id: "preference-1",
-    user_id: user.id,
-    program_id: "program-1",
-    selection_source: "self_selected",
-    programs: { id: "program-1", title: "Graphic Design" }
   }));
   hookMocks.useStudentSupportTickets.mockReturnValue(query([]));
 });
@@ -233,7 +213,7 @@ describe("Portal routes", () => {
     ["/portal/announcements", "Announcements", "useStudentAnnouncements"],
     ["/portal/assignments", "Assignments", "useStudentAssignments"],
     ["/portal/resources", "Learning Resources", "useStudentResources"],
-    ["/portal/payments", "Payments", "useStudentPayments"],
+    ["/portal/payments", "Active Payment", "useStudentActivePayments"],
     ["/portal/certificates", "Certificates", "useStudentCertificates"],
     ["/portal/notifications", "Notifications", "useStudentNotifications"],
     ["/portal/articles", "Learning Articles", "usePortalArticles"],
@@ -246,43 +226,17 @@ describe("Portal routes", () => {
     expect(screen.queryByText(/signed-in learner/i)).not.toBeInTheDocument();
   });
 
-  it("requires programme selection only when no active programme or preference exists", async () => {
-    hookMocks.useStudentProgramPreference.mockReturnValue(query(null));
-
+  it("does not allow a Student to choose or change a programme", () => {
     renderPortal("/portal");
-
-    expect(await screen.findByRole("heading", { name: "Choose Your Programme" })).toBeInTheDocument();
-
-    cleanup();
-    hookMocks.useStudentEnrolments.mockReturnValue(query([
-      {
-        id: "enrolment-1",
-        user_id: user.id,
-        status: "active",
-        program_id: "program-1",
-        programs: { id: "program-1", title: "Graphic Design" }
-      }
-    ]));
-
-    renderPortal("/portal");
-
-    await waitFor(() => expect(screen.queryByRole("heading", { name: "Choose Your Programme" })).not.toBeInTheDocument());
+    expect(screen.queryByRole("heading", { name: "Choose Your Programme" })).not.toBeInTheDocument();
+    expect(screen.getAllByText("Programme assignment pending").length).toBeGreaterThan(0);
   });
 
-  it("saves the self-selected programme preference from onboarding", async () => {
-    hookMocks.useStudentProgramPreference.mockReturnValue(query(null));
-    hookMocks.useProgramCatalog.mockReturnValue(query([
-      { id: "program-1", title: "Graphic Design", short_description: "Design foundations" },
-      { id: "program-2", title: "Data Analysis", short_description: "Data reporting" }
-    ]));
-
-    renderPortal("/portal");
-
-    await screen.findByRole("heading", { name: "Choose Your Programme" });
-    fireEvent.change(screen.getByPlaceholderText("Type a programme name"), { target: { value: "Data" } });
-    fireEvent.click(screen.getByRole("option", { name: /Data Analysis/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Save Programme" }));
-
-    await waitFor(() => expect(saveStudentProgramPreference).toHaveBeenCalledWith(user.id, { program_id: "program-2" }));
+  it("shows programme and credentials as Admin-managed in settings", () => {
+    renderPortal("/portal/settings");
+    expect(screen.getByRole("heading", { name: "Assigned programme" })).toBeInTheDocument();
+    expect(screen.getByText(/assigned only by Zentel Insight Admin/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Save Programme/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /password reset/i })).not.toBeInTheDocument();
   });
 });

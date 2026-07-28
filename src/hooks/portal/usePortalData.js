@@ -11,10 +11,9 @@ import {
   getStudentEnrolments,
   getStudentLiveClasses,
   getStudentNotifications,
-  getStudentPayments,
+  getStudentActivePayments,
   getPortalArticles,
   getStudentPreferences,
-  getStudentProgramPreference,
   getStudentProfile,
   getStudentResources,
   getStudentSupportTickets,
@@ -124,8 +123,8 @@ export function usePortalArticles(userId) {
   return usePortalQuery(() => getPortalArticles(userId), [userId], { enabled: Boolean(userId) });
 }
 
-export function useStudentPayments(userId) {
-  return usePortalQuery(() => getStudentPayments(userId), [userId], { enabled: Boolean(userId) });
+export function useStudentActivePayments(userId) {
+  return usePortalQuery(() => getStudentActivePayments(userId), [userId], { enabled: Boolean(userId) });
 }
 
 export function useStudentCertificates(userId) {
@@ -142,8 +141,4 @@ export function useStudentSupportTickets(userId) {
 
 export function useStudentPreferences(userId) {
   return usePortalQuery(() => getStudentPreferences(userId), [userId], { enabled: Boolean(userId) });
-}
-
-export function useStudentProgramPreference(userId) {
-  return usePortalQuery(() => getStudentProgramPreference(userId), [userId], { enabled: Boolean(userId) });
 }

@@ -144,6 +144,7 @@ function AdminFrame({ data, onRealtimeChange, children }) {
         "program_levels",
         "programs",
         "resources",
+        "support_ticket_messages",
         "support_tickets",
         "timetable_entries",
         "tutor_profiles",
@@ -477,20 +478,21 @@ function AssignmentForms({ data, onSaved }) {
   );
 }
 
-function buildStudentEditForm(student = {}) {
+function buildStudentEditForm(student) {
+  const record = student || {};
   return {
-    id: student.id || "",
-    full_name: student.full_name || "",
-    email: student.email || "",
+    id: record.id || "",
+    full_name: record.full_name || "",
+    email: record.email || "",
     new_password: "",
-    phone: student.phone || "",
-    date_of_birth: student.date_of_birth || "",
-    education_level: student.education_level || "",
-    address: student.address || "",
-    program_id: student.program_id || "",
-    program_level_id: student.program_level_id || "",
-    account_status: student.account_status || "inactive",
-    status_reason: student.status_reason || ""
+    phone: record.phone || "",
+    date_of_birth: record.date_of_birth || "",
+    education_level: record.education_level || "",
+    address: record.address || "",
+    program_id: record.program_id || "",
+    program_level_id: record.program_level_id || "",
+    account_status: record.account_status || "inactive",
+    status_reason: record.status_reason || ""
   };
 }
 
@@ -581,23 +583,27 @@ function StudentEditPanel({ student, programs, onClose, onSaved }) {
   );
 }
 
-function buildTutorEditForm(tutor = {}) {
+function buildTutorEditForm(tutor) {
+  const record = tutor || {};
   return {
-    user_id: tutor.user_id || "",
-    title: tutor.title || "Mr",
-    full_name: tutor.full_name || "",
-    email: tutor.email || "",
+    user_id: record.user_id || "",
+    title: record.title || "Mr",
+    full_name: record.full_name || "",
+    email: record.email || "",
     new_password: "",
-    phone: tutor.phone || "",
-    specialisation: tutor.specialisation || "",
-    professional_bio: tutor.professional_bio || "",
-    qualifications: tutor.qualifications || "",
-    teaching_experience: tutor.teaching_experience || "",
-    availability: tutor.availability || "",
-    program_id: tutor.program_id || "",
-    track_id: tutor.track_id || "",
-    account_status: tutor.account_status || "inactive",
-    status_reason: tutor.status_reason || ""
+    phone: record.phone || "",
+    date_of_birth: record.date_of_birth || "",
+    education_level: record.education_level || "",
+    address: record.address || "",
+    specialisation: record.specialisation || "",
+    professional_bio: record.professional_bio || "",
+    qualifications: record.qualifications || "",
+    teaching_experience: record.teaching_experience || "",
+    availability: record.availability || "",
+    program_id: record.program_id || "",
+    track_id: record.track_id || "",
+    account_status: record.account_status || "inactive",
+    status_reason: record.status_reason || ""
   };
 }
 
@@ -662,6 +668,8 @@ function TutorEditPanel({ tutor, programs, onClose, onSaved }) {
         <label><span>Email address</span><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label>
         <label><span>New password</span><input type="password" autoComplete="new-password" value={form.new_password} onChange={(event) => setForm({ ...form, new_password: event.target.value })} /></label>
         <label><span>Phone</span><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
+        <label><span>Date of birth</span><input type="date" value={form.date_of_birth || ""} onChange={(event) => setForm({ ...form, date_of_birth: event.target.value })} /></label>
+        <label><span>Education level</span><input value={form.education_level} onChange={(event) => setForm({ ...form, education_level: event.target.value })} /></label>
         <label><span>Specialisation</span><input value={form.specialisation} onChange={(event) => setForm({ ...form, specialisation: event.target.value })} /></label>
         <label>
           <span>Programme</span>
@@ -686,6 +694,7 @@ function TutorEditPanel({ tutor, programs, onClose, onSaved }) {
           </select>
         </label>
       </div>
+      <label><span>Address</span><input value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} /></label>
       <label><span>Professional bio</span><textarea value={form.professional_bio} onChange={(event) => setForm({ ...form, professional_bio: event.target.value })} /></label>
       <label><span>Qualifications</span><textarea value={form.qualifications} onChange={(event) => setForm({ ...form, qualifications: event.target.value })} /></label>
       <label><span>Teaching experience</span><textarea value={form.teaching_experience} onChange={(event) => setForm({ ...form, teaching_experience: event.target.value })} /></label>
@@ -697,7 +706,7 @@ function TutorEditPanel({ tutor, programs, onClose, onSaved }) {
   );
 }
 
-function PeopleSection({ data, onSaved, activeSection = "people" }) {
+export function PeopleSection({ data, onSaved, activeSection = "people" }) {
   const [studentSearchInput, setStudentSearchInput] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
   const [studentStatusFilter, setStudentStatusFilter] = useState("all");
@@ -776,12 +785,20 @@ function PeopleSection({ data, onSaved, activeSection = "people" }) {
   }, [data.tutorAssignments, data.tutors, tutorFilter, tutorSearch]);
   const studentFallbackRecords = localStudents.slice((studentPage - 1) * 25, studentPage * 25);
   const tutorFallbackRecords = localTutors.slice((tutorPage - 1) * 25, tutorPage * 25);
-  const studentRecords = studentsQuery.error ? studentFallbackRecords : studentsQuery.data?.records || [];
-  const studentTotal = studentsQuery.error ? localStudents.length : studentsQuery.data?.total || 0;
-  const studentPageCount = Math.max(1, studentsQuery.error ? Math.ceil(localStudents.length / 25) : studentsQuery.data?.pageCount || 1);
-  const tutorRecords = tutorsQuery.error ? tutorFallbackRecords : tutorsQuery.data?.records || [];
-  const tutorTotal = tutorsQuery.error ? localTutors.length : tutorsQuery.data?.total || 0;
-  const tutorPageCount = Math.max(1, tutorsQuery.error ? Math.ceil(localTutors.length / 25) : tutorsQuery.data?.pageCount || 1);
+  const remoteStudentRecords = studentsQuery.data?.records || [];
+  const remoteTutorRecords = tutorsQuery.data?.records || [];
+  const useLocalStudents = Boolean(studentsQuery.error)
+    || (studentsQuery.loading && localStudents.length > 0)
+    || (!studentsQuery.loading && remoteStudentRecords.length === 0 && localStudents.length > 0);
+  const useLocalTutors = Boolean(tutorsQuery.error)
+    || (tutorsQuery.loading && localTutors.length > 0)
+    || (!tutorsQuery.loading && remoteTutorRecords.length === 0 && localTutors.length > 0);
+  const studentRecords = useLocalStudents ? studentFallbackRecords : remoteStudentRecords;
+  const studentTotal = useLocalStudents ? localStudents.length : Number(studentsQuery.data?.total || 0);
+  const studentPageCount = Math.max(1, useLocalStudents ? Math.ceil(localStudents.length / 25) : Number(studentsQuery.data?.pageCount || 1));
+  const tutorRecords = useLocalTutors ? tutorFallbackRecords : remoteTutorRecords;
+  const tutorTotal = useLocalTutors ? localTutors.length : Number(tutorsQuery.data?.total || 0);
+  const tutorPageCount = Math.max(1, useLocalTutors ? Math.ceil(localTutors.length / 25) : Number(tutorsQuery.data?.pageCount || 1));
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -842,7 +859,7 @@ function PeopleSection({ data, onSaved, activeSection = "people" }) {
         onClose={() => setSelectedTutor(null)}
         onSaved={handleTutorsChanged}
       />
-      <div className="portal-grid">
+      <div className="portal-grid admin-people-directory-grid">
         {showStudents ? <article className="notice-card">
           <div className="management-card-heading">
             <div>
@@ -918,7 +935,7 @@ function PeopleSection({ data, onSaved, activeSection = "people" }) {
                     </td>
                   </tr>
                 ))}
-                {studentsQuery.loading ? <tr><td colSpan="9">Loading students...</td></tr> : null}
+                {studentsQuery.loading && !studentRecords.length ? <tr><td colSpan="9">Loading students...</td></tr> : null}
                 {!studentsQuery.loading && !studentRecords.length ? <tr><td colSpan="9">No students match this search.</td></tr> : null}
               </tbody>
             </table>
@@ -991,7 +1008,7 @@ function PeopleSection({ data, onSaved, activeSection = "people" }) {
                     </td>
                   </tr>
                 ))}
-                {tutorsQuery.loading ? <tr><td colSpan="9">Loading tutors...</td></tr> : null}
+                {tutorsQuery.loading && !tutorRecords.length ? <tr><td colSpan="9">Loading tutors...</td></tr> : null}
                 {!tutorsQuery.loading && !tutorRecords.length ? <tr><td colSpan="9">No Tutors match this search.</td></tr> : null}
               </tbody>
             </table>
@@ -1393,15 +1410,25 @@ function PaymentsSection({ data }) {
 
 function SupportSection({ data, onSaved }) {
   const [responses, setResponses] = useState({});
+  const [savingTicketId, setSavingTicketId] = useState("");
   const [status, setStatus] = useState({ type: "", message: "" });
 
-  async function respond(ticket) {
+  async function updateTicket(ticket, nextStatus) {
+    const response = String(responses[ticket.id] || "").trim();
+    if (!response && nextStatus === ticket.status) {
+      setStatus({ type: "warning", message: "Add a response or change the ticket status." });
+      return;
+    }
+    setSavingTicketId(ticket.id);
     try {
-      await respondToSupportTicket({ id: ticket.id, response: responses[ticket.id] || "", status: "in_progress" });
-      setStatus({ type: "success", message: "Support response saved." });
+      await respondToSupportTicket({ id: ticket.id, response, status: nextStatus });
+      setResponses((current) => ({ ...current, [ticket.id]: "" }));
+      setStatus({ type: "success", message: nextStatus === "resolved" ? "Ticket marked resolved and the Student was notified." : "Support response sent and marked unread for the Student." });
       onSaved();
     } catch (error) {
       setStatus({ type: "warning", message: error.message || "Support response could not be saved." });
+    } finally {
+      setSavingTicketId("");
     }
   }
 
@@ -1416,15 +1443,32 @@ function SupportSection({ data, onSaved }) {
               <p className="eyebrow">{ticket.status} | {formatDateTime(ticket.created_at)}</p>
               <h3>{ticket.subject}</h3>
               <p>{ticket.message}</p>
-              {ticket.response ? <p><strong>Current response:</strong> {ticket.response}</p> : null}
+              <div className="support-thread" aria-label={`Messages for ${ticket.subject}`}>
+                {(ticket.support_ticket_messages || []).slice().sort((left, right) => String(left.created_at).localeCompare(String(right.created_at))).map((message) => (
+                  <div className={`support-message ${message.sender_role}`} key={message.id}>
+                    <strong>{message.sender_role === "admin" ? "Admin" : "Student"}</strong>
+                    <p>{message.message}</p>
+                    <small>{formatDateTime(message.created_at)}</small>
+                  </div>
+                ))}
+                {!(ticket.support_ticket_messages || []).length && ticket.response ? <div className="support-message admin"><strong>Admin</strong><p>{ticket.response}</p></div> : null}
+              </div>
             </div>
-            <label>
-              <span>Response</span>
-              <textarea value={responses[ticket.id] || ""} onChange={(event) => setResponses({ ...responses, [ticket.id]: event.target.value })} />
-            </label>
-            <button className="button button-secondary" type="button" onClick={() => respond(ticket)}>Save Response</button>
+            {!["resolved", "closed"].includes(ticket.status) ? (
+              <>
+                <label>
+                  <span>Response</span>
+                  <textarea value={responses[ticket.id] || ""} onChange={(event) => setResponses({ ...responses, [ticket.id]: event.target.value })} />
+                </label>
+                <div className="button-row">
+                  <button className="button button-secondary" type="button" disabled={savingTicketId === ticket.id} onClick={() => updateTicket(ticket, "in_progress")}>Send Reply</button>
+                  <button className="button button-primary" type="button" disabled={savingTicketId === ticket.id} onClick={() => updateTicket(ticket, "resolved")}>Mark Resolved</button>
+                </div>
+              </>
+            ) : <p className="form-status success">Resolved. This ticket no longer accepts Student replies.</p>}
           </article>
         ))}
+        {!data.supportTickets.length ? <div className="notice-card"><p>No support tickets have been submitted.</p></div> : null}
       </div>
     </div>
   );
