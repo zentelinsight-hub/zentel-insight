@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, BookOpen, Check, CreditCard, HelpCircle, Wrench } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import BrandLogo from "../components/BrandLogo";
+import ProgramBanner from "../components/ProgramBanner";
 import SectionHeader from "../components/SectionHeader";
 import { getProgramBySlug } from "../data/programs";
 import { usePublicProgram } from "../hooks/usePublicCatalog";
@@ -97,59 +98,62 @@ export default function ProgramDetail() {
       <section className="page-hero visual-section program-detail-hero">
         <div className="visual-section__background" aria-hidden="true" />
         <div className="visual-section__overlay" aria-hidden="true" />
-        <div className="container split-section visual-section__content">
-          <div>
-            <BrandLogo brand="main" size="auth" className="hero-brand-logo" />
-            <p className="eyebrow">Program details</p>
-            <h1>{program.title}</h1>
-            <p>{program.fullDescription}</p>
-            <div className="hero-actions">
-              <Link className="button button-secondary" to="/programs">
-                Back to Programs
-              </Link>
+        <div className="container visual-section__content program-detail-hero__content">
+          <ProgramBanner program={program} placement="detail" />
+          <div className="split-section program-detail-hero__details">
+            <div>
+              <BrandLogo brand="main" size="auth" className="hero-brand-logo" />
+              <p className="eyebrow">Program details</p>
+              <h1>{program.title}</h1>
+              <p>{program.fullDescription}</p>
+              <div className="hero-actions">
+                <Link className="button button-secondary" to="/programs">
+                  Back to Programs
+                </Link>
+              </div>
             </div>
+            <aside className="form-card level-selector-card">
+              <span className="program-icon" aria-hidden="true">
+                <ProgramIcon size={26} />
+              </span>
+              <h2>Select Track</h2>
+              <p className="selection-empty">No track selected. Choose one track to enable enrolment.</p>
+              <div className="level-options" role="radiogroup" aria-label="Program track">
+                {program.levels.map((level) => (
+                  <button
+                    type="button"
+                    key={level.slug}
+                    role="radio"
+                    aria-checked={selectedLevel?.slug === level.slug}
+                    className={selectedLevel?.slug === level.slug ? "level-option active" : "level-option"}
+                    onClick={() => setSelectedLevelSlug(level.slug)}
+                  >
+                    <span>{level.name}</span>
+                    <strong>{formatCurrency(level.price)}</strong>
+                  </button>
+                ))}
+              </div>
+              <div className="selected-track-summary" aria-live="polite">
+                <div>
+                  <span>Selected programme</span>
+                  <strong>{program.title}</strong>
+                </div>
+                <div>
+                  <span>Selected track</span>
+                  <strong>{selectedLevel?.name || "No track selected"}</strong>
+                </div>
+                <div>
+                  <span>Price</span>
+                  <strong>{selectedLevel ? formatCurrency(selectedLevel.price) : "Select a track"}</strong>
+                </div>
+                {selectedLevel ? <p>{selectedLevel.summary}</p> : null}
+              </div>
+              <button className="button button-primary" type="button" disabled={!selectedLevel} onClick={handleEnrol}>
+                {selectedLevel ? `Enrol in ${selectedLevel.name}` : "Select a Track to Enrol"}
+                <CreditCard size={18} aria-hidden="true" />
+              </button>
+            </aside>
           </div>
-          <aside className="form-card level-selector-card">
-            <span className="program-icon" aria-hidden="true">
-              <ProgramIcon size={26} />
-            </span>
-            <h2>Select Track</h2>
-            <p className="selection-empty">No track selected. Choose one track to enable enrolment.</p>
-            <div className="level-options" role="radiogroup" aria-label="Program track">
-              {program.levels.map((level) => (
-                <button
-                  type="button"
-                  key={level.slug}
-                  role="radio"
-                  aria-checked={selectedLevel?.slug === level.slug}
-                  className={selectedLevel?.slug === level.slug ? "level-option active" : "level-option"}
-                  onClick={() => setSelectedLevelSlug(level.slug)}
-                >
-                  <span>{level.name}</span>
-                  <strong>{formatCurrency(level.price)}</strong>
-                </button>
-              ))}
-            </div>
-            <div className="selected-track-summary" aria-live="polite">
-              <div>
-                <span>Selected programme</span>
-                <strong>{program.title}</strong>
-              </div>
-              <div>
-                <span>Selected track</span>
-                <strong>{selectedLevel?.name || "No track selected"}</strong>
-              </div>
-              <div>
-                <span>Price</span>
-                <strong>{selectedLevel ? formatCurrency(selectedLevel.price) : "Select a track"}</strong>
-              </div>
-              {selectedLevel ? <p>{selectedLevel.summary}</p> : null}
-            </div>
-            <button className="button button-primary" type="button" disabled={!selectedLevel} onClick={handleEnrol}>
-              {selectedLevel ? `Enrol in ${selectedLevel.name}` : "Select a Track to Enrol"}
-              <CreditCard size={18} aria-hidden="true" />
-            </button>
-          </aside>
         </div>
       </section>
 

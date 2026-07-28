@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 import { Link } from "react-router-dom";
+import ProgramBanner from "./ProgramBanner";
 import { getProgramIcon } from "../utils/programIcons.jsx";
 import { formatCurrency } from "../utils/format";
 
@@ -9,6 +10,7 @@ export default function ProgramCard({ program }) {
 
   return (
     <article className="program-card" id={program.slug}>
+      <ProgramBanner program={program} />
       <div className="program-card-top">
         <span className="program-icon" aria-hidden="true">
           <ProgramIcon size={24} />

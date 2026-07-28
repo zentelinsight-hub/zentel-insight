@@ -9,6 +9,7 @@ import ContactForm from "./forms/ContactForm";
 import Footer from "./Footer";
 import Navbar from "./Navbar";
 import RouteTransitionGate from "./RouteTransitionGate";
+import ProgramBanner from "./ProgramBanner";
 import WelcomeExperience from "./WelcomeExperience";
 import { NAVBAR_DESKTOP_BREAKPOINT_PX } from "./navbarConfig";
 import { welcomeDurationMs } from "./welcomeConfig";
@@ -16,6 +17,7 @@ import { AuthContext } from "../context/authContextCore";
 import { ThemeProvider } from "../context/ThemeContext";
 import { studyHubActionItems, studyHubNavItems } from "../data/site";
 import { programs } from "../data/programs";
+import { getProgramBanner, programBannerAliases, programBannerMap } from "../data/programBanners";
 import Checkout from "../pages/Checkout";
 import ProgramDetail from "../pages/ProgramDetail";
 import Programs from "../pages/Programs";
@@ -339,6 +341,46 @@ describe("programme enrolment flow", () => {
       expect(link.getAttribute("href")).toMatch(/^\/programs\/[a-z0-9-]+$/);
       expect(link.getAttribute("href")).not.toContain("/checkout");
     });
+
+    programs.forEach((program) => {
+      const banner = getProgramBanner(program.slug);
+      const image = screen.getByRole("img", { name: `${program.title} programme banner` });
+      expect(image).toHaveAttribute("src", banner.src);
+      expect(image).toHaveAttribute("width", String(banner.width));
+      expect(image).toHaveAttribute("height", String(banner.height));
+      expect(image).toHaveAttribute("loading", "lazy");
+    });
+  });
+
+  it("has one central banner entry for every programme slug", () => {
+    expect(Object.keys(programBannerMap).sort()).toEqual(programs.map((program) => program.slug).sort());
+    expect(getProgramBanner("cybersecurity-basics")).toBe(programBannerMap[programBannerAliases["cybersecurity-basics"]]);
+  });
+
+  it.each(programs)("shows the correct $title banner on its detail page", (program) => {
+    renderWithRouter(
+      <Routes>
+        <Route path="/programs/:slug" element={<ProgramDetail />} />
+      </Routes>,
+      [`/programs/${program.slug}`]
+    );
+
+    const banner = getProgramBanner(program.slug);
+    const image = screen.getByRole("img", { name: `${program.title} programme banner` });
+    expect(image).toHaveAttribute("src", banner.src);
+    expect(image).toHaveAttribute("width", String(banner.width));
+    expect(image).toHaveAttribute("height", String(banner.height));
+    expect(image).toHaveAttribute("loading", "eager");
+    expect(image).toHaveAttribute("fetchpriority", "high");
+  });
+
+  it("shows a named fallback when a banner is missing or fails to load", () => {
+    const { rerender } = render(<ProgramBanner program={programs[0]} />);
+    fireEvent.error(screen.getByRole("img", { name: `${programs[0].title} programme banner` }));
+    expect(screen.getByRole("img", { name: `${programs[0].title} programme banner unavailable` })).toBeInTheDocument();
+
+    rerender(<ProgramBanner program={{ slug: "missing-programme", title: "Missing Programme" }} />);
+    expect(screen.getByRole("img", { name: "Missing Programme programme banner unavailable" })).toBeInTheDocument();
   });
 
   it("requires track selection before the dedicated Enrol button opens checkout", () => {
