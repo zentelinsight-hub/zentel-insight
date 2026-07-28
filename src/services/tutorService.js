@@ -44,7 +44,7 @@ export async function getTutorDashboardData(tutorId) {
     ? await Promise.all([
         requiredSelect("students", supabase.from("enrolments").select("*, programs(id, title), program_levels(id, level_name)").in("program_id", programIds).eq("status", "active").order("created_at", { ascending: false })),
         requiredSelect("student preferences", supabase.from("student_program_preferences").select("*, programs(id, title), program_levels(id, level_name)").in("program_id", programIds).order("created_at", { ascending: false })),
-        requiredSelect("timetable", supabase.from("timetable_entries").select("*, programs(id, title), program_levels(id, level_name)").in("program_id", programIds).order("day_of_week", { ascending: true })),
+        requiredSelect("timetable", supabase.from("timetable_entries").select("*, programs(id, title), program_level:program_levels!timetable_entries_program_level_id_fkey(id, level_name), track_level:program_levels!timetable_entries_track_id_fkey(id, level_name)").in("program_id", programIds).order("day_of_week", { ascending: true })),
         requiredSelect("announcements", supabase.from("announcements").select("*, programs(id, title), program_levels(id, level_name)").in("program_id", programIds).order("created_at", { ascending: false })),
         requiredSelect("assignments", supabase.from("assignments").select("*, programs(id, title), program_levels(id, level_name)").in("program_id", programIds).order("created_at", { ascending: false })),
         requiredSelect("resources", supabase.from("resources").select("*, programs(id, title), program_levels(id, level_name)").in("program_id", programIds).order("created_at", { ascending: false })),
@@ -63,6 +63,10 @@ export async function getTutorDashboardData(tutorId) {
   const hydratedOfficialStudents = normalizeList(officialStudents).map((item) => ({ ...item, profiles: profileById.get(item.user_id) || null }));
   const hydratedPreferenceStudents = normalizeList(preferenceStudents).map((item) => ({ ...item, profiles: profileById.get(item.user_id) || null }));
   const officialStudentIds = new Set(hydratedOfficialStudents.map((item) => item.user_id).filter(Boolean));
+  const hydratedTimetable = normalizeList(timetable).map((item) => ({
+    ...item,
+    program_levels: item.track_level || item.program_level || null
+  }));
 
   return {
     profile,
@@ -70,7 +74,7 @@ export async function getTutorDashboardData(tutorId) {
     assignments: normalizeList(assignments),
     officialStudents: hydratedOfficialStudents,
     preferenceStudents: hydratedPreferenceStudents.filter((item) => !officialStudentIds.has(item.user_id)),
-    timetable: normalizeList(timetable),
+    timetable: hydratedTimetable,
     announcements: normalizeList(announcements),
     learningAssignments: normalizeList(learningAssignments),
     resources: normalizeList(resources),

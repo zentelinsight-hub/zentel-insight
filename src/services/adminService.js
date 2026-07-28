@@ -47,6 +47,34 @@ async function requiredSelect(label, query, fallback = []) {
   return data ?? fallback;
 }
 
+const adminSectionData = {
+  overview: ["profiles", "roles", "tutors", "tutorAssignments", "programs", "liveClasses", "supportTickets", "payments"],
+  people: ["profiles", "roles", "tutors", "tutorAssignments", "programs"],
+  students: ["profiles", "programs"],
+  tutors: ["profiles", "tutors", "tutorAssignments", "programs"],
+  programmes: ["programs"],
+  enrolments: ["profiles", "programs", "enrolments"],
+  classrooms: [],
+  "live-classes": ["profiles", "tutors", "programs", "liveClasses"],
+  timetable: ["programs", "timetable"],
+  announcements: ["profiles", "roles", "tutors", "programs", "announcements"],
+  assignments: ["programs", "assignments"],
+  resources: ["programs", "resources"],
+  articles: ["programs", "articles"],
+  payments: ["payments"],
+  certificates: ["profiles", "certificates"],
+  notifications: ["notifications"],
+  support: ["profiles", "supportTickets"],
+  audit: ["auditLogs"],
+  profile: [],
+  settings: []
+};
+
+function sectionSelect(requiredData, key, label, queryFactory, fallback = []) {
+  if (!requiredData.has(key)) return Promise.resolve(fallback);
+  return requiredSelect(label, queryFactory(), fallback);
+}
+
 async function listAdminPeople({ role = "all", query = "", status = "all", assignment = "all", programId = "", page = 1, pageSize = 25 } = {}) {
   const data = await invokeEdgeFunction("admin-list-people", {
     body: { role, query, status, assignment, programId, page, pageSize },
@@ -57,8 +85,9 @@ async function listAdminPeople({ role = "all", query = "", status = "all", assig
   return data;
 }
 
-export async function getAdminDashboardData() {
+export async function getAdminDashboardData(section = "overview") {
   const supabase = await getClient();
+  const requiredData = new Set(adminSectionData[section] || adminSectionData.overview);
   const [
     profiles,
     roles,
@@ -78,23 +107,23 @@ export async function getAdminDashboardData() {
     certificates,
     auditLogs
   ] = await Promise.all([
-    requiredSelect("profiles", supabase.from("profiles").select("*").order("created_at", { ascending: false }).limit(500)),
-    requiredSelect("roles", supabase.from("user_roles").select("*").order("created_at", { ascending: false }).limit(500)),
-    requiredSelect("tutor profiles", supabase.from("tutor_profiles").select("*").order("created_at", { ascending: false }).limit(300)),
-    requiredSelect("tutor assignments", supabase.from("tutor_program_assignments").select("*, programs(id, slug, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(500)),
-    requiredSelect("programs", supabase.from("programs").select("*, program_levels(*)").order("display_order", { ascending: true }).order("title", { ascending: true })),
-    requiredSelect("enrolments", supabase.from("enrolments").select("*, programs(id, slug, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(500)),
-    requiredSelect("announcements", supabase.from("announcements").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(100)),
-    requiredSelect("timetable", supabase.from("timetable_entries").select("*, programs(id, title), program_levels(id, level_name)").order("day_of_week", { ascending: true }).order("start_time", { ascending: true }).limit(150)),
-    requiredSelect("assignments", supabase.from("assignments").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(150)),
-    requiredSelect("resources", supabase.from("resources").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(150)),
-    requiredSelect("notifications", supabase.from("portal_notifications").select("*").order("created_at", { ascending: false }).limit(100)),
-    requiredSelect("articles", supabase.from("portal_articles").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(100)),
-    requiredSelect("live classes", supabase.from("live_class_sessions").select("*, programs(id, title), program_levels(id, level_name)").order("scheduled_start", { ascending: false }).limit(150)),
-    requiredSelect("support tickets", supabase.from("support_tickets").select("*").order("created_at", { ascending: false }).limit(200)),
-    requiredSelect("payments", supabase.from("payments").select("*, payment_attempt_events(*)").order("created_at", { ascending: false }).limit(500)),
-    requiredSelect("certificates", supabase.from("certificates").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(200)),
-    requiredSelect("audit logs", supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(100))
+    sectionSelect(requiredData, "profiles", "profiles", () => supabase.from("profiles").select("*").order("created_at", { ascending: false }).limit(500)),
+    sectionSelect(requiredData, "roles", "roles", () => supabase.from("user_roles").select("*").order("created_at", { ascending: false }).limit(500)),
+    sectionSelect(requiredData, "tutors", "tutor profiles", () => supabase.from("tutor_profiles").select("*").order("created_at", { ascending: false }).limit(300)),
+    sectionSelect(requiredData, "tutorAssignments", "tutor assignments", () => supabase.from("tutor_program_assignments").select("*, programs(id, slug, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(500)),
+    sectionSelect(requiredData, "programs", "programs", () => supabase.from("programs").select("*, program_levels(*)").order("display_order", { ascending: true }).order("title", { ascending: true })),
+    sectionSelect(requiredData, "enrolments", "enrolments", () => supabase.from("enrolments").select("*, programs(id, slug, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(500)),
+    sectionSelect(requiredData, "announcements", "announcements", () => supabase.from("announcements").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(100)),
+    sectionSelect(requiredData, "timetable", "timetable", () => supabase.from("timetable_entries").select("*, programs(id, title), program_level:program_levels!timetable_entries_program_level_id_fkey(id, level_name), track_level:program_levels!timetable_entries_track_id_fkey(id, level_name)").order("day_of_week", { ascending: true }).order("start_time", { ascending: true }).limit(150)),
+    sectionSelect(requiredData, "assignments", "assignments", () => supabase.from("assignments").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(150)),
+    sectionSelect(requiredData, "resources", "resources", () => supabase.from("resources").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(150)),
+    sectionSelect(requiredData, "notifications", "notifications", () => supabase.from("portal_notifications").select("*").order("created_at", { ascending: false }).limit(100)),
+    sectionSelect(requiredData, "articles", "articles", () => supabase.from("portal_articles").select("*, programs(id, title), program_levels(id, level_name)").order("created_at", { ascending: false }).limit(100)),
+    sectionSelect(requiredData, "liveClasses", "live classes", () => supabase.from("live_class_sessions").select("*, programs(id, title), program_levels(id, level_name)").order("scheduled_start", { ascending: false }).limit(150)),
+    sectionSelect(requiredData, "supportTickets", "support tickets", () => supabase.from("support_tickets").select("*").order("created_at", { ascending: false }).limit(200)),
+    sectionSelect(requiredData, "payments", "payments", () => supabase.from("payments").select("*, payment_attempt_events(*)").order("created_at", { ascending: false }).limit(500)),
+    sectionSelect(requiredData, "certificates", "certificates", () => supabase.from("certificates").select("*, enrolments(id, programs(id, slug, title), program_levels(id, level_name))").order("created_at", { ascending: false }).limit(200)),
+    sectionSelect(requiredData, "auditLogs", "audit logs", () => supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(100))
   ]);
   const roleByUserId = new Map(normalizeList(roles).map((item) => [item.user_id, item.role]));
   const profileByUserId = new Map(normalizeList(profiles).map((item) => [item.id, item]));
@@ -104,7 +133,16 @@ export async function getAdminDashboardData() {
   const hydratedEnrolments = normalizeList(enrolments).map((item) => ({ ...item, profiles: profileByUserId.get(item.user_id) || null }));
   const hydratedLiveClasses = normalizeList(liveClasses).map((item) => ({ ...item, profiles: profileByUserId.get(item.tutor_id) || null }));
   const hydratedSupportTickets = normalizeList(supportTickets).map((item) => ({ ...item, profiles: profileByUserId.get(item.user_id) || null }));
-  const hydratedCertificates = normalizeList(certificates).map((item) => ({ ...item, profiles: profileByUserId.get(item.user_id) || null }));
+  const hydratedTimetable = normalizeList(timetable).map((item) => ({
+    ...item,
+    program_levels: item.track_level || item.program_level || null
+  }));
+  const hydratedCertificates = normalizeList(certificates).map((item) => ({
+    ...item,
+    profiles: profileByUserId.get(item.user_id) || null,
+    programs: item.enrolments?.programs || null,
+    program_levels: item.enrolments?.program_levels || null
+  }));
   const activeTutorIds = new Set(hydratedTutorAssignments.filter((item) => item.active !== false).map((item) => item.tutor_id));
   const activeTutorProgramIds = new Set(hydratedTutorAssignments.filter((item) => item.active !== false).map((item) => item.program_id));
   const peopleMetrics = {
@@ -129,7 +167,7 @@ export async function getAdminDashboardData() {
     programs: normalizeList(programs),
     enrolments: hydratedEnrolments,
     announcements: normalizeList(announcements),
-    timetable: normalizeList(timetable),
+    timetable: hydratedTimetable,
     assignments: normalizeList(assignments),
     resources: normalizeList(resources),
     notifications: normalizeList(notifications),

@@ -1553,8 +1553,13 @@ function AdminSettingsSection() {
 
 export default function AdminDashboard() {
   const { section = "overview" } = useParams();
-  const dataQuery = useAsyncData(() => getAdminDashboardData(), []);
   const activeSection = sections.some(([slug]) => slug === section) ? section : "overview";
+  const activeSectionLabel = sections.find(([slug]) => slug === activeSection)?.[1] || "Overview";
+  const dataQuery = useAsyncData(
+    () => getAdminDashboardData(activeSection),
+    [activeSection],
+    { errorMessage: `${activeSectionLabel} could not be loaded. Please try again.` }
+  );
 
   usePageMeta({
     path: activeSection === "overview" ? "/admin" : `/admin/${activeSection}`,
@@ -1563,18 +1568,27 @@ export default function AdminDashboard() {
     robots: "noindex,nofollow"
   });
 
-  if (dataQuery.loading) return <div className="route-loader">Loading admin dashboard</div>;
+  if (dataQuery.loading) {
+    return (
+      <AdminFrame data={null}>
+        <div className="route-loader">Loading {activeSectionLabel.toLowerCase()}</div>
+      </AdminFrame>
+    );
+  }
   if (dataQuery.error) {
     return (
-      <section className="page-section">
-        <div className="container narrow">
-          <div className="notice-card">
-            <h1>Admin dashboard could not be loaded</h1>
+      <AdminFrame data={null}>
+        <div className="portal-page">
+          <PageHeading
+            title={`${activeSectionLabel} could not be loaded.`}
+            description="The rest of the Admin Portal remains available while this section is retried."
+          />
+          <div className="notice-card portal-state-card">
             <p>{dataQuery.error}</p>
             <button className="button button-primary" type="button" onClick={dataQuery.refetch}>Try Again</button>
           </div>
         </div>
-      </section>
+      </AdminFrame>
     );
   }
 
