@@ -23,6 +23,7 @@ import {
 import { NavLink, useNavigate, useParams } from "react-router-dom";
 import LiveClassCards from "../components/LiveClassCards";
 import ProgramChatPanel from "../components/ProgramChatPanel";
+import PortalDialog from "../components/portal/PortalDialog";
 import PortalShell from "../components/portal/PortalShell";
 import { useAuth } from "../context/authHooks";
 import { useAsyncData } from "../hooks/useAsyncData";
@@ -483,8 +484,6 @@ function buildStudentEditForm(student) {
   return {
     id: record.id || "",
     full_name: record.full_name || "",
-    email: record.email || "",
-    new_password: "",
     phone: record.phone || "",
     date_of_birth: record.date_of_birth || "",
     education_level: record.education_level || "",
@@ -498,12 +497,15 @@ function buildStudentEditForm(student) {
 
 function StudentEditPanel({ student, programs, onClose, onSaved }) {
   const [form, setForm] = useState(() => buildStudentEditForm(student));
+  const [baseline, setBaseline] = useState(() => buildStudentEditForm(student));
   const [status, setStatus] = useState({ type: "", message: "" });
   const [loading, setLoading] = useState(false);
   const tracks = getTrackOptions(programs, form.program_id);
 
   useEffect(() => {
-    setForm(buildStudentEditForm(student));
+    const nextForm = buildStudentEditForm(student);
+    setForm(nextForm);
+    setBaseline(nextForm);
     setStatus({ type: "", message: "" });
   }, [student]);
 
@@ -511,6 +513,10 @@ function StudentEditPanel({ student, programs, onClose, onSaved }) {
 
   async function submit(event) {
     event.preventDefault();
+    if (!form.full_name.trim() || !form.phone.trim()) {
+      setStatus({ type: "warning", message: "Enter the Student's full name and phone number before saving." });
+      return;
+    }
     const programChanged = form.program_id !== (student.program_id || "") || form.program_level_id !== (student.program_level_id || "");
     if (programChanged && (!form.program_id || !form.program_level_id)) {
       setStatus({ type: "warning", message: "Choose both programme and track before saving a programme change." });
@@ -526,9 +532,9 @@ function StudentEditPanel({ student, programs, onClose, onSaved }) {
         program_id: programChanged ? form.program_id : "",
         program_level_id: programChanged ? form.program_level_id : ""
       });
-      setForm((current) => ({ ...current, new_password: "" }));
+      setBaseline(form);
       setStatus({ type: "success", message: "Student record saved." });
-      onSaved();
+      await onSaved();
     } catch (error) {
       setStatus({ type: "warning", message: error.message || "Student record could not be saved." });
     } finally {
@@ -536,26 +542,28 @@ function StudentEditPanel({ student, programs, onClose, onSaved }) {
     }
   }
 
+  const dirty = JSON.stringify(form) !== JSON.stringify(baseline);
+
   return (
-    <form className="form-card management-form student-edit-panel" onSubmit={submit}>
-      <div className="management-card-heading">
-        <div>
-          <h3>Edit Student Record</h3>
-          <p>{student.email}</p>
-        </div>
-        <button className="button button-secondary" type="button" onClick={onClose}>Close</button>
-      </div>
+    <PortalDialog
+      open={Boolean(student)}
+      title="Edit Student Record"
+      description={`Update the authorised account details for ${student.email}.`}
+      dirty={dirty}
+      busy={loading}
+      onClose={onClose}
+    >
+      {({ requestClose }) => <form className="portal-dialog-form management-form student-edit-panel" onSubmit={submit}>
+      <div className="portal-dialog-form-fields">
       <div className="form-grid">
-        <label><span>Full name</span><input value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} /></label>
-        <label><span>Email address</span><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label>
-        <label><span>New password</span><input type="password" autoComplete="new-password" value={form.new_password} onChange={(event) => setForm({ ...form, new_password: event.target.value })} /></label>
-        <label><span>Phone</span><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
+        <label><span>Full name</span><input value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} required /></label>
+        <label><span>Phone number</span><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} required /></label>
         <label><span>Date of birth</span><input type="date" value={form.date_of_birth || ""} onChange={(event) => setForm({ ...form, date_of_birth: event.target.value })} /></label>
         <label><span>Education level</span><input value={form.education_level} onChange={(event) => setForm({ ...form, education_level: event.target.value })} /></label>
         <label>
           <span>Programme</span>
           <select value={form.program_id} onChange={(event) => setForm({ ...form, program_id: event.target.value, program_level_id: "" })}>
-            <option value="">No programme change</option>
+            <option value="">Choose programme</option>
             {programs.map((program) => <option key={program.id} value={program.id}>{program.title}</option>)}
           </select>
         </label>
@@ -578,8 +586,13 @@ function StudentEditPanel({ student, programs, onClose, onSaved }) {
       <label><span>Address</span><input value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} /></label>
       <label><span>Status reason</span><textarea value={form.status_reason} onChange={(event) => setForm({ ...form, status_reason: event.target.value })} /></label>
       <StatusMessage status={status} />
-      <button className="button button-primary" type="submit" disabled={loading}>{loading ? "Saving Student" : "Save Student"}</button>
-    </form>
+      </div>
+      <div className="portal-dialog-actions">
+        <button className="button button-secondary" type="button" disabled={loading} onClick={requestClose}>Cancel</button>
+        <button className="button button-primary" type="submit" disabled={loading || !dirty}>{loading ? "Saving Changes" : "Save Changes"}</button>
+      </div>
+    </form>}
+    </PortalDialog>
   );
 }
 
@@ -589,12 +602,7 @@ function buildTutorEditForm(tutor) {
     user_id: record.user_id || "",
     title: record.title || "Mr",
     full_name: record.full_name || "",
-    email: record.email || "",
-    new_password: "",
     phone: record.phone || "",
-    date_of_birth: record.date_of_birth || "",
-    education_level: record.education_level || "",
-    address: record.address || "",
     specialisation: record.specialisation || "",
     professional_bio: record.professional_bio || "",
     qualifications: record.qualifications || "",
@@ -609,12 +617,15 @@ function buildTutorEditForm(tutor) {
 
 function TutorEditPanel({ tutor, programs, onClose, onSaved }) {
   const [form, setForm] = useState(() => buildTutorEditForm(tutor));
+  const [baseline, setBaseline] = useState(() => buildTutorEditForm(tutor));
   const [status, setStatus] = useState({ type: "", message: "" });
   const [loading, setLoading] = useState(false);
   const tracks = getTrackOptions(programs, form.program_id);
 
   useEffect(() => {
-    setForm(buildTutorEditForm(tutor));
+    const nextForm = buildTutorEditForm(tutor);
+    setForm(nextForm);
+    setBaseline(nextForm);
     setStatus({ type: "", message: "" });
   }, [tutor]);
 
@@ -622,6 +633,10 @@ function TutorEditPanel({ tutor, programs, onClose, onSaved }) {
 
   async function submit(event) {
     event.preventDefault();
+    if (!form.full_name.trim() || !form.phone.trim()) {
+      setStatus({ type: "warning", message: "Enter the Tutor's full name and phone number before saving." });
+      return;
+    }
     const assignmentChanged = form.program_id !== (tutor.program_id || "") || form.track_id !== (tutor.track_id || "");
     if (assignmentChanged && !form.program_id) {
       setStatus({ type: "warning", message: "Choose a programme before saving a Tutor assignment change." });
@@ -637,9 +652,9 @@ function TutorEditPanel({ tutor, programs, onClose, onSaved }) {
         program_id: assignmentChanged ? form.program_id : "",
         track_id: assignmentChanged ? form.track_id : ""
       });
-      setForm((current) => ({ ...current, new_password: "" }));
+      setBaseline(form);
       setStatus({ type: "success", message: "Tutor record saved." });
-      onSaved();
+      await onSaved();
     } catch (error) {
       setStatus({ type: "warning", message: error.message || "Tutor record could not be saved." });
     } finally {
@@ -647,15 +662,19 @@ function TutorEditPanel({ tutor, programs, onClose, onSaved }) {
     }
   }
 
+  const dirty = JSON.stringify(form) !== JSON.stringify(baseline);
+
   return (
-    <form className="form-card management-form tutor-edit-panel" onSubmit={submit}>
-      <div className="management-card-heading">
-        <div>
-          <h3>Edit Tutor Record</h3>
-          <p>{tutor.email}</p>
-        </div>
-        <button className="button button-secondary" type="button" onClick={onClose}>Close</button>
-      </div>
+    <PortalDialog
+      open={Boolean(tutor)}
+      title="Edit Tutor Record"
+      description={`Update the authorised account details for ${tutor.email}.`}
+      dirty={dirty}
+      busy={loading}
+      onClose={onClose}
+    >
+      {({ requestClose }) => <form className="portal-dialog-form management-form tutor-edit-panel" onSubmit={submit}>
+      <div className="portal-dialog-form-fields">
       <div className="form-grid">
         <label>
           <span>Title</span>
@@ -664,17 +683,13 @@ function TutorEditPanel({ tutor, programs, onClose, onSaved }) {
             <option value="Mrs">Mrs</option>
           </select>
         </label>
-        <label><span>Full name</span><input value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} /></label>
-        <label><span>Email address</span><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label>
-        <label><span>New password</span><input type="password" autoComplete="new-password" value={form.new_password} onChange={(event) => setForm({ ...form, new_password: event.target.value })} /></label>
-        <label><span>Phone</span><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
-        <label><span>Date of birth</span><input type="date" value={form.date_of_birth || ""} onChange={(event) => setForm({ ...form, date_of_birth: event.target.value })} /></label>
-        <label><span>Education level</span><input value={form.education_level} onChange={(event) => setForm({ ...form, education_level: event.target.value })} /></label>
+        <label><span>Full name</span><input value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} required /></label>
+        <label><span>Phone number</span><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} required /></label>
         <label><span>Specialisation</span><input value={form.specialisation} onChange={(event) => setForm({ ...form, specialisation: event.target.value })} /></label>
         <label>
           <span>Programme</span>
           <select value={form.program_id} onChange={(event) => setForm({ ...form, program_id: event.target.value, track_id: "" })}>
-            <option value="">No assignment change</option>
+            <option value="">Choose programme</option>
             {programs.map((program) => <option key={program.id} value={program.id}>{program.title}</option>)}
           </select>
         </label>
@@ -694,15 +709,19 @@ function TutorEditPanel({ tutor, programs, onClose, onSaved }) {
           </select>
         </label>
       </div>
-      <label><span>Address</span><input value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} /></label>
       <label><span>Professional bio</span><textarea value={form.professional_bio} onChange={(event) => setForm({ ...form, professional_bio: event.target.value })} /></label>
       <label><span>Qualifications</span><textarea value={form.qualifications} onChange={(event) => setForm({ ...form, qualifications: event.target.value })} /></label>
       <label><span>Teaching experience</span><textarea value={form.teaching_experience} onChange={(event) => setForm({ ...form, teaching_experience: event.target.value })} /></label>
       <label><span>Availability</span><textarea value={form.availability} onChange={(event) => setForm({ ...form, availability: event.target.value })} /></label>
       <label><span>Status reason</span><textarea value={form.status_reason} onChange={(event) => setForm({ ...form, status_reason: event.target.value })} /></label>
       <StatusMessage status={status} />
-      <button className="button button-primary" type="submit" disabled={loading}>{loading ? "Saving Tutor" : "Save Tutor"}</button>
-    </form>
+      </div>
+      <div className="portal-dialog-actions">
+        <button className="button button-secondary" type="button" disabled={loading} onClick={requestClose}>Cancel</button>
+        <button className="button button-primary" type="submit" disabled={loading || !dirty}>{loading ? "Saving Changes" : "Save Changes"}</button>
+      </div>
+    </form>}
+    </PortalDialog>
   );
 }
 

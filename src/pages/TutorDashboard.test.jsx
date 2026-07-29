@@ -22,8 +22,14 @@ vi.mock("../services/tutorService", () => ({
     articles: [],
     liveClasses: [],
     notifications: [],
-    supportTickets: []
-  }))
+    supportTickets: [],
+    studentTotal: 0,
+    unreadMessages: 0
+  })),
+  searchTutorStudents: vi.fn(async () => ({ records: [], total: 0, page: 1, pageCount: 1 })),
+  updateTutorProfessionalProfile: vi.fn(),
+  saveTutorAssignment: vi.fn(),
+  saveTutorResource: vi.fn()
 }));
 
 beforeEach(() => {

@@ -16,12 +16,12 @@ function AccountRestrictedScreen({ accountStatus, email, phone, onSignOut }) {
       <div className="restricted-account-card">
         <ShieldAlert size={34} aria-hidden="true" />
         <div>
-          <p className="eyebrow">{suspended ? "Account Suspended" : "Account Access Restricted"}</p>
-          <h1>{suspended ? "Your account is suspended" : "Account Access Restricted"}</h1>
+          <p className="eyebrow">{suspended ? "Account Security" : "Account Status"}</p>
+          <h1>{suspended ? "Account access temporarily restricted" : "Account access currently inactive"}</h1>
           {suspended ? (
             <>
-              <p>Your account was suspended after five incorrect password attempts.</p>
-              <p>Please contact Zentel Insight customer service. Only an Admin can reactivate this account.</p>
+              <p>We have restricted access to this account following several unsuccessful sign-in attempts. This security measure helps protect your information from unauthorised access.</p>
+              <p>Please contact Zentel Insight Support for assistance. Only an authorised administrator can restore access.</p>
             </>
           ) : (
             <>
@@ -46,7 +46,7 @@ function AccountRestrictedScreen({ accountStatus, email, phone, onSignOut }) {
             Contact Support
           </a>
           <button className="button button-secondary" type="button" onClick={onSignOut}>
-            Sign Out
+            Return to Sign In
           </button>
         </div>
       </div>

@@ -53,7 +53,7 @@ describe("ProtectedRoute account status", () => {
     renderProtected();
 
     expect(screen.getByText("Private Portal Data")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Account Access Restricted" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Account access currently inactive" })).not.toBeInTheDocument();
   });
 
   it("blocks inactive students before private portal content mounts", () => {
@@ -64,24 +64,25 @@ describe("ProtectedRoute account status", () => {
       signOut
     });
 
-    expect(screen.getByRole("heading", { name: "Account Access Restricted" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Account access currently inactive" })).toBeInTheDocument();
     expect(screen.queryByText("Private Portal Data")).not.toBeInTheDocument();
     expect(screen.getByText("Email")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "zentelinsight@gmail.com" })).toHaveAttribute("href", "mailto:zentelinsight@gmail.com");
 
-    fireEvent.click(screen.getByRole("button", { name: "Sign Out" }));
+    fireEvent.click(screen.getByRole("button", { name: "Return to Sign In" }));
     expect(signOut).toHaveBeenCalledWith({ scope: "local" });
   });
 
-  it("shows suspended students that only an Admin can reactivate the account", () => {
+  it("shows professional security wording without exposing attempt counters", () => {
     renderProtected({
       accountStatus: ACCOUNT_STATUSES.SUSPENDED,
       profile: { id: "user-1", account_status: ACCOUNT_STATUSES.SUSPENDED }
     });
 
-    expect(screen.getByRole("heading", { name: "Your account is suspended" })).toBeInTheDocument();
-    expect(screen.getByText("Your account was suspended after five incorrect password attempts.")).toBeInTheDocument();
-    expect(screen.getByText("Please contact Zentel Insight customer service. Only an Admin can reactivate this account.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Account access temporarily restricted" })).toBeInTheDocument();
+    expect(screen.getByText("We have restricted access to this account following several unsuccessful sign-in attempts. This security measure helps protect your information from unauthorised access.")).toBeInTheDocument();
+    expect(screen.getByText("Please contact Zentel Insight Support for assistance. Only an authorised administrator can restore access.")).toBeInTheDocument();
+    expect(screen.queryByText(/five incorrect/i)).not.toBeInTheDocument();
     expect(screen.queryByText("Private Portal Data")).not.toBeInTheDocument();
   });
 });

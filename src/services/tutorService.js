@@ -1,4 +1,5 @@
 import { getSupabaseClient } from "./supabaseClient";
+import { getProgramChatUnreadCounts } from "./chatService";
 
 function normalizeList(data) {
   return Array.isArray(data) ? data : [];
@@ -25,45 +26,49 @@ export async function getTutorDashboardData(tutorId) {
   const [profile, tutorProfile, assignments] = await Promise.all([
     requiredSelect("profile", supabase.from("profiles").select("*").eq("id", tutorId).maybeSingle(), null),
     requiredSelect("tutor profile", supabase.from("tutor_profiles").select("*").eq("user_id", tutorId).maybeSingle(), null),
-    requiredSelect("assignments", supabase.from("tutor_program_assignments").select("*, programs(id, slug, title), program_levels(id, level_name)").eq("tutor_id", tutorId).eq("active", true))
+    requiredSelect(
+      "assignments",
+      supabase
+        .from("tutor_program_assignments")
+        .select("*, programs(id, slug, title, short_description, long_description), program_levels(id, level_name)")
+        .eq("tutor_id", tutorId)
+        .eq("active", true)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+    )
   ]);
 
-  const programIds = normalizeList(assignments).map((item) => item.program_id).filter(Boolean);
+  const primaryAssignment = normalizeList(assignments)[0] || null;
+  const programId = primaryAssignment?.program_id || "";
+  const trackId = primaryAssignment?.track_id || "";
   const [
-    officialStudents,
-    preferenceStudents,
+    studentsPage,
     timetable,
     announcements,
     learningAssignments,
     resources,
     articles,
     liveClasses,
-    notifications,
-    supportTickets
-  ] = programIds.length
+    unreadMessageCounts
+  ] = programId
     ? await Promise.all([
-        requiredSelect("students", supabase.from("enrolments").select("*, programs(id, title), program_levels(id, level_name)").in("program_id", programIds).eq("status", "active").order("created_at", { ascending: false })),
-        requiredSelect("student preferences", supabase.from("student_program_preferences").select("*, programs(id, title), program_levels(id, level_name)").in("program_id", programIds).order("created_at", { ascending: false })),
-        requiredSelect("timetable", supabase.from("timetable_entries").select("*, programs(id, title), program_level:program_levels!timetable_entries_program_level_id_fkey(id, level_name), track_level:program_levels!timetable_entries_track_id_fkey(id, level_name)").in("program_id", programIds).order("day_of_week", { ascending: true })),
-        requiredSelect("announcements", supabase.from("announcements").select("*, programs(id, title), program_levels(id, level_name)").in("program_id", programIds).order("created_at", { ascending: false })),
-        requiredSelect("assignments", supabase.from("assignments").select("*, programs(id, title), program_levels(id, level_name)").in("program_id", programIds).order("created_at", { ascending: false })),
-        requiredSelect("resources", supabase.from("resources").select("*, programs(id, title), program_levels(id, level_name)").in("program_id", programIds).order("created_at", { ascending: false })),
-        requiredSelect("articles", supabase.from("portal_articles").select("*, programs(id, title), program_levels(id, level_name)").in("program_id", programIds).order("created_at", { ascending: false })),
-        requiredSelect("live classes", supabase.from("live_class_sessions").select("*, programs(id, title), program_levels(id, level_name)").in("program_id", programIds).order("scheduled_start", { ascending: true })),
-        requiredSelect("notifications", supabase.from("portal_notifications").select("*").eq("user_id", tutorId).order("created_at", { ascending: false }).limit(100)),
-        requiredSelect("support tickets", supabase.from("support_tickets").select("*").eq("user_id", tutorId).order("created_at", { ascending: false }).limit(100))
+        searchTutorStudents({ page: 1, pageSize: 25 }),
+        requiredSelect("timetable", supabase.from("timetable_entries").select("*, programs(id, title), program_level:program_levels!timetable_entries_program_level_id_fkey(id, level_name), track_level:program_levels!timetable_entries_track_id_fkey(id, level_name)").eq("program_id", programId).order("day_of_week", { ascending: true })),
+        requiredSelect("announcements", supabase.from("announcements").select("*, programs(id, title), program_levels(id, level_name)").eq("program_id", programId).order("created_at", { ascending: false })),
+        requiredSelect("assignments", supabase.from("assignments").select("*, programs(id, title), program_levels(id, level_name)").eq("program_id", programId).order("created_at", { ascending: false })),
+        requiredSelect("resources", supabase.from("resources").select("*, programs(id, title), program_levels(id, level_name)").eq("program_id", programId).order("created_at", { ascending: false })),
+        requiredSelect("articles", supabase.from("portal_articles").select("*, programs(id, title), program_levels(id, level_name)").eq("program_id", programId).order("created_at", { ascending: false })),
+        requiredSelect("live classes", supabase.from("live_class_sessions").select("*, programs(id, title), program_levels(id, level_name)").eq("program_id", programId).order("scheduled_start", { ascending: true })),
+        getProgramChatUnreadCounts()
       ])
-    : [[], [], [], [], [], [], [], [], [], []];
-
-  const studentIds = [...new Set([...normalizeList(officialStudents), ...normalizeList(preferenceStudents)].map((item) => item.user_id).filter(Boolean))];
-  const studentProfiles = studentIds.length
-    ? await requiredSelect("student profiles", supabase.from("profiles").select("id, full_name, email, phone, avatar_path, account_status").in("id", studentIds))
-    : [];
-  const profileById = new Map(normalizeList(studentProfiles).map((item) => [item.id, item]));
-  const hydratedOfficialStudents = normalizeList(officialStudents).map((item) => ({ ...item, profiles: profileById.get(item.user_id) || null }));
-  const hydratedPreferenceStudents = normalizeList(preferenceStudents).map((item) => ({ ...item, profiles: profileById.get(item.user_id) || null }));
-  const officialStudentIds = new Set(hydratedOfficialStudents.map((item) => item.user_id).filter(Boolean));
-  const hydratedTimetable = normalizeList(timetable).map((item) => ({
+    : [{ records: [], total: 0, page: 1, pageCount: 1 }, [], [], [], [], [], [], {}];
+  const [notifications, supportTickets] = await Promise.all([
+    requiredSelect("notifications", supabase.from("portal_notifications").select("*").eq("user_id", tutorId).order("created_at", { ascending: false }).limit(100)),
+    requiredSelect("support tickets", supabase.from("support_tickets").select("*, support_ticket_messages(*)").eq("user_id", tutorId).order("created_at", { ascending: false }).limit(100))
+  ]);
+  const studentRecords = normalizeList(studentsPage.records);
+  const scopedToTrack = (records, key = "program_level_id") => normalizeList(records).filter((item) => !trackId || !item[key] || item[key] === trackId);
+  const hydratedTimetable = scopedToTrack(timetable, "track_id").map((item) => ({
     ...item,
     program_levels: item.track_level || item.program_level || null
   }));
@@ -72,14 +77,16 @@ export async function getTutorDashboardData(tutorId) {
     profile,
     tutorProfile,
     assignments: normalizeList(assignments),
-    officialStudents: hydratedOfficialStudents,
-    preferenceStudents: hydratedPreferenceStudents.filter((item) => !officialStudentIds.has(item.user_id)),
+    officialStudents: studentRecords.filter((item) => item.assignment_type === "official"),
+    preferenceStudents: studentRecords.filter((item) => item.assignment_type === "preference"),
+    studentTotal: Number(studentsPage.total || 0),
     timetable: hydratedTimetable,
     announcements: normalizeList(announcements),
-    learningAssignments: normalizeList(learningAssignments),
-    resources: normalizeList(resources),
-    articles: normalizeList(articles),
-    liveClasses: normalizeList(liveClasses),
+    learningAssignments: scopedToTrack(learningAssignments),
+    resources: scopedToTrack(resources),
+    articles: scopedToTrack(articles),
+    liveClasses: scopedToTrack(liveClasses, "track_id"),
+    unreadMessages: Object.values(unreadMessageCounts || {}).reduce((total, count) => total + Number(count || 0), 0),
     notifications: normalizeList(notifications),
     supportTickets: normalizeList(supportTickets)
   };
@@ -87,33 +94,77 @@ export async function getTutorDashboardData(tutorId) {
 
 export async function updateTutorProfessionalProfile(tutorId, values) {
   const supabase = await getClient();
-  const payload = {
-    professional_bio: String(values.professional_bio || "").trim(),
-    qualifications: String(values.qualifications || "").trim(),
-    teaching_experience: String(values.teaching_experience || "").trim(),
-    availability: String(values.availability || "").trim(),
-    specialisation: String(values.specialisation || "").trim()
+  if (!tutorId) throw new Error("Tutor profile could not be identified.");
+  const { data, error } = await supabase.rpc("tutor_update_professional_profile", {
+    next_professional_bio: String(values.professional_bio || "").trim(),
+    next_qualifications: String(values.qualifications || "").trim(),
+    next_teaching_experience: String(values.teaching_experience || "").trim(),
+    next_specialisation: String(values.specialisation || "").trim(),
+    next_availability: String(values.availability || "").trim()
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function searchTutorStudents({ query = "", status = "all", assignment = "all", trackId = "", page = 1, pageSize = 20 } = {}) {
+  const supabase = await getClient();
+  const safePage = Math.max(1, Number(page) || 1);
+  const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 20));
+  const { data, error } = await supabase.rpc("tutor_search_assigned_students", {
+    search_text: String(query || "").trim(),
+    status_filter: ["active", "inactive", "suspended"].includes(status) ? status : "all",
+    assignment_filter: ["official", "preference"].includes(assignment) ? assignment : "all",
+    track_filter: trackId || null,
+    page_limit: safePageSize,
+    page_offset: (safePage - 1) * safePageSize
+  });
+  if (error) throw error;
+  const rows = normalizeList(data).map((item) => ({
+    ...item,
+    profiles: {
+      id: item.user_id,
+      full_name: item.full_name,
+      avatar_path: item.avatar_path,
+      account_status: item.account_status,
+      profile_completion: item.profile_completion
+    },
+    programs: { id: item.program_id, title: item.program_title },
+    program_levels: item.track_id ? { id: item.track_id, level_name: item.track_name } : null
+  }));
+  const total = Number(rows[0]?.total_count || 0);
+  return {
+    records: rows,
+    total,
+    page: safePage,
+    pageSize: safePageSize,
+    pageCount: Math.max(1, Math.ceil(total / safePageSize))
   };
+}
 
-  const { data: updated, error: updateError } = await supabase
-    .from("tutor_profiles")
-    .update(payload)
-    .eq("user_id", tutorId)
-    .select("*")
-    .maybeSingle();
+export async function saveTutorAssignment(values) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("tutor_save_assignment", {
+    target_assignment_id: values.id || null,
+    next_title: String(values.title || "").trim(),
+    next_instructions: String(values.instructions || "").trim(),
+    next_due_at: values.due_at ? new Date(values.due_at).toISOString() : null,
+    next_maximum_score: Math.max(1, Number(values.maximum_score || 100)),
+    next_published: Boolean(values.published)
+  });
+  if (error) throw error;
+  return data;
+}
 
-  if (updateError) throw updateError;
-  if (updated) return updated;
-
-  const { data, error } = await supabase
-    .from("tutor_profiles")
-    .insert({
-      user_id: tutorId,
-      title: values.title || "Mr",
-      ...payload
-    })
-    .select("*")
-    .maybeSingle();
+export async function saveTutorResource(values) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("tutor_save_resource", {
+    target_resource_id: values.id || null,
+    next_title: String(values.title || "").trim(),
+    next_description: String(values.description || "").trim(),
+    next_resource_type: values.resource_type || "link",
+    next_external_url: String(values.external_url || "").trim(),
+    next_published: Boolean(values.published)
+  });
   if (error) throw error;
   return data;
 }

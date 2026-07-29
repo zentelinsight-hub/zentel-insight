@@ -317,23 +317,6 @@ export async function searchAdminTutors({ query = "", filter = "all", page = 1, 
   }
 }
 
-async function updateAccountCredentials(values) {
-  const data = await invokeEdgeFunction("admin-update-account-credentials", {
-    body: {
-      userId: values.user_id || values.id,
-      email: String(values.email || "").trim().toLowerCase(),
-      newPassword: values.new_password || "",
-      dateOfBirth: values.date_of_birth || null,
-      educationLevel: String(values.education_level || "").trim(),
-      address: String(values.address || "").trim()
-    },
-    unavailableMessage: "Account credentials are temporarily unavailable. Please try again.",
-    failureMessage: "Account credentials could not be updated. Please review the details and try again."
-  });
-  if (!data?.ok) throw new Error(data?.error || "Account credentials could not be updated.");
-  return data;
-}
-
 export async function updateStudentProfile(values) {
   const supabase = await getClient();
   const { data, error } = await supabase.rpc("admin_update_student_profile", {
@@ -349,7 +332,6 @@ export async function updateStudentProfile(values) {
     next_status_reason: values.status_reason || null
   });
   if (error) throw error;
-  await updateAccountCredentials(values);
   return data;
 }
 
@@ -371,7 +353,6 @@ export async function updateTutorProfile(values) {
     next_track_id: values.track_id || null
   });
   if (error) throw error;
-  await updateAccountCredentials(values);
   return data;
 }
 
