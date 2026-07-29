@@ -29,6 +29,7 @@ import PortalDialog from "../components/portal/PortalDialog";
 import PortalShell from "../components/portal/PortalShell";
 import { AccountLookupSection, AccountManagementSection } from "./admin/AdminAccountSections";
 import AdminAiSection from "./admin/AdminAiSection";
+import { resolveAdminSection } from "./admin/adminRouteUtils";
 import { useAuth } from "../context/authHooks";
 import { useAsyncData } from "../hooks/useAsyncData";
 import {
@@ -1684,9 +1685,8 @@ function AdminSettingsSection() {
 }
 
 export default function AdminDashboard() {
-  const { section = "overview", portalId = "" } = useParams();
-  const requestedSection = ["people", "students", "tutors"].includes(section) ? "accounts" : section;
-  const activeSection = sections.some(([slug]) => slug === requestedSection) ? requestedSection : "overview";
+  const { section, portalId = "" } = useParams();
+  const activeSection = resolveAdminSection(section, portalId);
   const activeSectionLabel = sections.find(([slug]) => slug === activeSection)?.[1] || "Overview";
   const dataQuery = useAsyncData(
     () => getAdminDashboardData(activeSection),

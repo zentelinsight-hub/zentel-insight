@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PeopleSection } from "./AdminDashboard";
+import { resolveAdminSection } from "./admin/adminRouteUtils";
 
 const serviceMocks = vi.hoisted(() => ({
   searchAdminStudents: vi.fn(),
@@ -76,6 +77,13 @@ function renderPeople(activeSection, overrides = {}, onSaved = vi.fn()) {
     </MemoryRouter>
   );
 }
+
+describe("Admin route resolution", () => {
+  it("keeps a Portal ID route on the editable Accounts section", () => {
+    expect(resolveAdminSection(undefined, "ZIS-ABCD-2345")).toBe("accounts");
+    expect(resolveAdminSection(undefined, "ZIT-WXYZ-6789")).toBe("accounts");
+  });
+});
 
 describe("Admin people directory", () => {
   it("renders loaded Student records when remote search returns an empty success", async () => {
