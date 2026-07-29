@@ -7,6 +7,7 @@ import { AccountLookupSection, AccountManagementSection } from "./AdminAccountSe
 
 const serviceMocks = vi.hoisted(() => ({
   findAdminAccount: vi.fn(),
+  searchAdminAccounts: vi.fn(),
   updateStudentProfile: vi.fn(),
   updateTutorProfile: vi.fn(),
   requestPasswordReset: vi.fn()
@@ -14,6 +15,7 @@ const serviceMocks = vi.hoisted(() => ({
 
 vi.mock("../../services/adminService", () => ({
   findAdminAccount: serviceMocks.findAdminAccount,
+  searchAdminAccounts: serviceMocks.searchAdminAccounts,
   updateStudentProfile: serviceMocks.updateStudentProfile,
   updateTutorProfile: serviceMocks.updateTutorProfile
 }));
@@ -42,6 +44,20 @@ const studentAccount = {
 
 beforeEach(() => {
   serviceMocks.findAdminAccount.mockResolvedValue({ account: studentAccount, lookupAt: "2026-07-29T10:00:00Z" });
+  serviceMocks.searchAdminAccounts.mockResolvedValue({
+    records: [{
+      id: "student-1",
+      portal_id: "ZIS-ABCD-2345",
+      full_name: "Ada Student",
+      email: "ada@example.com",
+      role: "student",
+      account_status: "active"
+    }],
+    total: 1,
+    page: 1,
+    pageSize: 25,
+    pageCount: 1
+  });
   serviceMocks.updateStudentProfile.mockResolvedValue({ id: "student-1" });
   serviceMocks.updateTutorProfile.mockResolvedValue({ id: "tutor-1" });
   serviceMocks.requestPasswordReset.mockResolvedValue({ ok: true, message: "Reset instructions sent." });
@@ -53,7 +69,7 @@ afterEach(() => {
 });
 
 describe("Admin exact account workflow", () => {
-  it("shows no account directory and searches only after submission", async () => {
+  it("shows a read-only directory and opens editing only from an exact lookup result", async () => {
     render(
       <MemoryRouter initialEntries={["/admin/accounts"]}>
         <Routes>
@@ -63,7 +79,10 @@ describe("Admin exact account workflow", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText(/No account directory or suggestions are shown/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Student and Tutor Directory" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Student / Tutor ID" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /edit/i })).not.toBeInTheDocument();
+    expect(serviceMocks.searchAdminAccounts).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
     expect(serviceMocks.findAdminAccount).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText("Portal ID"), { target: { value: "ZIS-ABCD-2345" } });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
@@ -73,6 +92,8 @@ describe("Admin exact account workflow", () => {
       value: "ZIS-ABCD-2345",
       accountType: "any"
     }));
+    expect(screen.queryByText("Dedicated account page")).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Open Ada Student account" }));
     expect(await screen.findByText("Dedicated account page")).toBeInTheDocument();
   });
 

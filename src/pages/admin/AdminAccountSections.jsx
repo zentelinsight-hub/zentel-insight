@@ -1,10 +1,10 @@
-import { ArrowLeft, KeyRound, Search, ShieldCheck, UserRound } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, KeyRound, Search, ShieldCheck, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PortalDialog from "../../components/portal/PortalDialog";
 import PortalIdCard from "../../components/portal/PortalIdCard";
 import { useAsyncData } from "../../hooks/useAsyncData";
-import { findAdminAccount, updateStudentProfile, updateTutorProfile } from "../../services/adminService";
+import { findAdminAccount, searchAdminAccounts, updateStudentProfile, updateTutorProfile } from "../../services/adminService";
 import { requestPasswordReset } from "../../services/authService";
 import { formatDateTime } from "../../utils/format";
 
@@ -53,6 +53,13 @@ export function AccountLookupSection() {
   const [status, setStatus] = useState(emptyStatus);
   const [loading, setLoading] = useState(false);
   const [lookupAt, setLookupAt] = useState("");
+  const [lookupAccount, setLookupAccount] = useState(null);
+  const [page, setPage] = useState(1);
+  const directoryQuery = useAsyncData(
+    () => searchAdminAccounts({ page, pageSize: 25 }),
+    [page],
+    { errorMessage: "We could not load the account directory. Please try again." }
+  );
 
   async function submit(event) {
     event.preventDefault();
@@ -63,10 +70,11 @@ export function AccountLookupSection() {
     }
     setLoading(true);
     setStatus(emptyStatus);
+    setLookupAccount(null);
     try {
       const result = await findAdminAccount({ ...form, value });
       setLookupAt(result.lookupAt || new Date().toISOString());
-      navigate(`/admin/accounts/${encodeURIComponent(result.account.profile.portal_id)}`);
+      setLookupAccount(result.account);
     } catch (error) {
       if (import.meta.env.DEV) console.info("Admin account lookup failed", error);
       setStatus({
@@ -90,6 +98,11 @@ export function AccountLookupSection() {
         </div>
         <ShieldCheck size={28} aria-hidden="true" />
       </div>
+      <div className="account-lookup-search-panel">
+        <div>
+          <h3>Find an account to manage</h3>
+          <p>Use an exact Portal ID or registered email. Review the result before opening the editable account page.</p>
+        </div>
       <form className="account-lookup-form" onSubmit={submit}>
         <label>
           <span>Search by</span>
@@ -122,9 +135,72 @@ export function AccountLookupSection() {
           {loading ? "Searching" : "Search"}
         </button>
       </form>
-      <p id="account-lookup-privacy" className="muted-line">Only exact matches are returned. No account directory or suggestions are shown.</p>
+      <p id="account-lookup-privacy" className="muted-line">Only an exact match can open the account editor.</p>
       {status.message ? <div className={`form-status ${status.type}`} role="alert">{status.message}</div> : null}
       {lookupAt ? <small className="muted-line">Most recent lookup: {formatDateTime(lookupAt)}</small> : null}
+      {lookupAccount ? (
+        <button
+          className="account-lookup-result"
+          type="button"
+          onClick={() => navigate(`/admin/accounts/${encodeURIComponent(lookupAccount.profile.portal_id)}`)}
+          aria-label={`Open ${lookupAccount.profile.full_name || roleLabel(lookupAccount.role)} account`}
+        >
+          <span className="portal-avatar"><UserRound size={20} aria-hidden="true" /></span>
+          <span className="account-lookup-result-person">
+            <strong>{lookupAccount.profile.full_name || roleLabel(lookupAccount.role)}</strong>
+            <small>{lookupAccount.profile.email}</small>
+          </span>
+          <span className="account-lookup-result-id"><small>{roleLabel(lookupAccount.role)} ID</small><strong>{lookupAccount.profile.portal_id}</strong></span>
+          <span className={`portal-tag ${lookupAccount.profile.account_status === "active" ? "success" : "warning"}`}>{lookupAccount.profile.account_status}</span>
+          <span className="account-lookup-open">Open account <ChevronRight size={18} aria-hidden="true" /></span>
+        </button>
+      ) : null}
+      </div>
+
+      <section className="account-directory" aria-labelledby="account-directory-title">
+        <div className="account-directory-heading">
+          <div>
+            <h3 id="account-directory-title">Student and Tutor Directory</h3>
+            <p>Read-only account information. Use the exact lookup above to open and edit an account.</p>
+          </div>
+          <span className="portal-tag">{directoryQuery.data?.total || 0} accounts</span>
+        </div>
+        {directoryQuery.loading ? <div className="route-loader">Loading accounts</div> : null}
+        {directoryQuery.error ? (
+          <div className="notice-card portal-state-card">
+            <p>{directoryQuery.error}</p>
+            <button className="button button-secondary" type="button" onClick={directoryQuery.refetch}>Try Again</button>
+          </div>
+        ) : null}
+        {!directoryQuery.loading && !directoryQuery.error ? (
+          <>
+            <div className="account-directory-table-wrap">
+              <table className="account-directory-table">
+                <thead><tr><th scope="col">Name</th><th scope="col">Account type</th><th scope="col">Student / Tutor ID</th><th scope="col">Email</th><th scope="col">Account status</th></tr></thead>
+                <tbody>
+                  {(directoryQuery.data?.records || []).map((person) => (
+                    <tr key={person.id}>
+                      <td data-label="Name"><strong>{person.full_name || "Name not recorded"}</strong></td>
+                      <td data-label="Account type"><span className="portal-tag">{roleLabel(person.role)}</span></td>
+                      <td data-label={`${roleLabel(person.role)} ID`}><span className="account-directory-id">{person.portal_id || "Not assigned"}</span></td>
+                      <td data-label="Email"><span className="account-directory-email">{person.email || "Not recorded"}</span></td>
+                      <td data-label="Account status"><span className={`portal-tag ${person.account_status === "active" ? "success" : "warning"}`}>{person.account_status || "inactive"}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!(directoryQuery.data?.records || []).length ? <p className="muted-line">No Student or Tutor accounts are available.</p> : null}
+            {directoryQuery.data?.pageCount > 1 ? (
+              <nav className="account-directory-pagination" aria-label="Account directory pages">
+                <button className="button button-secondary" type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}><ChevronLeft size={18} aria-hidden="true" />Previous</button>
+                <span>Page {page} of {directoryQuery.data.pageCount}</span>
+                <button className="button button-secondary" type="button" disabled={page >= directoryQuery.data.pageCount} onClick={() => setPage((current) => current + 1)}>Next<ChevronRight size={18} aria-hidden="true" /></button>
+              </nav>
+            ) : null}
+          </>
+        ) : null}
+      </section>
     </section>
   );
 }

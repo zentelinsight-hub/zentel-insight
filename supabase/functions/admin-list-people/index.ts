@@ -82,7 +82,7 @@ Deno.serve(async (request) => {
       levelsResult,
       authUsers
     ] = await Promise.all([
-      admin.supabase.from("profiles").select("id, full_name, email, phone, title, avatar_path, date_of_birth, education_level, address, account_status, status_changed_at, status_changed_by, status_reason, profile_completion, failed_login_attempts, created_at, updated_at"),
+      admin.supabase.from("profiles").select("id, portal_id, full_name, email, phone, title, avatar_path, date_of_birth, education_level, address, account_status, status_changed_at, status_changed_by, status_reason, profile_completion, failed_login_attempts, created_at, updated_at"),
       admin.supabase.from("user_roles").select("user_id, role"),
       admin.supabase.from("tutor_profiles").select("user_id, title, specialisation, professional_bio, qualifications, teaching_experience, availability"),
       admin.supabase.from("tutor_program_assignments").select("id, tutor_id, program_id, track_id, active, created_at, updated_at").eq("active", true),
@@ -134,6 +134,7 @@ Deno.serve(async (request) => {
       return {
         id: profile.id,
         user_id: profile.id,
+        portal_id: profile.portal_id || "",
         role,
         title: tutorProfile.title || profile.title || (role === "tutor" ? "Mr" : ""),
         full_name: profile.full_name || "",
@@ -193,7 +194,9 @@ Deno.serve(async (request) => {
     };
 
     const filtered = people
-      .filter((person: any) => roleFilter === "all" || person.role === roleFilter)
+      .filter((person: any) => roleFilter === "all"
+        ? ["student", "tutor"].includes(person.role)
+        : person.role === roleFilter)
       .filter((person: any) => statusFilter === "all" || person.account_status === statusFilter)
       .filter((person: any) => {
         if (assignmentFilter === "all") return true;
@@ -204,6 +207,7 @@ Deno.serve(async (request) => {
         if (!search) return true;
         const haystack = [
           person.full_name,
+          person.portal_id,
           person.email,
           person.phone,
           person.role,

@@ -98,6 +98,21 @@ async function listAdminPeople({ role = "all", query = "", status = "all", assig
   return data;
 }
 
+export async function searchAdminAccounts({ page = 1, pageSize = 25 } = {}) {
+  const safePage = Math.max(1, Number(page) || 1);
+  const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 25));
+  const data = await listAdminPeople({ role: "all", page: safePage, pageSize: safePageSize });
+  const records = normalizeList(data.records);
+  const total = Number(data.total || 0);
+  return {
+    records,
+    total,
+    page: safePage,
+    pageSize: safePageSize,
+    pageCount: Number(data.pageCount || Math.max(1, Math.ceil(total / safePageSize)))
+  };
+}
+
 export async function getAdminDashboardData(section = "overview") {
   const supabase = await getClient();
   const requiredData = new Set(adminSectionData[section] || adminSectionData.overview);

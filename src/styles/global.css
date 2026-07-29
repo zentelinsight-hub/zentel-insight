@@ -2792,7 +2792,27 @@ body.portal-route-active .site-footer {
 
 .account-lookup-section {
   padding-bottom: var(--space-6);
-  border-bottom: 1px solid var(--color-border);
+}
+
+.account-lookup-search-panel {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.account-lookup-search-panel h3,
+.account-directory h3 {
+  margin: 0;
+}
+
+.account-lookup-search-panel p,
+.account-directory-heading p {
+  margin: var(--space-1) 0 0;
 }
 
 .account-lookup-form {
@@ -2810,6 +2830,131 @@ body.portal-route-active .site-footer {
 
 .account-lookup-submit {
   min-height: 46px;
+}
+
+.account-lookup-result {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) minmax(170px, 0.7fr) auto auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--brand-primary);
+  border-radius: var(--radius-card);
+  background: var(--brand-primary-soft);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.account-lookup-result:hover {
+  border-color: var(--color-heading);
+}
+
+.account-lookup-result:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand-primary) 35%, transparent);
+  outline-offset: 2px;
+}
+
+.account-lookup-result .portal-avatar {
+  width: 42px;
+  height: 42px;
+}
+
+.account-lookup-result-person,
+.account-lookup-result-id {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.account-lookup-result-person small,
+.account-lookup-result-id small {
+  color: var(--color-muted);
+}
+
+.account-lookup-result-person small,
+.account-lookup-result-id strong,
+.account-directory-email,
+.account-directory-id {
+  overflow-wrap: anywhere;
+}
+
+.account-lookup-open {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-heading);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.account-directory {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-4);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
+}
+
+.account-directory-heading {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.account-directory-table-wrap {
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+.account-directory-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+.account-directory-table th,
+.account-directory-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.account-directory-table th {
+  background: var(--color-bg-alt);
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.account-directory-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.account-directory-table tbody tr:hover {
+  background: color-mix(in srgb, var(--brand-primary-soft) 55%, transparent);
+}
+
+.account-directory-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.account-directory-pagination span {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
 .account-summary {
@@ -2901,6 +3046,23 @@ body.portal-route-active .site-footer {
   .account-lookup-value {
     grid-column: 1 / -1;
   }
+
+  .account-lookup-result {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .account-lookup-result-id {
+    grid-column: 2;
+  }
+
+  .account-lookup-result .portal-tag {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .account-lookup-open {
+    grid-column: 3;
+  }
 }
 
 @media (max-width: 680px) {
@@ -2912,6 +3074,33 @@ body.portal-route-active .site-footer {
   .account-lookup-value,
   .account-summary .portal-mini-details {
     grid-column: auto;
+  }
+
+  .account-lookup-search-panel {
+    padding: var(--space-4);
+  }
+
+  .account-lookup-result {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+
+  .account-lookup-result-id,
+  .account-lookup-result .portal-tag,
+  .account-lookup-open {
+    grid-column: 2;
+    grid-row: auto;
+    justify-self: start;
+  }
+
+  .account-directory-heading,
+  .account-directory-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .account-directory-pagination .button {
+    width: 100%;
   }
 
   .account-management-actions {
