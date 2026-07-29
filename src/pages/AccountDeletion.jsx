@@ -18,8 +18,8 @@ export default function AccountDeletion() {
           <p className="eyebrow">Account privacy</p>
           <h1>Delete your Zentel Insight account</h1>
           <p>
-            Zentel Insight account deletion is permanent. It removes your Supabase Auth account and deletes or detaches
-            account-owned records according to the production database policies and retention obligations.
+            Zentel Insight account deletion is permanent. It removes your account access and deletes or detaches
+            account-owned records according to our production retention and privacy obligations.
           </p>
         </div>
 

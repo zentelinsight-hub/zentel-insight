@@ -73,13 +73,13 @@ export const programs = [
       "Learners move from layout and styling fundamentals into real website structure, accessibility, responsive design, React foundations and publishing workflows.",
     targetLearners: "Beginners and aspiring web creators who want to build and publish practical websites.",
     outcomes: ["Structure accessible pages", "Style responsive interfaces", "Build and publish practical web projects"],
-    tools: ["HTML", "CSS", "JavaScript", "VS Code", "Git", "GitHub", "React", "Supabase where appropriate"],
-    curriculum: ["Semantic HTML and responsive CSS", "JavaScript, accessibility and version control", "React, APIs, database-backed applications and deployment"],
+    tools: ["HTML", "CSS", "JavaScript", "VS Code", "Git", "GitHub", "React", "secure cloud data tools"],
+    curriculum: ["Semantic HTML and responsive CSS", "JavaScript, accessibility and version control", "React, APIs, data-powered applications and deployment"],
     projects: ["Responsive business page", "Interactive frontend component", "Small full-stack web application"],
     tracks: [
       track("Web Foundations", 20000, "HTML, CSS, responsive layout and web publishing foundations."),
       track("Frontend Development", 35000, "JavaScript, accessibility, Git and interactive frontend practice."),
-      track("Full-Stack Web Applications", 55000, "React, APIs, Supabase-backed data and deployment workflow.")
+      track("Full-Stack Web Applications", 55000, "React, APIs, secure cloud data and deployment workflow.")
     ],
     icon: "code",
     featured: true
@@ -90,14 +90,14 @@ export const programs = [
     title: "Software Development",
     shortDescription: "Develop problem-solving habits and software foundations for real application building.",
     fullDescription:
-      "A structured introduction to software thinking, application logic, versioning discipline, debugging, testing and practical development workflows.",
+      "A structured introduction to software thinking, application logic, versioning discipline, troubleshooting, testing and practical development workflows.",
     targetLearners: "Learners who want a serious foundation for building software and solving problems with code.",
-    outcomes: ["Solve problems with code", "Plan and debug applications", "Use software engineering habits responsibly"],
-    tools: ["VS Code", "Git", "GitHub", "JavaScript and/or Python", "PostgreSQL", "testing tools"],
-    curriculum: ["Problem solving, algorithms and programming fundamentals", "Object-oriented concepts, databases and APIs", "Testing, architecture and deployment practice"],
-    projects: ["Command-line utility", "Database-backed API exercise", "Documented application project"],
+    outcomes: ["Solve problems with code", "Plan and troubleshoot applications", "Use software engineering habits responsibly"],
+    tools: ["VS Code", "Git", "GitHub", "JavaScript and/or Python", "relational data tools", "testing tools"],
+    curriculum: ["Problem solving, algorithms and programming fundamentals", "Object-oriented concepts, data systems and APIs", "Testing, architecture and deployment practice"],
+    projects: ["Command-line utility", "Data-powered API exercise", "Documented application project"],
     tracks: [
-      track("Programming Foundations", 25000, "Programming logic, syntax, debugging and small exercises."),
+      track("Programming Foundations", 25000, "Programming logic, syntax, troubleshooting and small exercises."),
       track("Application Development", 45000, "Data, APIs, project structure and application workflows."),
       track("Software Engineering Practice", 70000, "Testing, architecture, versioning and deployment readiness.")
     ],
@@ -250,7 +250,7 @@ export const programs = [
       "A coherent Flutter and Dart pathway for learners interested in building mobile experiences, from interface planning to app logic and deployment concepts.",
     targetLearners: "Learners who want to understand mobile interfaces and app-building foundations.",
     outcomes: ["Plan mobile screens", "Understand app logic", "Build practical mobile app foundations"],
-    tools: ["Flutter", "Dart", "Android Studio", "Git", "Supabase or Firebase where appropriate"],
+    tools: ["Flutter", "Dart", "Android Studio", "Git", "secure cloud data tools"],
     curriculum: ["Mobile development foundations", "Cross-platform Flutter application development", "Production apps, APIs and deployment concepts"],
     projects: ["Mobile UI prototype", "Flutter feature app", "API-backed mobile project"],
     tracks: [
@@ -287,7 +287,7 @@ export const programs = [
     shortDescription: "Learn practical remote support, organization, communication, and task-management skills.",
     fullDescription:
       "A practical pathway for learners interested in administrative support, client communication, scheduling, digital operations and remote work systems.",
-    targetLearners: "Learners preparing for remote support, administrative, or freelance service roles.",
+    targetLearners: "Learners preparing for remote support, administrative, or freelance careers.",
     outcomes: ["Organize remote tasks", "Communicate professionally", "Use practical support workflows"],
     tools: ["Google Workspace", "Microsoft 365", "Calendly", "Trello", "Asana", "Canva"],
     curriculum: ["Virtual assistant essentials", "Executive and digital operations", "Specialized technical virtual assistance"],

@@ -2,7 +2,8 @@ import { Download, Home, Mail, ShieldCheck } from "lucide-react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import BrandLogo from "../components/BrandLogo";
 import { siteConfig } from "../data/site";
-import { readTemporaryPayment } from "../services/paymentService";
+import { readTemporaryPayment, verifyPaymentReference } from "../services/paymentService";
+import { useAsyncData } from "../hooks/useAsyncData";
 import { formatCurrency, formatDateTime, isValidEmail } from "../utils/format";
 import { normalizePaymentReference } from "../utils/paymentCalculations";
 import { usePageMeta } from "../utils/usePageMeta";
@@ -46,7 +47,7 @@ function downloadReceipt(data) {
   <main class="receipt">
     <p class="brand">${escapeHtml(brandConfig.name)}</p>
     <h1>Payment Completed</h1>
-    <p>Paystack reported that this checkout was completed successfully. Keep this reference for confirmation and enrolment processing.</p>
+    <p>This payment was verified securely. Keep this reference for your records.</p>
     <dl>
       <dt>Reference</dt><dd>${escapeHtml(data.reference)}</dd>
       <dt>Product</dt><dd>${escapeHtml(data.productTitle || data.productType)}</dd>
@@ -80,6 +81,12 @@ export default function PaymentSuccess() {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const data = getPaymentDetails(searchParams);
+  const reference = normalizePaymentReference(searchParams.get("reference"), searchParams.get("trxref"));
+  const verification = useAsyncData(
+    () => verifyPaymentReference(reference),
+    [reference],
+    { enabled: Boolean(reference), timeoutMs: 30000, errorMessage: "Payment confirmation is still pending. Keep your reference and check again shortly." }
+  );
   const routeBrand = location.pathname.startsWith("/studyhub") ? "studyhub" : "main";
   const brand = data?.brand === "studyhub" ? "studyhub" : data ? "main" : routeBrand;
   const brandConfig = brand === "studyhub" ? siteConfig.studyHub : siteConfig.main;
@@ -136,8 +143,8 @@ export default function PaymentSuccess() {
             <ShieldCheck size={28} aria-hidden="true" />
             <div>
               <p className="eyebrow">{brandConfig.name}</p>
-              <h1>Payment completed</h1>
-              <p>Paystack reported that your payment was completed successfully. Keep your transaction reference for confirmation and enrolment processing.</p>
+              <h1>{verification.data?.verified ? "Payment verified" : "Payment submitted"}</h1>
+              <p>{verification.data?.verified ? "Your payment has been confirmed securely. Access activation is being completed." : "Your checkout was completed and secure server confirmation is still in progress."}</p>
             </div>
           </div>
 
@@ -160,12 +167,12 @@ export default function PaymentSuccess() {
             <div><dt>Date</dt><dd>{formatDateTime(data.updatedAt || data.createdAt)}</dd></div>
           </dl>
 
-          <div className="form-status warning">
-            Secure backend verification is temporarily offline. This page does not activate course access by itself.
+          <div className={`form-status ${verification.data?.verified ? "success" : "warning"}`}>
+            {verification.loading ? "Confirming this payment securely with Paystack..." : verification.data?.verified ? "Server verification completed successfully." : verification.error || verification.data?.message || "Payment confirmation is pending. This page does not activate access by itself."}
           </div>
 
           <div className="receipt-actions">
-            <button className="button button-primary" type="button" onClick={() => downloadReceipt(data)}>
+            <button className="button button-primary" type="button" disabled={!verification.data?.verified} onClick={() => downloadReceipt(data)}>
               Download Copy
               <Download size={18} aria-hidden="true" />
             </button>
@@ -173,6 +180,7 @@ export default function PaymentSuccess() {
               {isStudyHub ? "Return to StudyHub" : "Return to Programs"}
               <Home size={18} aria-hidden="true" />
             </Link>
+            {!verification.loading && !verification.data?.verified ? <button className="button button-secondary" type="button" onClick={verification.refetch}>Check Again</button> : null}
             <Link className="button button-secondary" to={contactHref}>
               {isStudyHub ? "Contact StudyHub" : "Contact Support"}
               <Mail size={18} aria-hidden="true" />

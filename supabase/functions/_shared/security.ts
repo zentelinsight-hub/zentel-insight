@@ -134,11 +134,13 @@ export async function writeAuditLog(supabase: any, input: {
   targetId?: string | null;
   metadata?: Record<string, unknown>;
 }) {
-  await supabase.from("audit_logs").insert({
+  const { data, error } = await supabase.from("audit_logs").insert({
     actor_user_id: input.actorUserId || null,
     action: input.action,
     target_table: input.targetTable || null,
     target_id: input.targetId || null,
     metadata: input.metadata || {}
-  });
+  }).select("id").single();
+  if (error) throw error;
+  return data;
 }

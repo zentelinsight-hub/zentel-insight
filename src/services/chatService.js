@@ -134,7 +134,14 @@ export async function sendProgramChatMessage({ roomId, senderId, body, imageFile
       size_bytes: imageFile.size,
       uploaded_by: senderId
     });
-    if (attachmentError && import.meta.env.DEV) console.info("Chat attachment metadata could not be saved", attachmentError);
+    if (attachmentError) {
+      await Promise.allSettled([
+        supabase.from("program_chat_messages").delete().eq("id", data.id).eq("sender_id", senderId),
+        supabase.storage.from(CHAT_IMAGE_BUCKET).remove([imagePath])
+      ]);
+      if (import.meta.env.DEV) console.info("Chat attachment record could not be saved", attachmentError);
+      throw new Error("The selected image could not be sent. Please try again.");
+    }
   }
 
   return hydrateMessage(data, supabase);

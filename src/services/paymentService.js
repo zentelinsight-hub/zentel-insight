@@ -1,5 +1,6 @@
 import { studyHubPricing } from "../data/programs";
 import { getSupabaseClient } from "./supabaseClient";
+import { invokeEdgeFunction } from "./edgeFunctionClient";
 import { isValidEmail } from "../utils/format";
 import {
   COURSE_PAYMENT_TYPE,
@@ -26,6 +27,18 @@ export function getPaystackPublicKeyMode(publicKey = getPaystackPublicKey()) {
   if (publicKey.startsWith("pk_test_")) return "test";
   if (publicKey.startsWith("pk_live_")) return "live";
   return "";
+}
+
+export function verifyPaymentReference(reference) {
+  const safeReference = normalizePaymentReference(reference);
+  if (!safeReference) return Promise.reject(new Error("A valid payment reference is required."));
+  return invokeEdgeFunction("verify-payment", {
+    body: { reference: safeReference },
+    requireSession: false,
+    timeoutMs: 30000,
+    unavailableMessage: "Payment confirmation is temporarily unavailable. Keep your reference and try again shortly.",
+    failureMessage: "Payment confirmation could not be completed. Keep your reference and try again shortly."
+  });
 }
 
 function isPaymentDebugEnabled() {

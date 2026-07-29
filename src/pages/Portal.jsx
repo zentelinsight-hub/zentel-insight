@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Award,
   Bell,
+  BrainCircuit,
   BookOpen,
   CalendarDays,
   CheckCircle2,
@@ -24,6 +25,7 @@ import {
 import LiveClassCards from "../components/LiveClassCards";
 import PageVisual from "../components/PageVisual";
 import ProgramChatPanel from "../components/ProgramChatPanel";
+import PortalIdCard from "../components/portal/PortalIdCard";
 import PortalShell from "../components/portal/PortalShell";
 import { useAuth } from "../context/authHooks";
 import { useTheme } from "../context/themeHooks";
@@ -67,6 +69,7 @@ const portalLinks = [
   ["/portal/announcements", "Announcements", Megaphone],
   ["/portal/assignments", "Assignments", FileCheck2],
   ["/portal/resources", "Resources", BookOpen],
+  ["/portal/zentel-ai", "Zentel AI", BrainCircuit],
   ["/portal/payments", "Active Payment", CreditCard],
   ["/portal/certificates", "Certificates", Award],
   ["/portal/notifications", "Notifications", Bell],
@@ -84,6 +87,7 @@ const pageMeta = {
   announcements: "/portal/announcements",
   assignments: "/portal/assignments",
   resources: "/portal/resources",
+  "zentel-ai": "/portal/zentel-ai",
   payments: "/portal/payments",
   certificates: "/portal/certificates",
   notifications: "/portal/notifications",
@@ -278,6 +282,10 @@ export function PortalLayout() {
       realtimeTables={[
         "announcements",
         "assignments",
+        "ai_conversations",
+        "ai_credit_wallets",
+        "ai_messages",
+        "ai_subscriptions",
         "certificates",
         "enrolments",
         "live_class_sessions",
@@ -429,6 +437,7 @@ function StudentClassroomPage() {
   const { user } = useAuth();
   const classroom = useStudentClassroom(user?.id);
   const liveClasses = useStudentLiveClasses(user?.id);
+  const [chatState, setChatState] = useState({ roomId: "", unreadCount: 0 });
 
   return (
     <PortalPage slug="classroom">
@@ -449,7 +458,10 @@ function StudentClassroomPage() {
 
         const tutorName = classroom.data.tutor_id
           ? `${classroom.data.tutor_title || ""} ${classroom.data.tutor_first_name || "Tutor"}`.trim()
-          : "A tutor has not yet been assigned to this programme. You will be notified when your classroom becomes available.";
+          : "Pending assignment";
+        const scheduledClasses = liveClasses.data || [];
+        const nextClass = scheduledClasses.find((session) => new Date(session.scheduled_end || session.scheduled_start || 0).getTime() >= Date.now()) || null;
+        const liveNow = scheduledClasses.some((session) => ["live", "in_progress"].includes(session.status));
 
         return (
           <div className="portal-page">
@@ -461,7 +473,7 @@ function StudentClassroomPage() {
               </div>
               <span className="portal-tag success">Official</span>
             </div>
-            <div className="dashboard-grid">
+            <div className="classroom-summary-grid">
               <article className="dashboard-card">
                 <GraduationCap size={22} aria-hidden="true" />
                 <span>Programme</span>
@@ -475,32 +487,39 @@ function StudentClassroomPage() {
                 <small>{classroom.data.tutor_specialisation || "Tutor assignment status"}</small>
               </article>
               <article className="dashboard-card">
+                <CalendarDays size={22} aria-hidden="true" />
+                <span>Next class</span>
+                <strong>{nextClass ? formatDateTime(nextClass.scheduled_start) : "Not scheduled"}</strong>
+                <small>{nextClass?.title || "No upcoming session"}</small>
+              </article>
+              <article className="dashboard-card">
                 <Video size={22} aria-hidden="true" />
-                <span>Live Classes</span>
-                <strong>{liveClasses.data?.length || 0}</strong>
-                <small>Scheduled or live classroom sessions</small>
+                <span>Live status</span>
+                <strong>{liveNow ? "Live now" : "Offline"}</strong>
+                <small>{liveNow ? "A classroom session is open" : "No session is live"}</small>
               </article>
               <article className="dashboard-card">
                 <MessageSquare size={22} aria-hidden="true" />
-                <span>Programme Chat</span>
-                <strong>Realtime</strong>
-                <small>Messages are stored in Supabase</small>
+                <span>Unread messages</span>
+                <strong>{chatState.unreadCount}</strong>
+                <small>Chat with your tutor and classmates.</small>
+              </article>
+              <article className="dashboard-card">
+                <CheckCircle2 size={22} aria-hidden="true" />
+                <span>Room access</span>
+                <strong>{chatState.roomId ? "Connected" : "Preparing"}</strong>
+                <small>Official programme classroom</small>
               </article>
             </div>
-            {!classroom.data.tutor_id ? (
-              <div className="notice-card portal-state-card">
-                <h2>Tutor assignment pending</h2>
-                <p>A tutor has not yet been assigned to this programme. You will be notified when your classroom becomes available.</p>
-              </div>
-            ) : null}
-            {liveClasses.loading ? <PortalLoading label="Loading live classes" /> : null}
-            {liveClasses.error ? <PortalError message={liveClasses.error} onRetry={liveClasses.refetch} /> : null}
-            {!liveClasses.loading && !liveClasses.error ? (
-              <LiveClassCards sessions={liveClasses.data || []} emptyMessage="No classroom live classes have been scheduled yet." />
-            ) : null}
-            {classroom.data.tutor_id ? (
-              <ProgramChatPanel programId={classroom.data.program_id} trackId={classroom.data.track_id} />
-            ) : null}
+            <div className="classroom-workspace">
+              <aside className="classroom-info-panel">
+                {!classroom.data.tutor_id ? <div className="portal-state-card"><h3>Tutor assignment pending</h3><p>A tutor has not yet been assigned. Classroom chat remains available to authorised programme members.</p></div> : <div><p className="eyebrow">Assigned Tutor</p><h3>{tutorName}</h3><p>{classroom.data.tutor_specialisation || "Programme Tutor"}</p></div>}
+                {liveClasses.loading ? <PortalLoading label="Loading live classes" /> : null}
+                {liveClasses.error ? <PortalError message={liveClasses.error} onRetry={liveClasses.refetch} /> : null}
+                {!liveClasses.loading && !liveClasses.error ? <LiveClassCards sessions={scheduledClasses} emptyMessage="No live class is scheduled. Your tutor will notify you when a new classroom session is available." /> : null}
+              </aside>
+              <ProgramChatPanel programId={classroom.data.program_id} trackId={classroom.data.track_id} onRoomState={setChatState} />
+            </div>
           </div>
         );
       }}
@@ -1140,6 +1159,7 @@ export function PortalProfile() {
                 <small>Account created {formatDateTime(user?.created_at || profile.created_at)}</small>
               </div>
             </div>
+            <PortalIdCard portalId={profile.portal_id} role="student" />
             <div className="form-grid">
               <label>
                 <span>Full name</span>

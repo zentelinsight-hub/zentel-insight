@@ -62,6 +62,8 @@ const EmailVerificationFailed = lazy(() => import("./pages/EmailVerificationFail
 const AdminVerify = lazy(() => import("./pages/AdminVerify"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const TutorDashboard = lazy(() => import("./pages/TutorDashboard"));
+const ZentelAI = lazy(() => import("./pages/ZentelAI"));
+const ZentelAIUsage = lazy(() => import("./pages/ZentelAI").then((module) => ({ default: module.ZentelAIUsage })));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const Payment = lazy(() => import("./pages/Payment"));
 const PaymentStatus = lazy(() => import("./pages/PaymentStatus"));
@@ -163,6 +165,8 @@ export default function App() {
               <Route path="announcements" element={<PortalSection page="announcements" />} />
               <Route path="assignments" element={<PortalSection page="assignments" />} />
               <Route path="resources" element={<PortalSection page="resources" />} />
+              <Route path="zentel-ai" element={<ZentelAI />} />
+              <Route path="zentel-ai/usage" element={<ZentelAIUsage />} />
               <Route path="payments" element={<PortalSection page="payments" />} />
               <Route path="certificates" element={<PortalSection page="certificates" />} />
               <Route path="notifications" element={<PortalSection page="notifications" />} />
@@ -177,6 +181,10 @@ export default function App() {
             />
             <Route
               path="/admin"
+              element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard /></ProtectedRoute>}
+            />
+            <Route
+              path="/admin/accounts/:portalId"
               element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard /></ProtectedRoute>}
             />
             <Route

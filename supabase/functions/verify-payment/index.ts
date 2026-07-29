@@ -27,7 +27,8 @@ function safePayment(payment: any) {
     provider_status: payment.provider_status,
     paid_at: payment.paid_at,
     verified_at: payment.verified_at,
-    created_at: payment.created_at
+    created_at: payment.created_at,
+    fulfilment_status: payment.fulfilment_status
   };
 }
 

@@ -77,7 +77,7 @@ npx supabase functions deploy delete-account
 Set the server-only Paystack secret in Supabase:
 
 ```bash
-npx supabase secrets set PAYSTACK_SECRET_KEY=sk_live_REPLACE_WITH_PRIVATE_SECRET
+npx supabase secrets set PAYSTACK_API_KEY=sk_live_REPLACE_WITH_PRIVATE_SECRET
 ```
 
 Do not put the real secret in Git, Vercel public variables or frontend code.
@@ -92,7 +92,7 @@ Add that URL in the Paystack dashboard after deploying the function.
 
 ## Paystack
 
-The frontend uses the public Paystack key only. Server verification requires the `verify-payment` Edge Function and `PAYSTACK_SECRET_KEY`.
+The frontend uses the public Paystack key only. Server verification requires the `verify-payment` Edge Function and `PAYSTACK_API_KEY`.
 
 The app must not label a transaction as server-verified until the server confirms it.
 
@@ -146,7 +146,7 @@ Do not run real Paystack charges in automated tests.
 - Configure the hosted Supabase OTP email template.
 - Authenticate Supabase CLI and push migrations.
 - Deploy Edge Functions.
-- Set `PAYSTACK_SECRET_KEY` in Supabase.
+- Set `PAYSTACK_API_KEY` in Supabase.
 - Add the Paystack webhook URL in the Paystack dashboard.
 - Add Vercel environment variables.
 - Connect the production domain.

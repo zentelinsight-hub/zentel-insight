@@ -52,9 +52,11 @@ const adminSectionData = {
   people: ["profiles", "roles", "tutors", "tutorAssignments", "programs", "enrolments"],
   students: ["profiles", "roles", "programs", "enrolments"],
   tutors: ["profiles", "roles", "tutors", "tutorAssignments", "programs"],
+  accounts: ["programs"],
   programmes: ["programs"],
   enrolments: ["profiles", "programs", "enrolments"],
   classrooms: [],
+  "zentel-ai": [],
   "live-classes": ["profiles", "tutors", "programs", "liveClasses"],
   timetable: ["programs", "timetable"],
   announcements: ["profiles", "roles", "tutors", "programs", "announcements"],
@@ -228,6 +230,20 @@ export async function createTutorAccount(values) {
   return data;
 }
 
+export async function findAdminAccount({ searchType = "portal_id", value = "", accountType = "any" } = {}) {
+  const data = await invokeEdgeFunction("admin-find-account", {
+    body: { searchType, value, accountType },
+    unavailableMessage: "Account lookup is temporarily unavailable. Please try again.",
+    failureMessage: "We could not complete this account lookup. Please try again."
+  });
+  if (!data?.ok || !data.account) {
+    const error = new Error(data?.error || "No matching Student or Tutor account was found.");
+    error.code = data?.code || "lookup_failed";
+    throw error;
+  }
+  return data;
+}
+
 export async function updateAdminProfile(userId, values) {
   const supabase = await getClient();
   let uploadedAvatarPath = "";
@@ -342,6 +358,9 @@ export async function updateTutorProfile(values) {
     next_title: values.title || "Mr",
     next_full_name: String(values.full_name || "").trim(),
     next_phone: String(values.phone || "").trim(),
+    next_date_of_birth: values.date_of_birth || null,
+    next_education_level: String(values.education_level || "").trim(),
+    next_address: String(values.address || "").trim(),
     next_specialisation: String(values.specialisation || "").trim(),
     next_professional_bio: String(values.professional_bio || "").trim(),
     next_qualifications: String(values.qualifications || "").trim(),
@@ -592,4 +611,15 @@ export async function respondToSupportTicket(values) {
   });
   if (error) throw error;
   return data;
+}
+
+export async function manageAdminAi(action = "dashboard", values = {}) {
+  const data = await invokeEdgeFunction("admin-manage-ai", {
+    body: { action, ...values },
+    timeoutMs: 30000,
+    unavailableMessage: "Zentel AI Admin services are temporarily unavailable.",
+    failureMessage: "Zentel AI Admin request could not be completed."
+  });
+  if (!data?.ok) throw new Error(data?.error || "Zentel AI Admin request could not be completed.");
+  return data.data;
 }

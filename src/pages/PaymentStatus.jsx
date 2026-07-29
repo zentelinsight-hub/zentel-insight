@@ -3,7 +3,8 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { CircleCheck, CircleX, Clock, Receipt, TriangleAlert } from "lucide-react";
 import BrandLogo from "../components/BrandLogo";
 import { siteConfig } from "../data/site";
-import { readTemporaryPayment } from "../services/paymentService";
+import { readTemporaryPayment, verifyPaymentReference } from "../services/paymentService";
+import { useAsyncData } from "../hooks/useAsyncData";
 import { formatCurrency, formatDateTime, isValidEmail } from "../utils/format";
 import { normalizePaymentReference } from "../utils/paymentCalculations";
 import { usePageMeta } from "../utils/usePageMeta";
@@ -73,10 +74,22 @@ export default function PaymentStatus() {
     [searchParams]
   );
   const record = useMemo(() => readTemporaryPayment(reference), [reference]);
+  const verification = useAsyncData(
+    () => verifyPaymentReference(reference),
+    [reference],
+    { enabled: Boolean(reference), timeoutMs: 30000, errorMessage: "Payment confirmation is still pending. Keep your reference and check again shortly." }
+  );
   const routeBrand = location.pathname.startsWith("/studyhub") || reference.startsWith("ZH-") ? "studyhub" : "main";
   const brand = record?.brand === "studyhub" ? "studyhub" : record ? "main" : routeBrand;
   const brandConfig = brand === "studyhub" ? siteConfig.studyHub : siteConfig.main;
-  const status = getStatus(record);
+  const serverStatus = verification.data?.status;
+  const status = verification.data?.verified
+    ? "success"
+    : ["failed", "reversed", "declined"].includes(serverStatus)
+      ? "error"
+      : ["abandoned", "cancelled"].includes(serverStatus)
+        ? "cancelled"
+        : getStatus(record);
   const copy = statusCopy[status];
   const StatusIcon = copy.icon;
   const retryHref = brand === "studyhub"
@@ -140,12 +153,12 @@ export default function PaymentStatus() {
             </dl>
           ) : null}
 
-          <div className="form-status warning">
-            Secure backend verification is temporarily offline. This status page only reflects the Paystack callback stored in this browser session.
+          <div className={`form-status ${verification.data?.verified ? "success" : "warning"}`}>
+            {verification.loading ? "Confirming this payment securely with Paystack..." : verification.data?.verified ? "Payment verified securely. Access activation is being completed." : verification.error || verification.data?.message || "Payment confirmation is pending. Keep your reference and check again shortly."}
           </div>
 
           <div className="receipt-actions">
-            {record && status === "success" ? (
+            {record && verification.data?.verified ? (
               <Link className="button button-primary" to={successHref}>
                 View Receipt
                 <Receipt size={18} aria-hidden="true" />
@@ -162,6 +175,7 @@ export default function PaymentStatus() {
             <Link className="button button-secondary" to={supportHref}>
               {brand === "studyhub" ? "Contact StudyHub" : "Contact Support"}
             </Link>
+            {reference && !verification.loading && !verification.data?.verified ? <button className="button button-secondary" type="button" onClick={verification.refetch}>Check Again</button> : null}
           </div>
         </div>
       </div>

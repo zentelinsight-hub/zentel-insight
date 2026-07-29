@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Award,
   Bell,
+  BrainCircuit,
   BookOpen,
   CalendarDays,
   CheckCircle2,
@@ -15,6 +16,7 @@ import {
   MessageSquare,
   Newspaper,
   Settings,
+  Search,
   ShieldCheck,
   UserRound,
   Users,
@@ -25,6 +27,8 @@ import LiveClassCards from "../components/LiveClassCards";
 import ProgramChatPanel from "../components/ProgramChatPanel";
 import PortalDialog from "../components/portal/PortalDialog";
 import PortalShell from "../components/portal/PortalShell";
+import { AccountLookupSection, AccountManagementSection } from "./admin/AdminAccountSections";
+import AdminAiSection from "./admin/AdminAiSection";
 import { useAuth } from "../context/authHooks";
 import { useAsyncData } from "../hooks/useAsyncData";
 import {
@@ -54,12 +58,11 @@ import { usePageMeta } from "../utils/usePageMeta";
 
 const sections = [
   ["overview", "Overview", LayoutDashboard],
-  ["people", "People", Users],
-  ["students", "Students", GraduationCap],
-  ["tutors", "Tutors", UserRound],
+  ["accounts", "Account Lookup", Search],
   ["programmes", "Programmes", GraduationCap],
   ["enrolments", "Enrolments", FileCheck2],
   ["classrooms", "Classrooms", MessageSquare],
+  ["zentel-ai", "Zentel AI", BrainCircuit],
   ["live-classes", "Live Classes", Video],
   ["timetable", "Timetable", CalendarDays],
   ["announcements", "Announcements", Megaphone],
@@ -239,7 +242,7 @@ function AccountStatusControls({ profile, profiles, onSaved }) {
                 {nextStatus === "active" ? "Activate this account?" : "Deactivate this account?"}
               </h2>
               <p>
-                This changes Portal access for {profile.full_name || profile.email || "this account"} only after Supabase confirms the update.
+                This changes Portal access for {profile.full_name || profile.email || "this account"} only after the secure update is confirmed.
               </p>
             </div>
             <label>
@@ -309,6 +312,7 @@ function OverviewSection({ data }) {
 }
 
 function TutorCreationForm({ programs, onSaved }) {
+  const navigate = useNavigate();
   const [values, setValues] = useState({
     title: "Mr",
     fullName: "",
@@ -328,10 +332,11 @@ function TutorCreationForm({ programs, onSaved }) {
     setLoading(true);
     setStatus({ type: "", message: "" });
     try {
-      await createTutorAccount(values);
+      const result = await createTutorAccount(values);
       setStatus({ type: "success", message: "Tutor account created as inactive. Activate it when the account is ready for portal access." });
       setValues({ title: "Mr", fullName: "", email: "", phone: "", temporaryPassword: "", programId: "", trackId: "", specialisation: "" });
-      onSaved();
+      await onSaved();
+      if (result.portalId) navigate(`/admin/accounts/${encodeURIComponent(result.portalId)}`);
     } catch (error) {
       setStatus({ type: "warning", message: error.message || "Tutor account could not be created." });
     } finally {
@@ -935,7 +940,6 @@ export function PeopleSection({ data, onSaved, activeSection = "people" }) {
                     <td data-label="Programme">{student.program_title ? `${student.program_title}${student.level_name ? ` / ${student.level_name}` : ""}` : "Not assigned"}</td>
                     <td data-label="Status">
                       <AccountStatusBadge status={student.account_status} />
-                      {student.account_status === "suspended" ? <small>{Number(student.failed_login_attempts || 5)} failed attempts</small> : null}
                     </td>
                     <td data-label="Profile">{Number(student.profile_completion || 0)}%</td>
                     <td data-label="Created">{formatDateTime(student.created_at)}</td>
@@ -1015,7 +1019,6 @@ export function PeopleSection({ data, onSaved, activeSection = "people" }) {
                     <td data-label="Programme">{tutor.program_title ? `${tutor.program_title}${tutor.track_name ? ` / ${tutor.track_name}` : ""}` : "Unassigned"}</td>
                     <td data-label="Status">
                       <AccountStatusBadge status={tutor.account_status} />
-                      {tutor.account_status === "suspended" ? <small>{Number(tutor.failed_login_attempts || 5)} failed attempts</small> : null}
                     </td>
                     <td data-label="Profile">{Number(tutor.profile_completion || 0)}%</td>
                     <td data-label="Created">{formatDateTime(tutor.created_at)}</td>
@@ -1121,7 +1124,7 @@ function ProgrammesSection({ data, onSaved }) {
 
   return (
     <div className="portal-page">
-      <PageHeading title="Programmes, tracks and prices." description="Programme display records and track prices are managed from Supabase." />
+      <PageHeading title="Programmes, tracks and prices." description="Manage published programme information and official track prices." />
       <div className="portal-grid">
         <form className="form-card management-form" onSubmit={submitProgram}>
           <h3>Add Programme</h3>
@@ -1681,8 +1684,9 @@ function AdminSettingsSection() {
 }
 
 export default function AdminDashboard() {
-  const { section = "overview" } = useParams();
-  const activeSection = sections.some(([slug]) => slug === section) ? section : "overview";
+  const { section = "overview", portalId = "" } = useParams();
+  const requestedSection = ["people", "students", "tutors"].includes(section) ? "accounts" : section;
+  const activeSection = sections.some(([slug]) => slug === requestedSection) ? requestedSection : "overview";
   const activeSectionLabel = sections.find(([slug]) => slug === activeSection)?.[1] || "Overview";
   const dataQuery = useAsyncData(
     () => getAdminDashboardData(activeSection),
@@ -1691,7 +1695,7 @@ export default function AdminDashboard() {
   );
 
   usePageMeta({
-    path: activeSection === "overview" ? "/admin" : `/admin/${activeSection}`,
+    path: portalId ? `/admin/accounts/${portalId}` : activeSection === "overview" ? "/admin" : `/admin/${activeSection}`,
     title: "Admin Dashboard",
     description: "Protected Zentel Insight admin dashboard.",
     robots: "noindex,nofollow"
@@ -1725,7 +1729,13 @@ export default function AdminDashboard() {
   return (
     <AdminFrame data={data} onRealtimeChange={dataQuery.refetch}>
       {activeSection === "overview" ? <OverviewSection data={data} /> : null}
-      {["people", "students", "tutors"].includes(activeSection) ? <PeopleSection data={data} onSaved={dataQuery.refetch} activeSection={activeSection} /> : null}
+      {activeSection === "accounts" && portalId ? <AccountManagementSection portalId={portalId} programs={data.programs} /> : null}
+      {activeSection === "accounts" && !portalId ? (
+        <div className="portal-page admin-account-lookup-page">
+          <AccountLookupSection />
+          <TutorCreationForm programs={data.programs} onSaved={dataQuery.refetch} />
+        </div>
+      ) : null}
       {activeSection === "programmes" ? <ProgrammesSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "enrolments" ? (
         <AdminRecordsSection
@@ -1743,6 +1753,7 @@ export default function AdminDashboard() {
           <ProgramChatPanel canModerate />
         </div>
       ) : null}
+      {activeSection === "zentel-ai" ? <AdminAiSection /> : null}
       {["timetable", "announcements", "assignments", "resources", "articles"].includes(activeSection)
         ? <ContentSection data={data} onSaved={dataQuery.refetch} activeSection={activeSection} />
         : null}
@@ -1759,7 +1770,7 @@ export default function AdminDashboard() {
       {activeSection === "notifications" ? (
         <AdminRecordsSection
           title="Notifications."
-          description="Review account and learning notifications stored in Supabase."
+          description="Review account and learning notifications."
           records={data.notifications}
           emptyMessage="No notifications have been created yet."
           render={(item) => renderAdminRecord("Notification", item)}

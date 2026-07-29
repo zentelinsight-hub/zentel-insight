@@ -28,7 +28,7 @@ export default function StudyHubPricing() {
       <StudyHubHero
         eyebrow="Pricing"
         title="Simple monthly pricing by class and subject."
-        body="The visible calculator explains the estimate. The backend remains authoritative for payment fulfilment."
+        body="The visible calculator explains the estimate. Your confirmed checkout amount remains authoritative for payment fulfilment."
         background="studyhub-pricing"
       />
 

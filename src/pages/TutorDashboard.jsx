@@ -3,6 +3,7 @@ import {
   Bell,
   BookOpen,
   CalendarDays,
+  CheckCircle2,
   FileCheck2,
   GraduationCap,
   LayoutDashboard,
@@ -21,6 +22,7 @@ import LiveClassCards from "../components/LiveClassCards";
 import PageVisual from "../components/PageVisual";
 import ProgramBanner from "../components/ProgramBanner";
 import ProgramChatPanel from "../components/ProgramChatPanel";
+import PortalIdCard from "../components/portal/PortalIdCard";
 import PortalShell from "../components/portal/PortalShell";
 import { useAuth } from "../context/authHooks";
 import { useTheme } from "../context/themeHooks";
@@ -29,8 +31,7 @@ import {
   getTutorDashboardData,
   saveTutorAssignment,
   saveTutorResource,
-  searchTutorStudents,
-  updateTutorProfessionalProfile
+  searchTutorStudents
 } from "../services/tutorService";
 import {
   calculateProfileCompletion,
@@ -210,33 +211,9 @@ function DashboardSection({ data, onSaved }) {
   );
 }
 
-function ProfileSection({ data, onSaved }) {
+function ProfileSection({ data }) {
   const { profile, user } = useAuth();
-  const [form, setForm] = useState({
-    professional_bio: data.tutorProfile?.professional_bio || "",
-    qualifications: data.tutorProfile?.qualifications || "",
-    teaching_experience: data.tutorProfile?.teaching_experience || "",
-    specialisation: data.tutorProfile?.specialisation || "",
-    availability: data.tutorProfile?.availability || ""
-  });
-  const [status, setStatus] = useState({ type: "", message: "" });
-  const [saving, setSaving] = useState(false);
   const assignment = data.assignments[0] || null;
-
-  async function submit(event) {
-    event.preventDefault();
-    setSaving(true);
-    setStatus({ type: "", message: "" });
-    try {
-      await updateTutorProfessionalProfile(user.id, form);
-      setStatus({ type: "success", message: "Professional profile saved." });
-      await onSaved();
-    } catch {
-      setStatus({ type: "warning", message: "We could not save these changes. No information was changed. Please try again." });
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <div className="portal-page">
@@ -255,6 +232,7 @@ function ProfileSection({ data, onSaved }) {
             <small>Admin-managed profile and credential completion.</small>
           </div>
         </div>
+        <PortalIdCard portalId={data.profile?.portal_id} role="tutor" />
         <dl className="portal-mini-details">
           <div><dt>Name</dt><dd>{data.profile?.title} {data.profile?.full_name || "Tutor"}</dd></div>
           <div><dt>Email</dt><dd>{data.profile?.email || user?.email}</dd></div>
@@ -264,20 +242,19 @@ function ProfileSection({ data, onSaved }) {
           <div><dt>Role</dt><dd>Tutor</dd></div>
           <div><dt>Account status</dt><dd>{data.profile?.account_status === "active" ? "Active" : "Restricted"}</dd></div>
         </dl>
-        <span className="portal-tag">Official details and programme assignment are Administration managed</span>
+        <span className="portal-tag">Official details, professional information and programme assignment are Administration managed</span>
       </article>
-      <form className="form-card management-form portal-profile-form" onSubmit={submit}>
+      <article className="form-card management-form portal-profile-form">
         <h3>Professional information</h3>
-        <label><span>Professional biography</span><textarea value={form.professional_bio} onChange={(event) => setForm({ ...form, professional_bio: event.target.value })} /></label>
-        <div className="form-grid">
-          <label><span>Qualifications</span><textarea value={form.qualifications} onChange={(event) => setForm({ ...form, qualifications: event.target.value })} /></label>
-          <label><span>Teaching experience</span><textarea value={form.teaching_experience} onChange={(event) => setForm({ ...form, teaching_experience: event.target.value })} /></label>
-          <label><span>Specialisation</span><input value={form.specialisation} onChange={(event) => setForm({ ...form, specialisation: event.target.value })} /></label>
-          <label><span>Availability</span><input value={form.availability} onChange={(event) => setForm({ ...form, availability: event.target.value })} /></label>
-        </div>
-        {status.message ? <div className={`form-status ${status.type}`} role={status.type === "warning" ? "alert" : "status"}>{status.message}</div> : null}
-        <button className="button button-primary" type="submit" disabled={saving}>{saving ? "Saving Profile" : "Save Professional Profile"}</button>
-      </form>
+        <dl className="portal-mini-details">
+          <div><dt>Professional biography</dt><dd>{data.tutorProfile?.professional_bio || "Not recorded"}</dd></div>
+          <div><dt>Qualifications</dt><dd>{data.tutorProfile?.qualifications || "Not recorded"}</dd></div>
+          <div><dt>Teaching experience</dt><dd>{data.tutorProfile?.teaching_experience || "Not recorded"}</dd></div>
+          <div><dt>Specialisation</dt><dd>{data.tutorProfile?.specialisation || "Not recorded"}</dd></div>
+          <div><dt>Availability</dt><dd>{data.tutorProfile?.availability || "Not recorded"}</dd></div>
+        </dl>
+        <Link className="button button-secondary" to="/tutor/support">Request a Change</Link>
+      </article>
     </div>
   );
 }
@@ -329,7 +306,10 @@ function StudentsSection({ data }) {
       pageSize: 20
     }),
     [search, statusFilter, assignmentFilter, assignment?.track_id, page],
-    { enabled: Boolean(assignment?.program_id) }
+    {
+      enabled: Boolean(assignment?.program_id),
+      errorMessage: "We could not load your student information. Please try again."
+    }
   );
 
   useEffect(() => {
@@ -451,6 +431,8 @@ function TutorClassroomSection({ data, onSaved }) {
   const connectedStudents = [...data.officialStudents, ...data.preferenceStudents];
   const connectedCount = data.studentTotal;
   const primaryAssignment = data.assignments[0] || null;
+  const nextClass = data.liveClasses.find((session) => new Date(session.scheduled_end || session.scheduled_start || 0).getTime() >= Date.now()) || null;
+  const liveNow = data.liveClasses.some((session) => ["live", "in_progress"].includes(session.status));
 
   return (
     <div className="portal-page">
@@ -458,7 +440,7 @@ function TutorClassroomSection({ data, onSaved }) {
         title="Classroom."
         description="Manage assigned programme students, live sessions and programme chat from one workspace."
       />
-      <div className="dashboard-grid">
+      <div className="classroom-summary-grid">
         <article className="dashboard-card">
           <GraduationCap size={22} aria-hidden="true" />
           <span>Programme</span>
@@ -472,20 +454,33 @@ function TutorClassroomSection({ data, onSaved }) {
           <small>Official enrolments and programme preferences</small>
         </article>
         <article className="dashboard-card">
+          <CalendarDays size={22} aria-hidden="true" />
+          <span>Next class</span>
+          <strong>{nextClass ? formatDateTime(nextClass.scheduled_start) : "Not scheduled"}</strong>
+          <small>{nextClass?.title || "No upcoming session"}</small>
+        </article>
+        <article className="dashboard-card">
           <Video size={22} aria-hidden="true" />
-          <span>Live Classes</span>
-          <strong>{data.liveClasses.length}</strong>
-          <small>Scheduled or live sessions</small>
+          <span>Live status</span>
+          <strong>{liveNow ? "Live now" : "Offline"}</strong>
+          <small>{liveNow ? "A classroom session is open" : "No session is live"}</small>
         </article>
         <article className="dashboard-card">
           <MessageSquare size={22} aria-hidden="true" />
-          <span>Group Chat</span>
-          <strong>Realtime</strong>
-          <small>Messages persist in Supabase</small>
+          <span>Unread messages</span>
+          <strong>{data.unreadMessages || 0}</strong>
+          <small>Programme classroom chat</small>
+        </article>
+        <article className="dashboard-card">
+          <CheckCircle2 size={22} aria-hidden="true" />
+          <span>Attendance</span>
+          <strong>After class</strong>
+          <small>Attendance appears when sessions end</small>
         </article>
       </div>
-      <div className="portal-grid">
-        <article className="notice-card">
+      <div className="classroom-workspace">
+        <aside className="classroom-info-panel">
+          <div>
           <h3>Connected Students</h3>
           <div className="portal-list compact-list">
             {connectedStudents.slice(0, 6).map((student) => (
@@ -497,17 +492,14 @@ function TutorClassroomSection({ data, onSaved }) {
             ))}
             {!connectedCount ? <EmptyState message="No Students are connected to your assigned programme yet." /> : null}
           </div>
-        </article>
-        <article className="notice-card">
+          </div>
+          <div>
           <h3>Upcoming live classes</h3>
-          <LiveClassCards audience="tutor" sessions={data.liveClasses.slice(0, 3)} emptyMessage="No classroom live classes have been scheduled yet." onChanged={onSaved} />
-        </article>
+          <LiveClassCards audience="tutor" sessions={data.liveClasses.slice(0, 3)} emptyMessage="No live class is scheduled. Create or schedule a session when you are ready to meet your students." onChanged={onSaved} />
+          </div>
+        </aside>
+        {primaryAssignment?.program_id ? <ProgramChatPanel programId={primaryAssignment.program_id} trackId={primaryAssignment.track_id} /> : <EmptyState message="A programme must be assigned before a Tutor classroom can open." />}
       </div>
-      {primaryAssignment?.program_id ? (
-        <ProgramChatPanel programId={primaryAssignment.program_id} trackId={primaryAssignment.track_id} />
-      ) : (
-        <EmptyState message="A programme must be assigned before a Tutor classroom can open." />
-      )}
     </div>
   );
 }
@@ -859,7 +851,10 @@ export default function TutorDashboard() {
   const { user } = useAuth();
   const { section = "dashboard" } = useParams();
   const activeSection = getActiveSection(section);
-  const dataQuery = useAsyncData(() => getTutorDashboardData(user.id), [user?.id], { enabled: Boolean(user?.id) });
+  const dataQuery = useAsyncData(() => getTutorDashboardData(user.id), [user?.id], {
+    enabled: Boolean(user?.id),
+    errorMessage: "We could not load your Tutor dashboard. Please try again."
+  });
 
   usePageMeta({
     path: activeSection === "dashboard" ? "/tutor" : `/tutor/${activeSection}`,
@@ -875,7 +870,7 @@ export default function TutorDashboard() {
         <div className="container narrow">
           <div className="notice-card">
             <h1>Tutor dashboard could not be loaded</h1>
-            <p>{dataQuery.error}</p>
+            <p>We could not load your Tutor dashboard. Please try again. If the issue continues, contact Zentel Insight Support.</p>
             <button className="button button-primary" type="button" onClick={dataQuery.refetch}>Try Again</button>
           </div>
         </div>
@@ -904,7 +899,7 @@ export default function TutorDashboard() {
   return (
     <TutorFrame data={data} onRealtimeChange={dataQuery.refetch}>
       {activeSection === "dashboard" ? <DashboardSection data={data} onSaved={dataQuery.refetch} /> : null}
-      {activeSection === "profile" ? <ProfileSection data={data} onSaved={dataQuery.refetch} /> : null}
+      {activeSection === "profile" ? <ProfileSection data={data} /> : null}
       {activeSection === "programme" ? <ProgrammeSection data={data} /> : null}
       {activeSection === "students" ? <StudentsSection data={data} /> : null}
       {activeSection === "classroom" ? <TutorClassroomSection data={data} onSaved={dataQuery.refetch} /> : null}

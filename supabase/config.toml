@@ -9,6 +9,22 @@ verify_jwt = false
 [functions.paystack-webhook]
 verify_jwt = false
 
+[functions.create-ai-subscription]
+verify_jwt = true
+
+[functions.buy-ai-credits]
+verify_jwt = true
+
+[functions.cancel-ai-subscription]
+verify_jwt = true
+
+[functions.zentel-ai-execute]
+verify_jwt = true
+
+[functions.admin-manage-ai]
+verify_jwt = true
+
+
 [functions.claim-my-enrolments]
 verify_jwt = true
 

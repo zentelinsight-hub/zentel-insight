@@ -13,6 +13,24 @@ function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function stageLabel(stage: string) {
+  const labels: Record<string, string> = {
+    validate_input: "validating the account details",
+    find_existing_profile: "checking the registered email",
+    verify_existing_tutor_role: "confirming the account type",
+    create_auth_user: "creating secure account access",
+    repair_existing_auth_user: "recovering the existing account",
+    mark_auth_user_tutor: "setting Tutor access",
+    upsert_profile: "saving the account profile",
+    upsert_role: "saving the Tutor role",
+    upsert_tutor_profile: "saving professional information",
+    assign_programme: "assigning the programme",
+    write_audit_log: "recording the Admin action",
+    verify_account: "verifying the completed Tutor account"
+  };
+  return labels[stage] || "completing the Tutor account";
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return handleOptions(request);
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed." }, 405, request);
@@ -60,7 +78,7 @@ Deno.serve(async (request) => {
         .eq("user_id", existingProfile.id)
         .maybeSingle();
       if (existingRoleError) throw existingRoleError;
-      if (existingRole?.role !== "tutor") {
+      if (existingRole?.role && existingRole.role !== "tutor") {
         return jsonResponse({ ok: false, error: "A non-Tutor account already uses this email address." }, 409, request);
       }
       tutorUserId = existingProfile.id;
@@ -166,6 +184,13 @@ Deno.serve(async (request) => {
     const { data: existingAssignment, error: existingAssignmentError } = await assignmentQuery.maybeSingle();
     if (existingAssignmentError) throw existingAssignmentError;
 
+    const { error: deactivateAssignmentsError } = await admin.supabase
+      .from("tutor_program_assignments")
+      .update({ active: false })
+      .eq("tutor_id", tutorUserId)
+      .eq("active", true);
+    if (deactivateAssignmentsError) throw deactivateAssignmentsError;
+
     const { data: assignment, error: assignmentError } = existingAssignment?.id
       ? await admin.supabase
         .from("tutor_program_assignments")
@@ -190,7 +215,7 @@ Deno.serve(async (request) => {
     if (assignmentError) throw assignmentError;
 
     failureStep = "write_audit_log";
-    await writeAuditLog(admin.supabase, {
+    const auditRecord = await writeAuditLog(admin.supabase, {
       actorUserId: admin.user.id,
       action: "tutor_account_created",
       targetTable: "profiles",
@@ -198,9 +223,34 @@ Deno.serve(async (request) => {
       metadata: { assignmentId: assignment?.id || null, programId, trackId, email, createdNewAuthUser }
     });
 
+    failureStep = "verify_account";
+    const [authResult, profileResult, roleResult, tutorProfileResult, assignmentResult] = await Promise.all([
+      admin.supabase.auth.admin.getUserById(tutorUserId),
+      admin.supabase.from("profiles").select("id, portal_id, email, account_status").eq("id", tutorUserId).maybeSingle(),
+      admin.supabase.from("user_roles").select("role").eq("user_id", tutorUserId).maybeSingle(),
+      admin.supabase.from("tutor_profiles").select("user_id").eq("user_id", tutorUserId).maybeSingle(),
+      admin.supabase.from("tutor_program_assignments").select("id, program_id, track_id, active").eq("id", assignment?.id || "00000000-0000-0000-0000-000000000000").maybeSingle()
+    ]);
+    const verificationError = [profileResult, roleResult, tutorProfileResult, assignmentResult]
+      .find((result) => result.error)?.error || authResult.error;
+    if (verificationError) throw verificationError;
+    const verified = Boolean(
+      authResult.data?.user?.id
+      && profileResult.data?.id
+      && /^ZIT-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(profileResult.data.portal_id || "")
+      && profileResult.data.email === email
+      && profileResult.data.account_status === "inactive"
+      && roleResult.data?.role === "tutor"
+      && tutorProfileResult.data?.user_id === tutorUserId
+      && assignmentResult.data?.active === true
+      && auditRecord?.id
+    );
+    if (!verified) throw new Error("Tutor account verification did not pass.");
+
     return jsonResponse({
       ok: true,
       tutorUserId,
+      portalId: profileResult.data.portal_id,
       message: "Tutor account created successfully."
     }, 200, request);
   } catch (error) {
@@ -213,6 +263,9 @@ Deno.serve(async (request) => {
       targetId: tutorUserId || null,
       metadata: { failureStep, message, retainedInactiveAuthUser: createdNewAuthUser && Boolean(tutorUserId) }
     });
-    return jsonResponse({ ok: false, error: `${message} Failed step: ${failureStep}.` }, 400, request);
+    const safeError = failureStep === "validate_input"
+      ? message
+      : `Tutor account creation stopped while ${stageLabel(failureStep)}. No active access was granted. Please retry.`;
+    return jsonResponse({ ok: false, code: "tutor_create_failed", failureStage: failureStep, error: safeError }, 400, request);
   }
 });

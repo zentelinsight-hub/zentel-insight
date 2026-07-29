@@ -1,4 +1,4 @@
-const technicalErrorPattern = /failed to fetch|functions(?:http|fetch|relay)error|row.level|rls|relation .* does not exist|foreign key|jwt|networkerror|load failed|aborterror|invalid input syntax|permission denied|policy|postgrest|pgrst|supabase/i;
+const technicalErrorPattern = /failed to fetch|functions(?:http|fetch|relay)error|function public\.|schema(?: cache)?|\brpc\b|row.level|rls|relation .* does not exist|foreign key|jwt|networkerror|load failed|aborterror|invalid input syntax|permission denied|policy|postgrest|pgrst|supabase/i;
 
 function makeSupportReference() {
   const value = Math.floor(1000 + Math.random() * 9000);

@@ -8,9 +8,9 @@ export const STUDYHUB_SUMMER_LESSONS_KOBO = STUDYHUB_PRICES_KOBO.SUMMER_LESSONS;
 export const SITE_URL = "https://zentelinsight.com.ng";
 
 type PaystackMode = "test" | "live" | "";
-type PaymentReferencePrefix = "ZI-COURSE" | "ZH-JSS" | "ZH-SSS" | "ZH-SUMMER";
+type PaymentReferencePrefix = "ZI-COURSE" | "ZH-JSS" | "ZH-SSS" | "ZH-SUMMER" | "ZI-AI-PLAN" | "ZI-AI-TOPUP";
 
-const paymentReferencePattern = /^(ZI-COURSE|ZH-JSS|ZH-SSS|ZH-SUMMER)-\d{10,}-[A-Z0-9]{8,}$/;
+const paymentReferencePattern = /^(ZI-COURSE|ZH-JSS|ZH-SSS|ZH-SUMMER|ZI-AI-PLAN|ZI-AI-TOPUP)-\d{10,}-[A-Z0-9]{8,}$/;
 const paystackSafeReferencePattern = /^[A-Za-z0-9.\-=]+$/;
 
 export class PaystackInitializationError extends Error {
@@ -29,6 +29,12 @@ export function normalizePaymentReference(...values: unknown[]) {
   const reference = candidate.trim();
   if (!paystackSafeReferencePattern.test(reference)) return "";
   return paymentReferencePattern.test(reference) ? reference : "";
+}
+
+export function normalizePaystackProviderReference(value: unknown) {
+  const reference = typeof value === "string" ? value.trim() : "";
+  if (!reference || reference.length > 120 || !paystackSafeReferencePattern.test(reference)) return "";
+  return reference;
 }
 
 export function createReference(prefix: PaymentReferencePrefix) {
@@ -91,7 +97,8 @@ export async function initializePaystackTransaction({
   reference,
   callbackUrl,
   metadata,
-  browserPublicKeyMode
+  browserPublicKeyMode,
+  planCode
 }: {
   email: string;
   amountKobo: number;
@@ -99,8 +106,9 @@ export async function initializePaystackTransaction({
   callbackUrl: string;
   metadata: Record<string, unknown>;
   browserPublicKeyMode?: unknown;
+  planCode?: string | null;
 }) {
-  const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
+  const paystackSecretKey = Deno.env.get("PAYSTACK_API_KEY");
   if (!paystackSecretKey) {
     throw new PaystackInitializationError("Paystack secret key is unavailable.", false);
   }
@@ -123,7 +131,8 @@ export async function initializePaystackTransaction({
       currency: "NGN",
       reference,
       callback_url: callbackUrl,
-      metadata
+      metadata,
+      ...(planCode ? { plan: planCode } : {})
     })
   });
 
@@ -141,12 +150,12 @@ export async function initializePaystackTransaction({
 }
 
 export async function verifyPaystackReference(reference: string) {
-  const canonicalReference = normalizePaymentReference(reference);
+  const canonicalReference = normalizePaymentReference(reference) || normalizePaystackProviderReference(reference);
   if (!canonicalReference) {
     throw new Error("A valid payment reference is required.");
   }
 
-  const secretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
+  const secretKey = Deno.env.get("PAYSTACK_API_KEY");
   if (!secretKey) {
     throw new Error("Paystack secret key is unavailable.");
   }
@@ -205,7 +214,7 @@ function getStoredAmountKobo(payment: any) {
   return Number(payment.amount_kobo || payment.expected_amount_kobo);
 }
 
-function assertVerifiedPaymentMatchesStoredPayment(payment: any, paystackData: any) {
+export function assertVerifiedPaymentMatchesStoredPayment(payment: any, paystackData: any) {
   const paidAmount = Number(paystackData.amount);
   const expectedAmount = getStoredAmountKobo(payment);
   const currency = String(paystackData.currency || "NGN").toUpperCase();
@@ -238,11 +247,12 @@ function assertVerifiedPaymentMatchesStoredPayment(payment: any, paystackData: a
 }
 
 export async function fulfilSuccessfulPayment(supabase: any, payment: any, paystackData: any, source: string) {
-  if (payment.status === "success") {
+  assertVerifiedPaymentMatchesStoredPayment(payment, paystackData);
+
+  const isAiPurchase = payment.product_type === "zentel_ai_subscription" || payment.product_type === "zentel_ai_topup";
+  if (payment.status === "success" && (!isAiPurchase || payment.fulfilment_status === "fulfilled")) {
     return payment;
   }
-
-  assertVerifiedPaymentMatchesStoredPayment(payment, paystackData);
 
   const paidAmount = Number(paystackData.amount);
   const providerTransactionId = String(paystackData.id || "");
@@ -259,9 +269,12 @@ export async function fulfilSuccessfulPayment(supabase: any, payment: any, payst
       payment_channel: paystackData.channel || null,
       gateway_response: paystackData.gateway_response || null,
       verification_source: source,
+      verification_status: "verified",
+      reported_status: "success",
       verified_at: verifiedAt,
       paid_at: paystackData.paid_at || verifiedAt,
-      failure_reason: null
+      failure_reason: null,
+      fulfilment_status: isAiPurchase ? "awaiting_webhook" : payment.fulfilment_status
     })
     .eq("id", payment.id)
     .select()
@@ -296,6 +309,32 @@ export async function fulfilSuccessfulPayment(supabase: any, payment: any, payst
       .from("studyhub_registrations")
       .update({ status: "active" })
       .eq("payment_id", payment.id);
+  }
+
+  if (isAiPurchase && source === "paystack_webhook") {
+    const providerDetails = {
+      customer_code: paystackData.customer?.customer_code || null,
+      subscription_code: paystackData.subscription?.subscription_code || paystackData.subscription_code || null,
+      email_token: paystackData.subscription?.email_token || paystackData.email_token || null,
+      next_payment_date: paystackData.subscription?.next_payment_date || paystackData.next_payment_date || null
+    };
+    const { error: fulfilmentError } = await supabase.rpc("ai_apply_verified_payment", {
+      target_payment_id: payment.id,
+      webhook_event_key: String(paystackData.__webhook_event_key || payment.reference),
+      provider_details: providerDetails
+    });
+    if (fulfilmentError) {
+      await supabase.from("payments").update({ fulfilment_status: "failed" }).eq("id", payment.id);
+      throw fulfilmentError;
+    }
+
+    const { data: fulfilledPayment, error: fulfilledPaymentError } = await supabase
+      .from("payments")
+      .select("*")
+      .eq("id", payment.id)
+      .single();
+    if (fulfilledPaymentError) throw fulfilledPaymentError;
+    return fulfilledPayment;
   }
 
   return updatedPayment;

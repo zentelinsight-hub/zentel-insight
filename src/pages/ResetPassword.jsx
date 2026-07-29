@@ -45,7 +45,7 @@ export default function ResetPassword() {
           <BrandLogo brand="main" className="page-brand-logo" size="auth" />
           <p className="eyebrow">New password</p>
           <h1>Choose a secure password.</h1>
-          <p>Open this page from your Supabase password recovery email so the reset session can be detected in the URL.</p>
+          <p>Open this page from your Zentel Insight password recovery email so your secure reset session can be confirmed.</p>
         </div>
         <form className="form-card auth-card" onSubmit={submit}>
           <label>

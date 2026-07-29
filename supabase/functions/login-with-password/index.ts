@@ -3,7 +3,7 @@ import { handleOptions, isAllowedOrigin, jsonResponse } from "../_shared/cors.ts
 import { createServiceClient } from "../_shared/supabase.ts";
 
 const suspendedMessage =
-  "Your account has been suspended after five incorrect password attempts. Please contact Zentel Insight customer service. Only an Admin can reactivate this account.";
+  "Account access is temporarily restricted. Please contact Zentel Insight Support for assistance. Only an authorised administrator can restore access.";
 
 function clean(value: unknown) {
   return String(value || "").trim();
@@ -117,7 +117,7 @@ Deno.serve(async (request) => {
       return jsonResponse({
         ok: false,
         code: "invalid_credentials",
-        error: "The email or password is incorrect. Accounts are suspended after five incorrect password attempts."
+        error: "The email or password is incorrect."
       }, 400, request);
     }
 

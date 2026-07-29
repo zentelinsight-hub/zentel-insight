@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getAdminDashboardData, searchAdminStudents, searchAdminTutors } from "./adminService";
+import { findAdminAccount, getAdminDashboardData, searchAdminStudents, searchAdminTutors } from "./adminService";
 
 const serviceMocks = vi.hoisted(() => ({
   getSupabaseClient: vi.fn(),
@@ -54,6 +54,30 @@ beforeEach(() => {
 });
 
 describe("Admin dashboard data loading", () => {
+  it("loads only programme choices for the exact Account Lookup route", async () => {
+    const supabase = createSupabaseMock();
+    serviceMocks.getSupabaseClient.mockResolvedValue(supabase.client);
+
+    await getAdminDashboardData("accounts");
+
+    expect(supabase.from.mock.calls.map(([table]) => table)).toEqual(["programs"]);
+  });
+
+  it("uses the verified exact account lookup service without loading a directory", async () => {
+    serviceMocks.invokeEdgeFunction.mockResolvedValue({
+      ok: true,
+      account: { profile: { id: "student-1", portal_id: "ZIS-ABCD-2345" }, role: "student" }
+    });
+
+    const result = await findAdminAccount({ searchType: "portal_id", value: "ZIS-ABCD-2345", accountType: "student" });
+
+    expect(serviceMocks.invokeEdgeFunction).toHaveBeenCalledWith("admin-find-account", expect.objectContaining({
+      body: { searchType: "portal_id", value: "ZIS-ABCD-2345", accountType: "student" }
+    }));
+    expect(result.account.profile.portal_id).toBe("ZIS-ABCD-2345");
+    expect(serviceMocks.getSupabaseClient).not.toHaveBeenCalled();
+  });
+
   it("loads only People dependencies for the People route", async () => {
     const supabase = createSupabaseMock();
     serviceMocks.getSupabaseClient.mockResolvedValue(supabase.client);
