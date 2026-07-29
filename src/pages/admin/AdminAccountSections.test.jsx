@@ -69,7 +69,7 @@ afterEach(() => {
 });
 
 describe("Admin exact account workflow", () => {
-  it("shows a read-only directory and opens editing only from an exact lookup result", async () => {
+  it("shows a read-only directory and redirects an exact lookup to the editable account", async () => {
     render(
       <MemoryRouter initialEntries={["/admin/accounts"]}>
         <Routes>
@@ -92,8 +92,6 @@ describe("Admin exact account workflow", () => {
       value: "ZIS-ABCD-2345",
       accountType: "any"
     }));
-    expect(screen.queryByText("Dedicated account page")).not.toBeInTheDocument();
-    fireEvent.click(await screen.findByRole("button", { name: "Open Ada Student account" }));
     expect(await screen.findByText("Dedicated account page")).toBeInTheDocument();
   });
 

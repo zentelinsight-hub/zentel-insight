@@ -52,8 +52,6 @@ export function AccountLookupSection() {
   const [form, setForm] = useState({ searchType: "portal_id", accountType: "any", value: "" });
   const [status, setStatus] = useState(emptyStatus);
   const [loading, setLoading] = useState(false);
-  const [lookupAt, setLookupAt] = useState("");
-  const [lookupAccount, setLookupAccount] = useState(null);
   const [page, setPage] = useState(1);
   const directoryQuery = useAsyncData(
     () => searchAdminAccounts({ page, pageSize: 25 }),
@@ -70,11 +68,9 @@ export function AccountLookupSection() {
     }
     setLoading(true);
     setStatus(emptyStatus);
-    setLookupAccount(null);
     try {
       const result = await findAdminAccount({ ...form, value });
-      setLookupAt(result.lookupAt || new Date().toISOString());
-      setLookupAccount(result.account);
+      navigate(`/admin/accounts/${encodeURIComponent(result.account.profile.portal_id)}`);
     } catch (error) {
       if (import.meta.env.DEV) console.info("Admin account lookup failed", error);
       setStatus({
@@ -101,7 +97,7 @@ export function AccountLookupSection() {
       <div className="account-lookup-search-panel">
         <div>
           <h3>Find an account to manage</h3>
-          <p>Use an exact Portal ID or registered email. Review the result before opening the editable account page.</p>
+          <p>Use an exact Portal ID or registered email to open the matching Student or Tutor account for editing.</p>
         </div>
       <form className="account-lookup-form" onSubmit={submit}>
         <label>
@@ -137,24 +133,6 @@ export function AccountLookupSection() {
       </form>
       <p id="account-lookup-privacy" className="muted-line">Only an exact match can open the account editor.</p>
       {status.message ? <div className={`form-status ${status.type}`} role="alert">{status.message}</div> : null}
-      {lookupAt ? <small className="muted-line">Most recent lookup: {formatDateTime(lookupAt)}</small> : null}
-      {lookupAccount ? (
-        <button
-          className="account-lookup-result"
-          type="button"
-          onClick={() => navigate(`/admin/accounts/${encodeURIComponent(lookupAccount.profile.portal_id)}`)}
-          aria-label={`Open ${lookupAccount.profile.full_name || roleLabel(lookupAccount.role)} account`}
-        >
-          <span className="portal-avatar"><UserRound size={20} aria-hidden="true" /></span>
-          <span className="account-lookup-result-person">
-            <strong>{lookupAccount.profile.full_name || roleLabel(lookupAccount.role)}</strong>
-            <small>{lookupAccount.profile.email}</small>
-          </span>
-          <span className="account-lookup-result-id"><small>{roleLabel(lookupAccount.role)} ID</small><strong>{lookupAccount.profile.portal_id}</strong></span>
-          <span className={`portal-tag ${lookupAccount.profile.account_status === "active" ? "success" : "warning"}`}>{lookupAccount.profile.account_status}</span>
-          <span className="account-lookup-open">Open account <ChevronRight size={18} aria-hidden="true" /></span>
-        </button>
-      ) : null}
       </div>
 
       <section className="account-directory" aria-labelledby="account-directory-title">
