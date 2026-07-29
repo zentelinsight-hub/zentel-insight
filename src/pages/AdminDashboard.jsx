@@ -1701,7 +1701,7 @@ export default function AdminDashboard() {
     robots: "noindex,nofollow"
   });
 
-  if (dataQuery.loading) {
+  if (dataQuery.loading && !dataQuery.data) {
     return (
       <AdminFrame data={null}>
         <div className="route-loader">Loading {activeSectionLabel.toLowerCase()}</div>
