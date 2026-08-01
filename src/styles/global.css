@@ -6334,8 +6334,25 @@ body.portal-route-active .site-footer {
 
   .chat-composer {
     grid-template-columns: 38px minmax(0, 1fr) 38px;
+    align-items: center;
     gap: var(--space-1);
     padding-inline: var(--space-2);
+  }
+
+  .chat-composer > .chat-composer-icon:not(.send) {
+    grid-column: 1;
+  }
+
+  .chat-composer-input {
+    grid-column: 2;
+  }
+
+  .chat-composer-icon.send {
+    grid-column: 3;
+  }
+
+  .chat-composer-reply {
+    grid-column: 1 / -1;
   }
 
   .chat-composer-icon {
