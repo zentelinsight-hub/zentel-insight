@@ -8,6 +8,30 @@ function clean(value: unknown) {
 
 async function isAuthorizedForSession(supabase: any, userId: string, role: string, session: any) {
   if (role === "admin") return true;
+  if (session.classroom_id) {
+    if (role === "tutor") {
+      const { data, error } = await supabase
+        .from("tutor_classroom_assignments")
+        .select("id")
+        .eq("tutor_id", userId)
+        .eq("classroom_id", session.classroom_id)
+        .eq("active", true)
+        .maybeSingle();
+      if (error) throw error;
+      return Boolean(data);
+    }
+    const { data, error } = await supabase
+      .from("classroom_memberships")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("classroom_id", session.classroom_id)
+      .eq("member_role", "student")
+      .eq("active", true)
+      .is("left_at", null)
+      .maybeSingle();
+    if (error) throw error;
+    return Boolean(data);
+  }
   if (role === "tutor") {
     const { data, error } = await supabase
       .from("tutor_program_assignments")
@@ -28,23 +52,7 @@ async function isAuthorizedForSession(supabase: any, userId: string, role: strin
   if (enrolmentError) throw enrolmentError;
   if ((enrolments || []).some((enrolment: any) => !session.track_id || enrolment.program_level_id === session.track_id)) return true;
 
-  const { data: active, error: activeError } = await supabase
-    .from("enrolments")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .limit(1);
-  if (activeError) throw activeError;
-  if (active?.length) return false;
-
-  const { data: preference, error: preferenceError } = await supabase
-    .from("student_program_preferences")
-    .select("track_id")
-    .eq("user_id", userId)
-    .eq("program_id", session.program_id)
-    .maybeSingle();
-  if (preferenceError) throw preferenceError;
-  return Boolean(preference && (!session.track_id || !preference.track_id || preference.track_id === session.track_id));
+  return false;
 }
 
 function getDailyApiKey() {

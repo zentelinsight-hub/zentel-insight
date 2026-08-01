@@ -2,26 +2,17 @@ import { Link, Outlet } from "react-router-dom";
 import { useEffect, useState } from "react";
 import {
   Award,
-  Bell,
   BrainCircuit,
-  BookOpen,
   CalendarDays,
   CheckCircle2,
   Clock3,
-  CreditCard,
-  FileCheck2,
   GraduationCap,
   LayoutDashboard,
-  LifeBuoy,
-  Megaphone,
   MessageSquare,
   Moon,
-  Newspaper,
-  Settings,
   Sun,
   UserRound,
-  Video,
-  WalletCards
+  Video
 } from "lucide-react";
 import LiveClassCards from "../components/LiveClassCards";
 import PageVisual from "../components/PageVisual";
@@ -65,12 +56,12 @@ import { usePageMeta } from "../utils/usePageMeta";
 import { useAsyncData } from "../hooks/useAsyncData";
 
 const portalGroups = [
-  { label: "Home", defaultOpen: true, items: [["/portal", "Dashboard", LayoutDashboard]] },
-  { label: "Learning", items: [["/portal/my-courses", "My Course", GraduationCap], ["/portal/timetable", "Timetable", CalendarDays], ["/portal/assignments", "Assignments", FileCheck2], ["/portal/resources", "Learning Resources", BookOpen]] },
-  { label: "Classroom", items: [["/portal/classroom", "Overview", MessageSquare], ["/portal/classroom/chat", "Chat", MessageSquare], ["/portal/classroom/live", "Live Classes", Video], ["/portal/classroom/attendance", "Attendance", CheckCircle2]] },
-  { label: "Zentel AI", items: [["/portal/zentel-ai", "AI Chat", BrainCircuit], ["/portal/zentel-ai/history", "Conversation History", Clock3], ["/portal/zentel-ai/usage", "Credits and Usage", CreditCard], ["/portal/zentel-ai/plans", "Plans and Billing", WalletCards], ["/portal/zentel-ai/settings", "AI Settings", Settings]] },
-  { label: "Updates", items: [["/portal/announcements", "Announcements", Megaphone], ["/portal/notifications", "Notifications", Bell], ["/portal/articles", "Learning Articles", Newspaper]] },
-  { label: "Account", items: [["/portal/profile", "My Profile", UserRound], ["/portal/payments", "Active Payment", CreditCard], ["/portal/certificates", "Certificates", Award], ["/portal/support", "Support", LifeBuoy], ["/portal/settings", "Settings", Settings]] }
+  { label: "Home", major: true, items: [["/portal", "Home", LayoutDashboard]] },
+  { label: "Learning", major: true, items: [["/portal/learning", "Learning", GraduationCap]] },
+  { label: "Classroom", major: true, items: [["/portal/classroom", "Classroom", MessageSquare]] },
+  { label: "Progress", major: true, items: [["/portal/progress", "Progress", Award]] },
+  { label: "Zentel AI", major: true, items: [["/portal/zentel-ai", "Zentel AI", BrainCircuit]] },
+  { label: "Account", major: true, items: [["/portal/account", "Account", UserRound]] }
 ];
 
 const pageMeta = {

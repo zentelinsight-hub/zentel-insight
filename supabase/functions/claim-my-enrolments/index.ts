@@ -24,40 +24,15 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: "A verified email is required." }, 403);
     }
 
-    const { data: payments, error: paymentsError } = await supabase
-      .from("payments")
-      .select("id")
-      .in("brand", ["zentel", "zentel_insight"])
-      .eq("product_type", "zentel_course")
-      .eq("status", "success")
-      .is("user_id", null)
-      .eq("customer_email", verifiedEmail);
-
-    if (paymentsError) throw paymentsError;
-    const paymentIds = (payments || []).map((payment: any) => payment.id);
-    if (!paymentIds.length) return jsonResponse({ linked: 0, message: "No unclaimed paid enrolments found." });
-
-    const { error: paymentsUpdateError } = await supabase
-      .from("payments")
-      .update({ user_id: user.id })
-      .in("id", paymentIds)
-      .is("user_id", null);
-
-    if (paymentsUpdateError) throw paymentsUpdateError;
-
-    const { data: enrolments, error: enrolmentUpdateError } = await supabase
-      .from("enrolments")
-      .update({ user_id: user.id, status: "active" })
-      .in("payment_id", paymentIds)
-      .is("user_id", null)
-      .eq("status", "paid_unlinked")
-      .select("id");
-
-    if (enrolmentUpdateError) throw enrolmentUpdateError;
+    const { data: linked, error: claimError } = await supabase.rpc("claim_verified_payments", {
+      target_user_id: user.id,
+      verified_email: verifiedEmail
+    });
+    if (claimError) throw claimError;
 
     return jsonResponse({
-      linked: enrolments?.length || 0,
-      message: "Paid enrolments refreshed."
+      linked: Number(linked || 0),
+      message: Number(linked || 0) ? "Paid enrolments refreshed." : "No unclaimed paid enrolments found."
     });
   } catch (error) {
     console.error("claim-my-enrolments", error.message);

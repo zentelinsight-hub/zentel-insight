@@ -30,6 +30,22 @@ function SidebarGroup({ group, pathname, onNavigate }) {
     if (active) setOpen(true);
   }, [active]);
 
+  if (group.major && group.items.length === 1) {
+    const item = group.items[0];
+    return (
+      <NavLink
+        to={item.to}
+        end={item.end}
+        onClick={onNavigate}
+        className={({ isActive }) => isActive ? "portal-link portal-major-link active" : "portal-link portal-major-link"}
+      >
+        <item.Icon size={19} aria-hidden="true" />
+        <span>{item.label}</span>
+        {Number(item.badge || 0) > 0 ? <span className="portal-nav-badge">{item.badge}</span> : null}
+      </NavLink>
+    );
+  }
+
   return (
     <details className="portal-nav-group" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary><span>{group.label}</span><ChevronDown size={15} aria-hidden="true" /></summary>
@@ -65,17 +81,17 @@ function SidebarContent({ sidebar, onNavigate, onSignOut }) {
             <span className="brand-motto">{sidebar.brandMotto || "Zentel Insight"}</span>
           </span>
         </NavLink>
+      </div>
+      <nav className="portal-sidebar-navigation" aria-label={sidebar.navLabel}>
+        {groups.map((group) => <SidebarGroup key={group.label} group={group} pathname={location.pathname} onNavigate={onNavigate} />)}
+      </nav>
+      <div className="portal-sidebar-footer">
         <SidebarProfile
           name={sidebar.profileName}
           detail={sidebar.profileDetail}
           avatarUrl={sidebar.avatarUrl}
           initial={sidebar.profileInitial}
         />
-      </div>
-      <nav className="portal-sidebar-navigation" aria-label={sidebar.navLabel}>
-        {groups.map((group) => <SidebarGroup key={group.label} group={group} pathname={location.pathname} onNavigate={onNavigate} />)}
-      </nav>
-      <div className="portal-sidebar-footer">
         <button className="portal-link signout" type="button" onClick={onSignOut}>
           <LogOut size={18} aria-hidden="true" />
           Sign Out

@@ -1,15 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CreditCard, ShieldCheck } from "lucide-react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/authHooks";
 import { slugifyProgramValue } from "../../data/programs";
 import { formatCurrency, isValidEmail } from "../../utils/format";
 import { COURSE_PAYMENT_TYPE, nairaToKobo } from "../../utils/paymentCalculations";
-import { flushQueuedPaymentAttempts, startPaystackPayment } from "../../services/paymentService";
+import { startPaystackPayment } from "../../services/paymentService";
 
 export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lockedSelection = false, cataloguePrograms = [] }) {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const { profile, user } = useAuth();
   const programs = cataloguePrograms;
   const startingProgramSlug = initialProgramSlug || searchParams.get("program") || (lockedSelection ? "" : programs[0]?.slug || "");
@@ -21,8 +20,6 @@ export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lock
   const [errors, setErrors] = useState({});
   const [status, setStatus] = useState({ type: "", message: "" });
   const [paymentState, setPaymentState] = useState("idle");
-  const paymentOpeningRef = useRef(false);
-  const hasNavigatedRef = useRef(false);
 
   const selectedProgram = useMemo(
     () => programs.find((program) => program.slug === programSlug),
@@ -35,23 +32,12 @@ export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lock
   const loading = ["recording_attempt", "opening", "verifying"].includes(paymentState);
 
   useEffect(() => {
-    void flushQueuedPaymentAttempts();
-  }, []);
-
-  useEffect(() => {
     setCustomer((current) => ({
       name: current.name || profile?.full_name || "",
       email: current.email || user?.email || profile?.email || "",
       phone: current.phone || profile?.phone || ""
     }));
   }, [profile?.email, profile?.full_name, profile?.phone, user?.email]);
-
-  useEffect(() => {
-    return () => {
-      paymentOpeningRef.current = false;
-      hasNavigatedRef.current = false;
-    };
-  }, []);
 
   function updateProgram(nextSlug) {
     const nextProgram = programs.find((program) => program.slug === nextSlug);
@@ -76,16 +62,14 @@ export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lock
 
   async function handleSubmit(event) {
     event.preventDefault();
-    if (loading || paymentOpeningRef.current) return;
+    if (loading) return;
 
     setStatus({ type: "", message: "" });
     const nextErrors = validate();
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length || !selected) return;
 
-    paymentOpeningRef.current = true;
-    hasNavigatedRef.current = false;
-    setPaymentState("recording_attempt");
+    setPaymentState("opening");
     const item = {
       paymentType: COURSE_PAYMENT_TYPE,
       slug: `${selected.program.slug}:${selected.level.slug}`,
@@ -101,46 +85,11 @@ export default function PaymentForm({ initialProgramSlug, initialLevelSlug, lock
     };
 
     try {
-      await startPaystackPayment({
-        item,
-        customer,
-        onCancel: (message, transaction) => {
-          paymentOpeningRef.current = false;
-          setPaymentState("cancelled");
-          setStatus({ type: "warning", message });
-          if (transaction && !hasNavigatedRef.current) {
-            hasNavigatedRef.current = true;
-            navigate(transaction.path || `/payment-failed?reference=${encodeURIComponent(transaction.reference || "")}&reason=cancelled`);
-          }
-        },
-        onError: (paymentError, transaction) => {
-          paymentOpeningRef.current = false;
-          setPaymentState("failed");
-          if (transaction && !hasNavigatedRef.current) {
-            hasNavigatedRef.current = true;
-            navigate(transaction.path || `/payment-failed?reference=${encodeURIComponent(transaction.reference || "")}&reason=error`);
-            return;
-          }
-          setStatus({ type: "error", message: paymentError.message });
-        },
-        onSuccess: (transaction) => {
-          if (hasNavigatedRef.current) return;
-          hasNavigatedRef.current = true;
-          setPaymentState("verifying");
-          navigate(transaction.path || `/payment-success?reference=${encodeURIComponent(transaction.reference || "")}`);
-        }
-      });
-      setPaymentState((current) => (current === "recording_attempt" ? "opening" : current));
-      setStatus({ type: "success", message: "Paystack checkout opened. Complete or cancel the popup to continue." });
+      await startPaystackPayment({ item, customer });
+      setStatus({ type: "success", message: "Opening secure payment..." });
     } catch (error) {
-      paymentOpeningRef.current = false;
       setPaymentState("failed");
-      setStatus({
-        type: "error",
-        message: error.paymentReference
-          ? `${error.message} Reference: ${error.paymentReference}`
-          : error.message || "Payment could not be started."
-      });
+      setStatus({ type: "error", message: error.message || "Payments are temporarily unavailable. Please try again shortly." });
     }
   }
 

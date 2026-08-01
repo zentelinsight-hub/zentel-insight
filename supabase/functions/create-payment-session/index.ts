@@ -1,6 +1,5 @@
 import { handleOptions, isAllowedOrigin, jsonResponse } from "../_shared/cors.ts";
 import {
-  PaystackInitializationError,
   SITE_URL,
   STUDYHUB_SUMMER_LESSONS_KOBO,
   calculateStudyHubAmountKobo,
@@ -99,29 +98,61 @@ function sanitizeError(error: unknown) {
   return String((error as Error)?.message || "Payment session could not be created.").slice(0, 240);
 }
 
-async function getOptionalUserId(supabase: any, request: Request) {
+async function getOptionalUser(supabase: any, request: Request) {
   const authorization = request.headers.get("Authorization") || "";
   const token = authorization.replace(/^Bearer\s+/i, "").trim();
   if (!token) return null;
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data?.user?.id) return null;
-  return data.user.id;
+  if (!data.user.email_confirmed_at || !data.user.email) {
+    throw new Error("Verify your account email before starting a payment.");
+  }
+  return { id: data.user.id, email: normalizeEmail(data.user.email) };
+}
+
+function normalizeIdempotencyKey(value: unknown) {
+  const key = cleanText(value).toLowerCase();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(key)) {
+    throw new Error("A valid payment request identifier is required.");
+  }
+  return key;
+}
+
+async function findExistingRequest(supabase: any, request: Request, idempotencyKey: string, userId: string | null, email: string) {
+  const { data, error } = await supabase
+    .from("payments")
+    .select("id, reference, user_id, customer_email, expected_amount_kobo, currency, status, authorization_url, initialization_mode")
+    .eq("initialization_request_id", idempotencyKey)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  if (data.user_id !== userId || normalizeEmail(data.customer_email) !== email) {
+    return jsonResponse({ ok: false, error: "This payment request cannot be reused." }, 409, request);
+  }
+  if (data.initialization_mode === "backend" && /^https:\/\/checkout\.paystack\.com\//i.test(data.authorization_url || "")) {
+    return jsonResponse({
+      ok: true,
+      mode: "backend",
+      paymentId: data.id,
+      reference: data.reference,
+      authorizationUrl: data.authorization_url,
+      amountKobo: data.expected_amount_kobo,
+      currency: data.currency || "NGN"
+    }, 200, request);
+  }
+  return jsonResponse({ ok: false, error: "Payments are temporarily unavailable. Please try again shortly." }, 503, request);
 }
 
 async function initializeStoredPayment({
   request,
   supabase,
   payment,
-  trusted,
-  browserPublicKeyMode,
-  browserPublicKeyConfigured
+  trusted
 }: {
   request: Request;
   supabase: any;
   payment: any;
   trusted: any;
-  browserPublicKeyMode: unknown;
-  browserPublicKeyConfigured: boolean;
 }) {
   const metadata = createPaystackMetadata(payment, trusted);
   const callbackUrl = trusted.brand === "studyhub" ? `${SITE_URL}/studyhub/payment-status` : `${SITE_URL}/payment-status`;
@@ -132,8 +163,7 @@ async function initializeStoredPayment({
       amountKobo: trusted.amountKobo,
       reference: payment.reference,
       callbackUrl,
-      metadata,
-      browserPublicKeyMode
+      metadata
     });
 
     await supabase
@@ -163,42 +193,24 @@ async function initializeStoredPayment({
     }, 200, request);
   } catch (error) {
     const failureReason = sanitizeError(error);
-    const fallbackEligible = !(error instanceof PaystackInitializationError) || error.fallbackEligible;
-    const canUseFallback = Boolean(fallbackEligible && browserPublicKeyConfigured);
 
     await supabase
       .from("payments")
       .update({
-        status: "pending",
+        status: "failed",
         provider: "paystack",
         provider_status: "initialize_failed",
-        initialization_mode: canUseFallback ? "frontend_fallback" : "backend_failed",
+        initialization_mode: "backend_failed",
         failure_reason: failureReason,
         metadata
       })
       .eq("id", payment.id);
 
-    if (!canUseFallback) {
-      return jsonResponse({
-        ok: false,
-        error: browserPublicKeyConfigured
-          ? "Paystack could not be opened. No payment has been charged. Please check your connection and try again."
-          : "Online payment configuration is incomplete. Please contact support and provide the payment reference shown below.",
-        reference: payment.reference
-      }, 503, request);
-    }
-
     return jsonResponse({
-      ok: true,
-      mode: "frontend_fallback",
-      paymentId: payment.id,
+      ok: false,
+      error: "Payments are temporarily unavailable. Please try again shortly.",
       reference: payment.reference,
-      email: trusted.customerEmail,
-      amountKobo: trusted.amountKobo,
-      currency: "NGN",
-      brand: trusted.brand,
-      metadata
-    }, 200, request);
+    }, 503, request);
   }
 }
 
@@ -211,9 +223,15 @@ Deno.serve(async (request) => {
     const supabase = createServiceClient();
     const body = await request.json();
     const brand = body.brand === "studyhub" ? "studyhub" : "zentel_insight";
-    const customer = getCustomer(body);
-    const browserPublicKeyMode = body.paystackPublicKeyMode;
-    const browserPublicKeyConfigured = body.paystackPublicKeyConfigured === true;
+    const requestUser = await getOptionalUser(supabase, request);
+    const submittedCustomer = getCustomer(body);
+    const customer = requestUser
+      ? { ...submittedCustomer, customerEmail: requestUser.email }
+      : submittedCustomer;
+    const userId = requestUser?.id || null;
+    const idempotencyKey = normalizeIdempotencyKey(body.idempotencyKey);
+    const existingRequest = await findExistingRequest(supabase, request, idempotencyKey, userId, customer.customerEmail);
+    if (existingRequest) return existingRequest;
 
     if (brand === "studyhub") {
       const requestedProductType = cleanText(body.productType);
@@ -234,6 +252,8 @@ Deno.serve(async (request) => {
         .from("payments")
         .insert({
           reference,
+          initialization_request_id: idempotencyKey,
+          user_id: userId,
           brand,
           product_type: productType,
           product_key: isSummerLessons ? "studyhub-summer-lessons" : "studyhub-academic-support",
@@ -244,6 +264,7 @@ Deno.serve(async (request) => {
           customer_name: customer.customerName,
           student_name: customer.studentName || customer.customerName,
           customer_email: customer.customerEmail,
+          normalized_email: customer.customerEmail,
           customer_phone: customer.customerPhone,
           expected_amount_kobo: amountKobo,
           amount_kobo: amountKobo,
@@ -284,9 +305,7 @@ Deno.serve(async (request) => {
           studentName: customer.studentName || customer.customerName,
           customerEmail: customer.customerEmail,
           amountKobo
-        },
-        browserPublicKeyMode,
-        browserPublicKeyConfigured
+        }
       });
     }
 
@@ -317,13 +336,13 @@ Deno.serve(async (request) => {
 
     if (!level) return jsonResponse({ error: "This programme or payment option is unavailable. Return to the programmes page and choose a valid option." }, 400, request);
 
-    const userId = await getOptionalUserId(supabase, request);
     const reference = createReference("ZI-COURSE");
     const amountKobo = Number(level.price_kobo);
     const { data: payment, error } = await supabase
       .from("payments")
       .insert({
         reference,
+        initialization_request_id: idempotencyKey,
         user_id: userId,
         brand,
         product_type: "zentel_course",
@@ -335,6 +354,7 @@ Deno.serve(async (request) => {
         selected_level: level.level_name,
         customer_name: customer.customerName,
         customer_email: customer.customerEmail,
+        normalized_email: customer.customerEmail,
         customer_phone: customer.customerPhone,
         expected_amount_kobo: amountKobo,
         amount_kobo: amountKobo,
@@ -361,9 +381,7 @@ Deno.serve(async (request) => {
         trackSlug: slugify(level.level_name),
         customerEmail: customer.customerEmail,
         amountKobo
-      },
-      browserPublicKeyMode,
-      browserPublicKeyConfigured
+      }
     });
   } catch (error) {
     console.error("create-payment-session", sanitizeError(error));

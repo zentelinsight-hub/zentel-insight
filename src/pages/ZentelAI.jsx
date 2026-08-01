@@ -122,7 +122,8 @@ export default function ZentelAI() {
   const snapshot = snapshotQuery.data || {};
   const conversations = conversationsQuery.data || [];
   const messages = useMemo(() => [...(messagesQuery.data || []), ...(streamMessage ? [streamMessage] : [])], [messagesQuery.data, streamMessage]);
-  const canUse = Boolean(snapshot.access?.account_active && snapshot.access?.ai_access_status !== "suspended" && snapshot.access?.system_available && (Number(snapshot.wallet?.total_available || 0) > 0 || snapshot.subscription));
+  const canAccess = Boolean(snapshot.access?.account_active && snapshot.access?.ai_access_status !== "suspended" && snapshot.access?.system_available);
+  const hasCredits = Number(snapshot.wallet?.total_available || 0) > 0;
   const estimate = estimateAiCredits(message, attachments, webResearch);
 
   usePageMeta({ path: "/portal/zentel-ai", title: "Zentel AI", description: "Your personal Zentel Insight learning assistant.", robots: "noindex,nofollow" });
@@ -168,6 +169,10 @@ export default function ZentelAI() {
   const send = async (override) => {
     const prompt = String(override ?? message).trim();
     if ((!prompt && !attachments.length) || streaming) return;
+    if (!hasCredits) {
+      setStatus({ type: "warning", message: "You have no Zentel AI credits. Choose a paid plan or buy credits to continue. Free trials are not available." });
+      return;
+    }
     let conversationId = selectedId;
     try {
       if (!conversationId) { const created = await createAiConversation(); conversationId = created.id; setSelectedId(created.id); navigate(`/portal/zentel-ai/chat/${created.id}`); }
@@ -210,8 +215,10 @@ export default function ZentelAI() {
         <Link to="/portal/zentel-ai/usage">Usage</Link>
       </div>
       {status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}
-      {!canUse ? <PlanCards snapshot={snapshot} busy={paymentBusy} onSelect={selectPlan} /> : null}
-      {canUse ? (
+      {!canAccess ? <div className="notice-card portal-state-card"><h2>Zentel AI is not available for this account</h2><p>Confirm that your Student account is active, or contact Support if access was suspended.</p></div> : null}
+      {canAccess && !hasCredits ? <div className="notice-card ai-zero-credit-state"><h2>No AI credits available</h2><p>Choose a paid plan or buy credits to send a message. Zentel AI does not offer free trials.</p><Link className="button button-primary" to="/portal/zentel-ai/usage">Buy credits</Link></div> : null}
+      {canAccess && !hasCredits ? <PlanCards snapshot={snapshot} busy={paymentBusy} onSelect={selectPlan} /> : null}
+      {canAccess ? (
         <section className="ai-workspace">
           {drawerOpen ? <button className="ai-drawer-scrim" aria-label="Close conversation history" onClick={() => setDrawerOpen(false)} /> : null}
           <ConversationSidebar open={drawerOpen} records={conversations} selectedId={selectedId} search={search} setSearch={setSearch} onSelect={(id) => { setSelectedId(id); setStreamMessage(null); setDrawerOpen(false); navigate(`/portal/zentel-ai/chat/${id}`); }} onNew={newConversation} onRename={rename} onArchive={archive} onClose={() => setDrawerOpen(false)} />
@@ -227,9 +234,9 @@ export default function ZentelAI() {
               {attachments.length || uploading ? <div className="ai-attachments">{uploading ? <span><Clock3 size={15} />Uploading file</span> : null}{attachments.map((item) => <span key={item.id}>{item.mime_type.startsWith("image/") ? <ImageIcon size={15} /> : <FileText size={15} />}{item.file_name}<button type="button" title="Remove attachment" onClick={() => removeAttachment(item)}><X size={14} /></button></span>)}</div> : null}
               <div className="ai-composer">
                 <input ref={fileRef} hidden type="file" accept=".pdf,.docx,.txt,.jpg,.jpeg,.png,.webp" onChange={(event) => event.target.files?.[0] && attach(event.target.files[0])} />
-                <button type="button" title="Attach a document or image" disabled={streaming || uploading} onClick={() => fileRef.current?.click()}><Paperclip size={19} /><span className="sr-only">Attach a document or image</span></button>
-                <textarea value={message} maxLength={30000} rows={2} placeholder="Ask Zentel AI to explain, teach, research or review..." onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} />
-                {streaming ? <button className="ai-send" type="button" title="Stop generation" onClick={() => abortRef.current?.abort()}><Square size={18} /><span className="sr-only">Stop generation</span></button> : <button className="ai-send" type="button" title="Send message" disabled={!message.trim() && !attachments.length} onClick={() => send()}><Send size={18} /><span className="sr-only">Send message</span></button>}
+                <button type="button" title="Attach a document or image" disabled={!hasCredits || streaming || uploading} onClick={() => fileRef.current?.click()}><Paperclip size={19} /><span className="sr-only">Attach a document or image</span></button>
+                <textarea value={message} disabled={!hasCredits} maxLength={30000} rows={2} placeholder={hasCredits ? "Ask Zentel AI to explain, teach, research or review..." : "Buy credits to start a Zentel AI conversation"} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} />
+                {streaming ? <button className="ai-send" type="button" title="Stop generation" onClick={() => abortRef.current?.abort()}><Square size={18} /><span className="sr-only">Stop generation</span></button> : <button className="ai-send" type="button" title="Send message" disabled={!hasCredits || (!message.trim() && !attachments.length)} onClick={() => send()}><Send size={18} /><span className="sr-only">Send message</span></button>}
               </div>
               <div className="ai-composer-meta"><label><input type="checkbox" checked={webResearch} onChange={(event) => { const enabled = event.target.checked; setWebResearch(enabled); window.localStorage.setItem("zentel-ai-web-research", String(enabled)); }} />Web research</label><span>Estimated {estimate.minimum}-{estimate.maximum} credits</span></div>
             </div>

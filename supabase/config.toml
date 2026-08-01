@@ -57,5 +57,8 @@ verify_jwt = true
 [functions.create-chat-voice-call]
 verify_jwt = true
 
+[functions.reconcile-payments]
+verify_jwt = false
+
 [functions.chat-retention-cleanup]
 verify_jwt = false

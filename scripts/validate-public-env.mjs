@@ -36,7 +36,6 @@ const env = {
 const requiredKeys = [
   "VITE_SUPABASE_URL",
   "VITE_SUPABASE_PUBLISHABLE_KEY",
-  "VITE_PAYSTACK_PUBLIC_KEY",
   "VITE_SITE_URL"
 ];
 
@@ -56,15 +55,11 @@ if (env.VITE_SITE_URL && env.VITE_SITE_URL !== "https://zentelinsight.com.ng") {
   issues.push("VITE_SITE_URL must be https://zentelinsight.com.ng for production builds.");
 }
 
-if (env.VITE_PAYSTACK_PUBLIC_KEY && !/^pk_(test|live)_/.test(env.VITE_PAYSTACK_PUBLIC_KEY)) {
-  issues.push("VITE_PAYSTACK_PUBLIC_KEY must start with pk_test_ or pk_live_.");
-}
-
 if (issues.length) {
-  console.error("[payment-config] Public payment environment is incomplete:");
+  console.error("[public-config] Public environment is incomplete:");
   for (const issue of issues) console.error(`- ${issue}`);
-  console.error("[payment-config] Set these values in Vercel and redeploy. Do not add server secrets to the frontend.");
+  console.error("[public-config] Set these values in the hosting environment and redeploy. Do not add server secrets to the frontend.");
   process.exit(1);
 }
 
-console.info("[payment-config] Public payment environment validated.");
+console.info("[public-config] Public environment validated.");

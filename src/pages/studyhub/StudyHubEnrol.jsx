@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { CreditCard, Check } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import BrandLogo from "../../components/BrandLogo";
 import { siteConfig } from "../../data/site";
 import { studyHubPricing } from "../../data/programs";
-import { flushQueuedPaymentAttempts, startPaystackPayment } from "../../services/paymentService";
+import { startPaystackPayment } from "../../services/paymentService";
 import { calculateStudyHubPrice, nairaToKobo, STUDYHUB_PAYMENT_TYPE } from "../../utils/paymentCalculations";
 import { formatCurrency, isValidEmail } from "../../utils/format";
 import { usePageMeta } from "../../utils/usePageMeta";
@@ -17,7 +17,6 @@ function getClassGroup(classLevel) {
 }
 
 export default function StudyHubEnrol({ programme = "" }) {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isSummerLessons = programme === "summer-lessons" || searchParams.get("programme") === "summer-lessons";
   const [classLevel, setClassLevel] = useState("JSS1");
@@ -26,18 +25,12 @@ export default function StudyHubEnrol({ programme = "" }) {
   const [form, setForm] = useState({ studentName: "", parentName: "", email: "", phone: "", learningPriority: "" });
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
-  const paymentOpeningRef = useRef(false);
-  const hasNavigatedRef = useRef(false);
   const classGroup = getClassGroup(classLevel);
   const pricing = studyHubPricing[classGroup];
   const total = useMemo(() => {
     if (isSummerLessons) return studyHubPricing.summerLessons.price;
     return calculateStudyHubPrice(classGroup, selectedSubjects.length, months);
   }, [classGroup, isSummerLessons, selectedSubjects.length, months]);
-
-  useEffect(() => {
-    void flushQueuedPaymentAttempts();
-  }, []);
 
   usePageMeta({
     path: isSummerLessons ? "/studyhub/enrol/summer-lessons" : "/studyhub/enrol",
@@ -77,7 +70,7 @@ export default function StudyHubEnrol({ programme = "" }) {
 
   async function handlePayment(event) {
     event.preventDefault();
-    if (paymentOpeningRef.current) return;
+    if (loading) return;
     setStatus("");
     const error = validate();
     if (error) {
@@ -86,8 +79,6 @@ export default function StudyHubEnrol({ programme = "" }) {
     }
 
     setLoading(true);
-    paymentOpeningRef.current = true;
-    hasNavigatedRef.current = false;
     const productTitle = isSummerLessons ? "Summer Lessons" : `${siteConfig.studyHub.name} - ${classLevel}`;
     const item = {
       paymentType: STUDYHUB_PAYMENT_TYPE,
@@ -114,40 +105,11 @@ export default function StudyHubEnrol({ programme = "" }) {
           phone: form.phone,
           parentName: form.parentName,
           studentName: form.studentName
-        },
-        onCancel: (message, transaction) => {
-          paymentOpeningRef.current = false;
-          setStatus(message);
-          setLoading(false);
-          if (transaction && !hasNavigatedRef.current) {
-            hasNavigatedRef.current = true;
-            navigate(transaction.path || `/studyhub/payment-failed?reference=${encodeURIComponent(transaction.reference || "")}&reason=cancelled`);
-          }
-        },
-        onError: (paymentError, transaction) => {
-          paymentOpeningRef.current = false;
-          setLoading(false);
-          if (transaction && !hasNavigatedRef.current) {
-            hasNavigatedRef.current = true;
-            navigate(transaction.path || `/studyhub/payment-failed?reference=${encodeURIComponent(transaction.reference || "")}&reason=error`);
-            return;
-          }
-          setStatus(paymentError.message);
-        },
-        onSuccess: (transaction) => {
-          if (hasNavigatedRef.current) return;
-          hasNavigatedRef.current = true;
-          navigate(transaction.path || `/studyhub/payment-success?reference=${encodeURIComponent(transaction.reference || "")}`);
         }
       });
-      setStatus("Paystack checkout opened. Complete or cancel the popup to continue.");
+      setStatus("Opening secure payment...");
     } catch (paymentError) {
-      paymentOpeningRef.current = false;
-      setStatus(
-        paymentError.paymentReference
-          ? `${paymentError.message} Reference: ${paymentError.paymentReference}`
-          : paymentError.message
-      );
+      setStatus(paymentError.message || "Payments are temporarily unavailable. Please try again shortly.");
       setLoading(false);
     }
   }

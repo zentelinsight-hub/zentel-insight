@@ -12,7 +12,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@paystack/inline-js": "^2.20.3",
     "@supabase/supabase-js": "^2.47.10",
     "@vitejs/plugin-react": "^4.3.4",
     "framer-motion": "^12.42.2",

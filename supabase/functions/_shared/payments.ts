@@ -250,7 +250,7 @@ export async function fulfilSuccessfulPayment(supabase: any, payment: any, payst
   assertVerifiedPaymentMatchesStoredPayment(payment, paystackData);
 
   const isAiPurchase = payment.product_type === "zentel_ai_subscription" || payment.product_type === "zentel_ai_topup";
-  if (payment.status === "success" && (!isAiPurchase || payment.fulfilment_status === "fulfilled")) {
+  if (payment.status === "success" && payment.fulfilment_status === "fulfilled") {
     return payment;
   }
 
@@ -274,7 +274,7 @@ export async function fulfilSuccessfulPayment(supabase: any, payment: any, payst
       verified_at: verifiedAt,
       paid_at: paystackData.paid_at || verifiedAt,
       failure_reason: null,
-      fulfilment_status: isAiPurchase ? "awaiting_webhook" : payment.fulfilment_status
+      fulfilment_status: "awaiting_webhook"
     })
     .eq("id", payment.id)
     .select()
@@ -283,32 +283,42 @@ export async function fulfilSuccessfulPayment(supabase: any, payment: any, payst
   if (updateError) throw updateError;
 
   if ((payment.brand === "zentel" || payment.brand === "zentel_insight") && payment.product_id) {
-    const { data: level } = await supabase
+    const { data: level, error: levelError } = await supabase
       .from("program_levels")
       .select("id, program_id")
       .eq("id", payment.product_id)
       .maybeSingle();
+    if (levelError || !level) {
+      await supabase.from("payments").update({ fulfilment_status: "failed" }).eq("id", payment.id);
+      throw levelError || new Error("The paid programme track could not be resolved.");
+    }
 
-    if (level) {
-      await supabase.from("enrolments").upsert(
-        {
-          user_id: payment.user_id || null,
-          program_id: level.program_id,
-          program_level_id: level.id,
-          payment_id: payment.id,
-          status: payment.user_id ? "active" : "paid_unlinked",
-          enrolled_date: new Date().toISOString().slice(0, 10)
-        },
-        { onConflict: "payment_id" }
-      );
+    const { error: enrolmentError } = await supabase.from("enrolments").upsert(
+      {
+        user_id: payment.user_id || null,
+        program_id: level.program_id,
+        program_level_id: level.id,
+        payment_id: payment.id,
+        status: payment.user_id ? "active" : "paid_unlinked",
+        enrolled_date: new Date().toISOString().slice(0, 10)
+      },
+      { onConflict: "payment_id" }
+    );
+    if (enrolmentError) {
+      await supabase.from("payments").update({ fulfilment_status: "failed" }).eq("id", payment.id);
+      throw enrolmentError;
     }
   }
 
   if (payment.brand === "studyhub") {
-    await supabase
+    const { error: registrationError } = await supabase
       .from("studyhub_registrations")
       .update({ status: "active" })
       .eq("payment_id", payment.id);
+    if (registrationError) {
+      await supabase.from("payments").update({ fulfilment_status: "failed" }).eq("id", payment.id);
+      throw registrationError;
+    }
   }
 
   if (isAiPurchase && source === "paystack_webhook") {
@@ -337,5 +347,15 @@ export async function fulfilSuccessfulPayment(supabase: any, payment: any, payst
     return fulfilledPayment;
   }
 
-  return updatedPayment;
+  const { data: fulfilledPayment, error: fulfilmentError } = await supabase
+    .from("payments")
+    .update({ fulfilment_status: "fulfilled" })
+    .eq("id", payment.id)
+    .select()
+    .single();
+  if (fulfilmentError) {
+    await supabase.from("payments").update({ fulfilment_status: "failed" }).eq("id", payment.id);
+    throw fulfilmentError;
+  }
+  return fulfilledPayment || updatedPayment;
 }

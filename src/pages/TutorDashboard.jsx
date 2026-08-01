@@ -10,6 +10,7 @@ import {
   LifeBuoy,
   Megaphone,
   MessageSquare,
+  School,
   Settings,
   Sun,
   Moon,
@@ -42,9 +43,14 @@ import {
 } from "../services/portal/portalRepository";
 import { formatDateTime } from "../utils/format";
 import { usePageMeta } from "../utils/usePageMeta";
+import { TutorAcademySection } from "./AcademyWorkspace";
 
 const sections = [
   ["dashboard", "Dashboard", LayoutDashboard],
+  ["teaching", "Teaching", BookOpen],
+  ["classrooms", "Classrooms", School],
+  ["assessment", "Assessment", FileCheck2],
+  ["performance", "Performance", CheckCircle2],
   ["profile", "My Profile", UserRound],
   ["programme", "My Programme", GraduationCap],
   ["students", "My Students", Users],
@@ -62,11 +68,12 @@ const sections = [
 ];
 
 const tutorGroupSpecs = [
-  { label: "Home", defaultOpen: true, slugs: ["dashboard"] },
-  { label: "Teaching", slugs: ["programme", "students", "timetable", "assignments", "resources"] },
-  { label: "Classroom", slugs: ["classroom", "classroom-chat", "live-classes", "attendance"] },
-  { label: "Communication", slugs: ["announcements", "notifications"] },
-  { label: "Account", slugs: ["profile", "support", "settings"] }
+  { label: "Home", major: true, slugs: ["dashboard"] },
+  { label: "Teaching", major: true, slugs: ["teaching"] },
+  { label: "Classrooms", major: true, slugs: ["classrooms"] },
+  { label: "Assessment", major: true, slugs: ["assessment"] },
+  { label: "Communication", major: true, slugs: ["notifications"] },
+  { label: "Account", major: true, slugs: ["profile"] }
 ];
 
 function firstName(value) {
@@ -919,6 +926,10 @@ export default function TutorDashboard({ forcedSection = "" }) {
   return (
     <TutorFrame data={data} onRealtimeChange={dataQuery.refetch}>
       {activeSection === "dashboard" ? <DashboardSection data={data} onSaved={dataQuery.refetch} /> : null}
+      {activeSection === "teaching" ? <TutorAcademySection view="teaching" /> : null}
+      {activeSection === "classrooms" ? <TutorAcademySection view="classrooms" /> : null}
+      {activeSection === "assessment" ? <TutorAcademySection view="assessment" /> : null}
+      {activeSection === "performance" ? <TutorAcademySection view="performance" /> : null}
       {activeSection === "profile" ? <ProfileSection data={data} /> : null}
       {activeSection === "programme" ? <ProgrammeSection data={data} /> : null}
       {activeSection === "students" ? <StudentsSection data={data} /> : null}

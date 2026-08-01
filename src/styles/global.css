@@ -149,7 +149,6 @@ body[data-brand="studyhub"] {
 html {
   width: 100%;
   max-width: 100%;
-  min-width: 320px;
   overflow-x: clip;
   scroll-behavior: smooth;
 }
@@ -158,7 +157,6 @@ body {
   width: 100%;
   max-width: 100%;
   margin: 0;
-  min-width: 320px;
   min-height: 100vh;
   background: linear-gradient(180deg, var(--color-bg), var(--color-bg-alt));
   color: var(--color-text);
@@ -6435,5 +6433,184 @@ body.portal-route-active .site-footer {
   .receipt-card {
     border: 0;
     box-shadow: none;
+  }
+}
+/* Coordinated academy workspaces */
+.academy-workspace {
+  min-width: 0;
+}
+
+.academy-heading > div:first-child {
+  min-width: 0;
+}
+
+.portal-back-button {
+  width: fit-content;
+  margin-bottom: 0.75rem;
+}
+
+.academy-tabs {
+  display: flex;
+  gap: 0.35rem;
+  max-width: 100%;
+  margin: 0 0 1.25rem;
+  padding: 0.3rem;
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+  background: var(--surface-color);
+}
+
+.academy-tabs a {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.55rem;
+  padding: 0.55rem 0.8rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.academy-tabs a:hover,
+.academy-tabs a.active {
+  color: var(--text-color);
+  background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+}
+
+.academy-summary-grid {
+  margin-bottom: 1.25rem;
+}
+
+.academy-record-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+}
+
+.academy-record-grid .portal-record-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.academy-record-grid .button {
+  margin-top: auto;
+}
+
+.academy-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  color: var(--text-muted);
+}
+
+.academy-submission-form {
+  max-width: 58rem;
+}
+
+.academy-question {
+  min-width: 0;
+  margin: 0;
+  padding: 1rem 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.academy-question legend {
+  width: 100%;
+  margin-bottom: 0.75rem;
+  color: var(--text-color);
+  font-weight: 800;
+}
+
+.academy-option {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.75rem;
+  margin: 0.35rem 0;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border-color);
+  background: var(--surface-color);
+}
+
+.academy-option input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+}
+
+.academy-classroom-switcher {
+  display: grid;
+  gap: 0.35rem;
+  width: min(100%, 24rem);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.academy-classroom-switcher select {
+  width: 100%;
+}
+
+.academy-grade-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  gap: 0.8rem;
+}
+
+.academy-grade-form {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+  border: 1px solid var(--border-color);
+  background: var(--surface-color);
+}
+
+.academy-grade-form label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.academy-admin-forms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 0.8rem;
+  margin: 1rem 0 1.25rem;
+}
+
+.portal-table td small {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--text-muted);
+}
+
+.portal-major-link {
+  margin: 0.18rem 0;
+}
+
+.portal-sidebar-footer .portal-sidebar-profile {
+  margin-bottom: 0.65rem;
+}
+
+@media (max-width: 700px) {
+  .academy-heading {
+    align-items: stretch;
+  }
+
+  .academy-classroom-switcher {
+    width: 100%;
+  }
+
+  .academy-tabs {
+    margin-inline: -0.15rem;
+  }
+
+  .academy-submission-form,
+  .academy-grade-form {
+    padding: 0.85rem;
   }
 }

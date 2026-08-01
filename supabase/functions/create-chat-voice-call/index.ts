@@ -15,7 +15,7 @@ function clean(value: unknown, maximum = 160) {
 async function getRoomMembership(supabase: any, roomId: string, userId: string) {
   const { data, error } = await supabase
     .from("program_chat_members")
-    .select("id, role, active, left_at, program_chat_rooms(id, program_id, track_id, title, active)")
+    .select("id, role, active, left_at, program_chat_rooms(id, program_id, track_id, classroom_id, title, active)")
     .eq("room_id", roomId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -24,6 +24,18 @@ async function getRoomMembership(supabase: any, roomId: string, userId: string) 
 }
 
 async function isAssignedTutor(supabase: any, userId: string, room: any) {
+  if (room.classroom_id) {
+    const { data, error } = await supabase
+      .from("tutor_classroom_assignments")
+      .select("id")
+      .eq("tutor_id", userId)
+      .eq("classroom_id", room.classroom_id)
+      .eq("active", true)
+      .maybeSingle();
+    if (error) throw error;
+    return Boolean(data);
+  }
+
   const { data, error } = await supabase
     .from("tutor_program_assignments")
     .select("id, track_id")
@@ -113,7 +125,7 @@ Deno.serve(async (request) => {
     if (!roomId) return jsonResponse({ ok: false, error: "A classroom is required." }, 400, request);
 
     const membership = role === "admin" ? null : await getRoomMembership(supabase, roomId, auth.user.id);
-    const room = membership?.program_chat_rooms || (await supabase.from("program_chat_rooms").select("id, program_id, track_id, title, active").eq("id", roomId).maybeSingle()).data;
+    const room = membership?.program_chat_rooms || (await supabase.from("program_chat_rooms").select("id, program_id, track_id, classroom_id, title, active").eq("id", roomId).maybeSingle()).data;
     if (!room?.active) return jsonResponse({ ok: false, error: "This classroom is not available." }, 404, request);
     if (role !== "admin" && (!membership?.active || membership.left_at)) {
       return jsonResponse({ ok: false, error: "Join the programme chat before joining a voice call." }, 403, request);

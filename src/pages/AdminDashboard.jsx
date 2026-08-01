@@ -56,10 +56,13 @@ import {
 } from "../services/adminService";
 import { formatCurrency, formatDateTime } from "../utils/format";
 import { usePageMeta } from "../utils/usePageMeta";
+import { AdminAcademySection } from "./AcademyWorkspace";
 
 const sections = [
   ["overview", "Overview", LayoutDashboard],
   ["accounts", "Account Lookup", Search],
+  ["academics", "Academics", GraduationCap],
+  ["finance", "Finance", CreditCard],
   ["programmes", "Programmes", GraduationCap],
   ["enrolments", "Enrolments", FileCheck2],
   ["classrooms", "Classrooms", MessageSquare],
@@ -80,14 +83,13 @@ const sections = [
 ];
 
 const adminGroupSpecs = [
-  { label: "Overview", defaultOpen: true, slugs: ["overview"] },
-  { label: "Accounts", slugs: ["accounts", "enrolments"] },
-  { label: "Academics", slugs: ["programmes", "timetable", "assignments", "resources"] },
-  { label: "Classrooms", slugs: ["classrooms", "live-classes"] },
-  { label: "Communication", slugs: ["announcements", "notifications", "articles"] },
-  { label: "Finance", slugs: ["payments", "certificates"] },
-  { label: "Zentel AI", slugs: ["zentel-ai"] },
-  { label: "Operations", slugs: ["support", "audit", "profile", "settings"] }
+  { label: "Overview", major: true, slugs: ["overview"] },
+  { label: "Accounts", major: true, slugs: ["accounts"] },
+  { label: "Academics", major: true, slugs: ["academics"] },
+  { label: "Classrooms", major: true, slugs: ["classrooms"] },
+  { label: "Finance", major: true, slugs: ["finance"] },
+  { label: "Zentel AI", major: true, slugs: ["zentel-ai"] },
+  { label: "Operations", major: true, slugs: ["support"] }
 ];
 
 const emptyProgramForm = {
@@ -1743,6 +1745,8 @@ export default function AdminDashboard({ forcedSection = "" }) {
   return (
     <AdminFrame data={data} onRealtimeChange={dataQuery.refetch}>
       {activeSection === "overview" ? <OverviewSection data={data} /> : null}
+      {activeSection === "academics" ? <AdminAcademySection view="academics" /> : null}
+      {activeSection === "finance" ? <AdminAcademySection view="finance" /> : null}
       {activeSection === "accounts" && portalId ? <AccountManagementSection portalId={portalId} programs={data.programs} /> : null}
       {activeSection === "accounts" && !portalId ? (
         <div className="portal-page admin-account-lookup-page">
