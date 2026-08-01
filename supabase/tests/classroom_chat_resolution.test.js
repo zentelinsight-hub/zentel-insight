@@ -9,6 +9,10 @@ const compatibilityMigration = readFileSync(
   new URL("../migrations/202608010005_classroom_chat_compatibility.sql", import.meta.url),
   "utf8"
 );
+const selfHealMigration = readFileSync(
+  new URL("../migrations/202608010006_classroom_chat_self_heal.sql", import.meta.url),
+  "utf8"
+);
 
 describe("classroom chat resolution migration", () => {
   it("creates and maintains one chat room per classroom", () => {
@@ -30,5 +34,12 @@ describe("classroom chat resolution migration", () => {
   it("routes older frontend bundles through the classroom resolver", () => {
     expect(compatibilityMigration).toMatch(/create or replace function public\.get_programme_chat_access/i);
     expect(compatibilityMigration).toMatch(/from public\.get_classroom_chat_access/i);
+  });
+
+  it("repairs active legacy enrolments before loading Chat", () => {
+    expect(selfHealMigration).toMatch(/from public\.enrolments enrolment/i);
+    expect(selfHealMigration).toMatch(/insert into public\.classroom_memberships/i);
+    expect(selfHealMigration).toMatch(/insert into public\.program_chat_members/i);
+    expect(selfHealMigration).toMatch(/else now\(\)/i);
   });
 });
