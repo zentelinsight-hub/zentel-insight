@@ -5,7 +5,7 @@ import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RouteTransitionGate from "./components/RouteTransitionGate";
 import WelcomeExperience from "./components/WelcomeExperience";
-import { PortalLayout, PortalOverview, PortalProfile, PortalSection } from "./pages/Portal";
+import { PortalLayout, PortalOverview, PortalProfile, PortalSection, StudentAttendancePage, StudentClassroomChatPage, StudentLiveClassesPage } from "./pages/Portal";
 import { USER_ROLES } from "./services/roleService";
 
 function getRouteBrand(location) {
@@ -64,6 +64,10 @@ const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const TutorDashboard = lazy(() => import("./pages/TutorDashboard"));
 const ZentelAI = lazy(() => import("./pages/ZentelAI"));
 const ZentelAIUsage = lazy(() => import("./pages/ZentelAI").then((module) => ({ default: module.ZentelAIUsage })));
+const ZentelAIHistory = lazy(() => import("./pages/ZentelAI").then((module) => ({ default: module.ZentelAIHistory })));
+const ZentelAIPlans = lazy(() => import("./pages/ZentelAI").then((module) => ({ default: module.ZentelAIPlans })));
+const ZentelAIBilling = lazy(() => import("./pages/ZentelAI").then((module) => ({ default: module.ZentelAIBilling })));
+const ZentelAISettings = lazy(() => import("./pages/ZentelAI").then((module) => ({ default: module.ZentelAISettings })));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const Payment = lazy(() => import("./pages/Payment"));
 const PaymentStatus = lazy(() => import("./pages/PaymentStatus"));
@@ -160,13 +164,23 @@ export default function App() {
               <Route path="programs" element={<Navigate to="/programs" replace />} />
               <Route path="enrolments" element={<Navigate to="/portal/my-courses" replace />} />
               <Route path="my-courses" element={<PortalSection page="my-courses" />} />
+              <Route path="my-course" element={<Navigate to="/portal/my-courses" replace />} />
               <Route path="classroom" element={<PortalSection page="classroom" />} />
+              <Route path="classroom/chat" element={<StudentClassroomChatPage />} />
+              <Route path="classroom/live" element={<StudentLiveClassesPage />} />
+              <Route path="classroom/attendance" element={<StudentAttendancePage />} />
               <Route path="timetable" element={<PortalSection page="timetable" />} />
               <Route path="announcements" element={<PortalSection page="announcements" />} />
               <Route path="assignments" element={<PortalSection page="assignments" />} />
               <Route path="resources" element={<PortalSection page="resources" />} />
               <Route path="zentel-ai" element={<ZentelAI />} />
+              <Route path="zentel-ai/new" element={<ZentelAI />} />
+              <Route path="zentel-ai/chat/:conversationId" element={<ZentelAI />} />
+              <Route path="zentel-ai/history" element={<ZentelAIHistory />} />
+              <Route path="zentel-ai/plans" element={<ZentelAIPlans />} />
               <Route path="zentel-ai/usage" element={<ZentelAIUsage />} />
+              <Route path="zentel-ai/billing" element={<ZentelAIBilling />} />
+              <Route path="zentel-ai/settings" element={<ZentelAISettings />} />
               <Route path="payments" element={<PortalSection page="payments" />} />
               <Route path="certificates" element={<PortalSection page="certificates" />} />
               <Route path="notifications" element={<PortalSection page="notifications" />} />
@@ -187,6 +201,20 @@ export default function App() {
               path="/admin/accounts/:portalId"
               element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard /></ProtectedRoute>}
             />
+            <Route path="/admin/accounts/activity" element={<Navigate to="/admin/audit" replace />} />
+            <Route path="/admin/tutors/create" element={<Navigate to="/admin/accounts" replace />} />
+            <Route path="/admin/programmes/:programId" element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard forcedSection="programmes" /></ProtectedRoute>} />
+            <Route path="/admin/pricing" element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard forcedSection="programmes" /></ProtectedRoute>} />
+            <Route path="/admin/classrooms/:roomId" element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard forcedSection="classrooms" /></ProtectedRoute>} />
+            <Route
+              path="/admin/classrooms/:roomId/chat"
+              element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard forcedSection="classroom-chat" /></ProtectedRoute>}
+            />
+            <Route path="/admin/voice-calls" element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard forcedSection="classrooms" /></ProtectedRoute>} />
+            <Route path="/admin/attendance" element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard forcedSection="classrooms" /></ProtectedRoute>} />
+            {['plans', 'subscriptions', 'usage', 'requests', 'configuration', 'budgets'].map((aiSection) => (
+              <Route key={aiSection} path={`/admin/zentel-ai/${aiSection}`} element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard forcedSection="zentel-ai" /></ProtectedRoute>} />
+            ))}
             <Route
               path="/admin/:section"
               element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard /></ProtectedRoute>}
@@ -194,6 +222,18 @@ export default function App() {
             <Route
               path="/tutor"
               element={<ProtectedRoute allowedRoles={[USER_ROLES.TUTOR]}><TutorDashboard /></ProtectedRoute>}
+            />
+            <Route
+              path="/tutor/classroom/chat"
+              element={<ProtectedRoute allowedRoles={[USER_ROLES.TUTOR]}><TutorDashboard forcedSection="classroom-chat" /></ProtectedRoute>}
+            />
+            <Route
+              path="/tutor/classroom/live"
+              element={<ProtectedRoute allowedRoles={[USER_ROLES.TUTOR]}><TutorDashboard forcedSection="live-classes" /></ProtectedRoute>}
+            />
+            <Route
+              path="/tutor/classroom/attendance"
+              element={<ProtectedRoute allowedRoles={[USER_ROLES.TUTOR]}><TutorDashboard forcedSection="attendance" /></ProtectedRoute>}
             />
             <Route
               path="/tutor/:section"

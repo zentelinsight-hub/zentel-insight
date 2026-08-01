@@ -56,7 +56,7 @@ async function ensureDailyRoom(supabase: any, session: any) {
 
   const apiKey = Deno.env.get("DAILY_API_KEY");
   if (!apiKey) {
-    return { configured: false, error: "Daily video provider credentials are not configured." };
+    return { configured: false, error: "Live classes are temporarily unavailable. Please try again." };
   }
 
   const roomName = `zentel-${session.id}`.replace(/[^a-zA-Z0-9_-]/g, "-");
@@ -110,10 +110,10 @@ async function ensureDailyRoom(supabase: any, session: any) {
   return { configured: true, session: updated || { ...session, provider_room_id: roomName, provider_room_url: roomUrl } };
 }
 
-async function createDailyToken(session: any, isHost: boolean, userId: string, expiresAt: Date) {
+async function createDailyToken(session: any, isHost: boolean, userId: string, userName: string, expiresAt: Date) {
   const apiKey = getDailyApiKey();
   if (!apiKey) {
-    return { configured: false, error: "Daily video provider credentials are not configured." };
+    return { configured: false, error: "Live classes are temporarily unavailable. Please try again." };
   }
 
   const response = await fetch("https://api.daily.co/v1/meeting-tokens", {
@@ -126,6 +126,7 @@ async function createDailyToken(session: any, isHost: boolean, userId: string, e
       properties: {
         room_name: session.provider_room_id,
         user_id: userId,
+        user_name: userName,
         is_owner: isHost,
         enable_screenshare: isHost,
         start_cloud_recording: false,
@@ -176,6 +177,8 @@ Deno.serve(async (request) => {
 
     const role = await getUserRole(supabase, auth.user.id);
     const accountStatus = await getUserAccountStatus(supabase, auth.user.id);
+    const { data: profile } = await supabase.from("profiles").select("full_name, portal_id").eq("id", auth.user.id).maybeSingle();
+    const userName = clean(profile?.full_name || profile?.portal_id || (role === "tutor" ? "Tutor" : role === "admin" ? "Admin" : "Student")).slice(0, 80);
     if (accountStatus !== "active") {
       return jsonResponse({ ok: false, error: "Your account is inactive. Contact Zentel Insight support for activation." }, 403, request);
     }
@@ -188,7 +191,7 @@ Deno.serve(async (request) => {
 
     const isHost = role === "admin" || (role === "tutor" && (!session.tutor_id || session.tutor_id === auth.user.id));
     if (session.provider !== "daily") {
-      return jsonResponse({ ok: false, error: "The configured live-class provider is not supported by this function." }, 501, request);
+      return jsonResponse({ ok: false, error: "Live classes are temporarily unavailable. Please try again." }, 501, request);
     }
 
     let readySession = session;
@@ -224,7 +227,7 @@ Deno.serve(async (request) => {
     }
 
     const tokenExpiry = new Date(Math.min(closesAt.getTime(), now.getTime() + (4 * 60 * 60 * 1000)));
-    const tokenResult = await createDailyToken(readySession, isHost, auth.user.id, tokenExpiry);
+    const tokenResult = await createDailyToken(readySession, isHost, auth.user.id, userName, tokenExpiry);
     if (!tokenResult.configured) {
       return jsonResponse({ ok: false, error: tokenResult.error }, 501, request);
     }
@@ -246,7 +249,6 @@ Deno.serve(async (request) => {
 
     return jsonResponse({
       ok: true,
-      provider: "daily",
       token: tokenResult.token,
       roomUrl: tokenResult.roomUrl,
       permission: isHost ? "host" : "participant",

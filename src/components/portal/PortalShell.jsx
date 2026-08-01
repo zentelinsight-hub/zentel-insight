@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { LogOut, Menu, X } from "lucide-react";
+import { ChevronDown, LogOut, Menu, X } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import BrandLogo from "../BrandLogo";
 import IdleSessionGuard from "../IdleSessionGuard";
@@ -21,7 +21,40 @@ function SidebarProfile({ name, detail, avatarUrl, initial }) {
   );
 }
 
+function SidebarGroup({ group, pathname, onNavigate }) {
+  const isItemActive = (item) => item.end ? pathname === item.to : pathname === item.to || pathname.startsWith(`${item.to}/`);
+  const active = group.items.some(isItemActive);
+  const [open, setOpen] = useState(Boolean(group.defaultOpen || active));
+
+  useEffect(() => {
+    if (active) setOpen(true);
+  }, [active]);
+
+  return (
+    <details className="portal-nav-group" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary><span>{group.label}</span><ChevronDown size={15} aria-hidden="true" /></summary>
+      <div>
+        {group.items.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            onClick={onNavigate}
+            className={({ isActive }) => isActive ? "portal-link active" : "portal-link"}
+          >
+            <item.Icon size={18} aria-hidden="true" />
+            <span>{item.label}</span>
+            {Number(item.badge || 0) > 0 ? <span className="portal-nav-badge">{item.badge}</span> : null}
+          </NavLink>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 function SidebarContent({ sidebar, onNavigate, onSignOut }) {
+  const location = useLocation();
+  const groups = sidebar.groups || [{ label: "Navigation", items: sidebar.items || [], defaultOpen: true }];
   return (
     <>
       <div className="portal-sidebar-header">
@@ -40,19 +73,7 @@ function SidebarContent({ sidebar, onNavigate, onSignOut }) {
         />
       </div>
       <nav className="portal-sidebar-navigation" aria-label={sidebar.navLabel}>
-        {sidebar.items.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            onClick={onNavigate}
-            className={({ isActive }) => isActive ? "portal-link active" : "portal-link"}
-          >
-            <item.Icon size={18} aria-hidden="true" />
-            <span>{item.label}</span>
-            {Number(item.badge || 0) > 0 ? <span className="portal-nav-badge">{item.badge}</span> : null}
-          </NavLink>
-        ))}
+        {groups.map((group) => <SidebarGroup key={group.label} group={group} pathname={location.pathname} onNavigate={onNavigate} />)}
       </nav>
       <div className="portal-sidebar-footer">
         <button className="portal-link signout" type="button" onClick={onSignOut}>

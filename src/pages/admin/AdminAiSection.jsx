@@ -1,5 +1,6 @@
 import { AlertTriangle, BrainCircuit, CheckCircle2, DollarSign, Gauge, RefreshCw, Search, ShieldOff, Sparkles, Users, WalletCards } from "lucide-react";
 import { useEffect, useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import { manageAdminAi } from "../../services/adminService";
 import { formatCurrency, formatDateTime } from "../../utils/format";
@@ -32,7 +33,7 @@ function StudentManager({ plans, onChanged }) {
     finally { setBusy(false); }
   };
   return (
-    <section className="admin-ai-section-block">
+    <section className="admin-ai-section-block ai-subscriptions-section">
       <div className="ai-section-heading"><div><p className="eyebrow">Student controls</p><h2>Find and manage a Student</h2></div></div>
       <form className="admin-ai-search" onSubmit={search}><label><span className="sr-only">Portal ID or email</span><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Portal ID or exact email" /></label><button className="button button-primary" disabled={busy}>Find Student</button></form>
       {status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}
@@ -69,14 +70,13 @@ function SettingsManager({ data, onChanged }) {
     ["maximum_output_tokens", "Maximum output tokens"], ["maximum_input_characters", "Maximum input characters"], ["maximum_files_per_request", "Files per request"],
     ["maximum_file_bytes", "Maximum file bytes"], ["maximum_web_searches_per_request", "Web searches per request"], ["per_student_daily_credits", "Student daily credits"],
     ["per_student_daily_cost_usd", "Student daily expense (USD)"], ["global_daily_cost_usd", "Global daily expense (USD)"], ["global_monthly_cost_usd", "Global monthly expense (USD)"],
-    ["maximum_concurrent_requests", "Concurrent requests per Student"], ["requests_per_minute", "Requests per minute"], ["request_timeout_seconds", "Request timeout seconds"],
-    ["trial_credits", "Trial credits"], ["trial_days", "Trial days"]
+    ["maximum_concurrent_requests", "Concurrent requests per Student"], ["requests_per_minute", "Requests per minute"], ["request_timeout_seconds", "Request timeout seconds"]
   ];
   return (
-    <section className="admin-ai-section-block">
+    <section className="admin-ai-section-block ai-configuration-section">
       <div className="ai-section-heading"><div><p className="eyebrow">Protection and routing</p><h2>AI configuration</h2></div></div>
       <form className="admin-ai-settings" onSubmit={submit}>
-        <div className="admin-ai-toggles"><Toggle label="Emergency disable" checked={values.emergency_disabled} onChange={(value) => set("emergency_disabled", value)} /><Toggle label="Web research enabled" checked={values.web_search_enabled} onChange={(value) => set("web_search_enabled", value)} /><Toggle label="File uploads enabled" checked={values.file_uploads_enabled} onChange={(value) => set("file_uploads_enabled", value)} /><Toggle label="Trial enabled" checked={values.trial_enabled} onChange={(value) => set("trial_enabled", value)} /></div>
+        <div className="admin-ai-toggles"><Toggle label="Emergency disable" checked={values.emergency_disabled} onChange={(value) => set("emergency_disabled", value)} /><Toggle label="Web research enabled" checked={values.web_search_enabled} onChange={(value) => set("web_search_enabled", value)} /><Toggle label="File uploads enabled" checked={values.file_uploads_enabled} onChange={(value) => set("file_uploads_enabled", value)} /></div>
         <div className="admin-ai-field-grid">{numeric.map(([key, label]) => <label key={key}>{label}<input type="number" step="any" value={values[key] ?? ""} onChange={(event) => set(key, Number(event.target.value))} /></label>)}</div>
         <fieldset><legend>Internal model routing</legend>{["standard", "advanced", "expert"].map((route) => <label key={route}>{route}<input value={values.model_mappings?.[route] || ""} onChange={(event) => set("model_mappings", { ...values.model_mappings, [route]: event.target.value })} /></label>)}</fieldset>
         {status ? <div className="form-status info">{status}</div> : null}<button className="button button-primary" disabled={busy}>Save AI Configuration</button>
@@ -111,7 +111,7 @@ function CatalogForm({ type, item, onChanged }) {
 
 function CatalogManager({ data, onChanged }) {
   return (
-    <section className="admin-ai-section-block">
+    <section className="admin-ai-section-block ai-plans-section">
       <div className="ai-section-heading"><div><p className="eyebrow">Commercial settings</p><h2>Plans and credit packs</h2></div></div>
       <h3>Subscription plans</h3><div className="admin-ai-catalog-grid">{(data.plans || []).map((item) => <CatalogForm key={item.id} type="plan" item={item} onChanged={onChanged} />)}</div>
       <h3>Top-up products</h3><div className="admin-ai-catalog-grid">{(data.topups || []).map((item) => <CatalogForm key={item.id} type="topup" item={item} onChanged={onChanged} />)}</div>
@@ -120,6 +120,8 @@ function CatalogManager({ data, onChanged }) {
 }
 
 export default function AdminAiSection() {
+  const location = useLocation();
+  const view = location.pathname.split("/zentel-ai/")[1] || "overview";
   const query = useAsyncData(() => manageAdminAi("dashboard"), [], { timeoutMs: 30000, errorMessage: "Zentel AI Admin data could not be loaded." });
   if (query.loading) return <div className="portal-page"><div className="route-loader">Loading Zentel AI management</div></div>;
   if (query.error) return <div className="portal-page"><div className="notice-card portal-state-card"><h2>Zentel AI management could not be loaded</h2><p>{query.error}</p><button className="button button-primary" onClick={query.refetch}>Try Again</button></div></div>;
@@ -129,8 +131,9 @@ export default function AdminAiSection() {
   const revenueNaira = (Number(metrics.subscriptionRevenueKobo || 0) + Number(metrics.topupRevenueKobo || 0)) / 100;
   const contribution = revenueNaira - Number(metrics.providerCostUsd || 0) * exchange;
   return (
-    <div className="portal-page admin-ai-page">
+    <div className={`portal-page admin-ai-page view-${view}`}>
       <div className="portal-page-heading"><div><p className="eyebrow">Admin</p><h2>Zentel AI</h2><p>Manage access, plans, credits, routing, budgets and live usage.</p></div><button className="button button-secondary" onClick={query.refetch}><RefreshCw size={16} />Refresh</button></div>
+      <nav className="portal-section-tabs" aria-label="Zentel AI management sections">{[["overview", "Overview"], ["plans", "Plans"], ["subscriptions", "Subscriptions"], ["usage", "Usage and Costs"], ["requests", "Requests and Errors"], ["configuration", "Configuration"], ["budgets", "Budgets"]].map(([slug, label]) => <NavLink key={slug} to={slug === "overview" ? "/admin/zentel-ai" : `/admin/zentel-ai/${slug}`} end>{label}</NavLink>)}</nav>
       {data.settings?.emergency_disabled ? <div className="form-status warning"><AlertTriangle size={17} />All Zentel AI execution is currently disabled.</div> : null}
       <div className="admin-ai-metrics">
         <Metric Icon={Users} label="Active subscriptions" value={metrics.activeSubscriptions || 0} detail={`${metrics.starterSubscriptions || 0} Starter · ${metrics.plusSubscriptions || 0} Plus · ${metrics.proSubscriptions || 0} Pro`} />
@@ -143,7 +146,7 @@ export default function AdminAiSection() {
       <StudentManager plans={data.plans || []} onChanged={query.refetch} />
       <SettingsManager data={data} onChanged={query.refetch} />
       <CatalogManager data={data} onChanged={query.refetch} />
-      <section className="admin-ai-section-block"><div className="ai-section-heading"><div><p className="eyebrow">Operations</p><h2>Recent AI requests</h2></div></div><div className="table-scroll"><table><thead><tr><th>Date</th><th>Status</th><th>Activity</th><th>Route</th><th>Credits</th><th>Expense</th></tr></thead><tbody>{(data.recentRequests || []).slice(0, 50).map((item) => <tr key={item.id}><td>{formatDateTime(item.created_at)}</td><td>{item.status}</td><td>{item.request_type}</td><td>{item.model_route}</td><td>{item.credits_charged}</td><td>${Number(item.provider_cost_usd || 0).toFixed(4)}</td></tr>)}</tbody></table></div></section>
+      <section className="admin-ai-section-block ai-requests-section"><div className="ai-section-heading"><div><p className="eyebrow">Operations</p><h2>Recent AI requests</h2></div></div><div className="table-scroll"><table><thead><tr><th>Date</th><th>Status</th><th>Activity</th><th>Route</th><th>Credits</th><th>Expense</th></tr></thead><tbody>{(data.recentRequests || []).slice(0, 50).map((item) => <tr key={item.id}><td>{formatDateTime(item.created_at)}</td><td>{item.status}</td><td>{item.request_type}</td><td>{item.model_route}</td><td>{item.credits_charged}</td><td>${Number(item.provider_cost_usd || 0).toFixed(4)}</td></tr>)}</tbody></table></div></section>
     </div>
   );
 }

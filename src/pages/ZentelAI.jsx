@@ -16,14 +16,13 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AiMessage from "../components/ai/AiMessage";
 import { useAsyncData } from "../hooks/useAsyncData";
 import {
   archiveAiConversation,
   buyAiCredits,
   cancelAiSubscription,
-  claimAiTrial,
   createAiConversation,
   createAiSubscription,
   estimateAiCredits,
@@ -40,28 +39,16 @@ import { verifyPaymentReference } from "../services/paymentService";
 import { normalizePaymentReference } from "../utils/paymentCalculations";
 import { usePageMeta } from "../utils/usePageMeta";
 
-const suggestions = [
-  "Explain a difficult topic",
-  "Help me practise coding",
-  "Create a study plan",
-  "Generate a quiz",
-  "Review an assignment idea",
-  "Research a current topic",
-  "Analyse a document",
-  "Analyse a screenshot"
-];
-
 function formatNaira(kobo) {
   return formatCurrency(Number(kobo || 0) / 100);
 }
 
-function PlanCards({ snapshot, busy, onSelect, onTrial }) {
+function PlanCards({ snapshot, busy, onSelect }) {
   const currentPlanId = snapshot.subscription?.plan_id;
   return (
     <section className="ai-pricing" aria-labelledby="ai-plans-title">
       <div className="ai-section-heading">
         <div><p className="eyebrow">Choose your access</p><h2 id="ai-plans-title">Zentel AI plans</h2></div>
-        {snapshot.access?.trial_available ? <button className="button button-secondary" type="button" disabled={busy} onClick={onTrial}>Activate 20-credit trial</button> : null}
       </div>
       <div className="ai-plan-grid">
         {(snapshot.plans || []).map((plan) => (
@@ -81,33 +68,12 @@ function PlanCards({ snapshot, busy, onSelect, onTrial }) {
   );
 }
 
-function PlanSummary({ snapshot, onPlans }) {
-  const wallet = snapshot.wallet || {};
-  const subscription = snapshot.subscription;
-  const allocation = Number(subscription?.monthly_credits || 0);
-  const remaining = Number(wallet.total_available || 0);
-  const monthlyRemaining = Number(wallet.monthly_credits || 0);
-  const used = Math.max(0, allocation - monthlyRemaining);
-  return (
-    <section className="ai-plan-summary" aria-label="Zentel AI plan and credits">
-      <div><span>Current plan</span><strong>{subscription?.plan_name || "No monthly plan"}</strong></div>
-      <div><span>Credits remaining</span><strong>{remaining.toLocaleString()}</strong></div>
-      <div><span>Credits used</span><strong>{used.toLocaleString()}{allocation ? ` of ${allocation.toLocaleString()}` : ""}</strong></div>
-      <div><span>Renewal date</span><strong>{subscription?.next_payment_date ? formatDateTime(subscription.next_payment_date) : "Not scheduled"}</strong></div>
-      <button className="button button-secondary" type="button" onClick={onPlans}>Upgrade Plan</button>
-      <Link className="button button-secondary" to="/portal/zentel-ai/usage#credits">Buy Credits</Link>
-      <Link className="button button-primary" to="/portal/zentel-ai/usage">View Usage</Link>
-    </section>
-  );
-}
-
-function Welcome({ onSuggestion }) {
+function Welcome() {
   return (
     <div className="ai-welcome">
       <span className="ai-welcome-icon"><Sparkles size={28} /></span>
-      <h2>Welcome to Zentel AI</h2>
-      <p>Learn, practise, research and build with an AI assistant designed to support your Zentel Insight learning journey.</p>
-      <div className="ai-suggestion-grid">{suggestions.map((item) => <button type="button" key={item} onClick={() => onSuggestion(item)}>{item}</button>)}</div>
+      <h2>How can I help you learn today?</h2>
+      <p>Type your question below or attach a document or image for analysis.</p>
       <p className="ai-caution">Zentel AI can make mistakes. Review important academic, technical and professional information before relying on it.</p>
     </div>
   );
@@ -134,16 +100,17 @@ function ConversationSidebar({ open, records, selectedId, search, setSearch, onS
 }
 
 export default function ZentelAI() {
-  const [selectedId, setSelectedId] = useState("");
+  const { conversationId = "" } = useParams();
+  const navigate = useNavigate();
+  const [selectedId, setSelectedId] = useState(conversationId);
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
   const [attachments, setAttachments] = useState([]);
-  const [webResearch, setWebResearch] = useState(false);
+  const [webResearch, setWebResearch] = useState(() => typeof window !== "undefined" && window.localStorage.getItem("zentel-ai-web-research") === "true");
   const [streaming, setStreaming] = useState(false);
   const [streamMessage, setStreamMessage] = useState(null);
   const [status, setStatus] = useState({ type: "", message: "" });
   const [paymentBusy, setPaymentBusy] = useState(false);
-  const [showPlans, setShowPlans] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
@@ -159,12 +126,21 @@ export default function ZentelAI() {
   const estimate = estimateAiCredits(message, attachments, webResearch);
 
   usePageMeta({ path: "/portal/zentel-ai", title: "Zentel AI", description: "Your personal Zentel Insight learning assistant.", robots: "noindex,nofollow" });
+  useEffect(() => {
+    setSelectedId(conversationId);
+    setStreamMessage(null);
+  }, [conversationId]);
+  useEffect(() => {
+    document.body.classList.add("portal-dedicated-workspace");
+    return () => document.body.classList.remove("portal-dedicated-workspace");
+  }, []);
   useEffect(() => { bottomRef.current?.scrollIntoView({ block: "end" }); }, [messages]);
 
   const refresh = () => { snapshotQuery.refetch(); conversationsQuery.refetch(); if (selectedId) messagesQuery.refetch(); };
   const newConversation = async () => {
     const created = await createAiConversation();
     setSelectedId(created.id);
+    navigate(`/portal/zentel-ai/chat/${created.id}`);
     setDrawerOpen(false);
     conversationsQuery.refetch();
   };
@@ -174,16 +150,10 @@ export default function ZentelAI() {
     catch (error) { setStatus({ type: "warning", message: error.message }); }
     finally { setPaymentBusy(false); }
   };
-  const activateTrial = async () => {
-    setPaymentBusy(true);
-    try { await claimAiTrial(); setStatus({ type: "success", message: "Your Zentel AI trial is ready." }); setShowPlans(false); snapshotQuery.refetch(); }
-    catch (error) { setStatus({ type: "warning", message: error.message }); }
-    finally { setPaymentBusy(false); }
-  };
   const attach = async (file) => {
     try {
       let conversationId = selectedId;
-      if (!conversationId) { const created = await createAiConversation(); conversationId = created.id; setSelectedId(created.id); conversationsQuery.refetch(); }
+      if (!conversationId) { const created = await createAiConversation(); conversationId = created.id; setSelectedId(created.id); navigate(`/portal/zentel-ai/chat/${created.id}`); conversationsQuery.refetch(); }
       setUploading(true);
       const uploaded = await uploadAiAttachment(conversationId, file);
       setAttachments((current) => [...current, uploaded]);
@@ -200,7 +170,7 @@ export default function ZentelAI() {
     if ((!prompt && !attachments.length) || streaming) return;
     let conversationId = selectedId;
     try {
-      if (!conversationId) { const created = await createAiConversation(); conversationId = created.id; setSelectedId(created.id); }
+      if (!conversationId) { const created = await createAiConversation(); conversationId = created.id; setSelectedId(created.id); navigate(`/portal/zentel-ai/chat/${created.id}`); }
       const controller = new AbortController(); abortRef.current = controller;
       setStreaming(true); setStatus({ type: "", message: "" }); setMessage("");
       setStreamMessage({ id: `stream-${Date.now()}`, role: "assistant", content: { text: "" }, status: "streaming" });
@@ -224,7 +194,7 @@ export default function ZentelAI() {
     if (!title || title === item.title) return;
     await renameAiConversation(item.id, title); conversationsQuery.refetch();
   };
-  const archive = async (id) => { await archiveAiConversation(id); if (selectedId === id) setSelectedId(""); conversationsQuery.refetch(); };
+  const archive = async (id) => { await archiveAiConversation(id); if (selectedId === id) { setSelectedId(""); navigate("/portal/zentel-ai/new"); } conversationsQuery.refetch(); };
   const lastStudentMessage = [...messages].reverse().find((item) => item.role === "user")?.content?.text;
 
   if (snapshotQuery.loading) return <div className="portal-page"><div className="route-loader">Loading Zentel AI</div></div>;
@@ -233,18 +203,23 @@ export default function ZentelAI() {
   return (
     <div className="portal-page ai-page">
       <header className="ai-page-heading"><div><p className="eyebrow">Student Portal</p><h1><BrainCircuit size={30} />Zentel AI</h1><p>Your personal learning assistant</p></div><button className="ai-history-toggle" type="button" onClick={() => setDrawerOpen(true)}><Menu size={19} />History</button></header>
-      <PlanSummary snapshot={snapshot} onPlans={() => setShowPlans((current) => !current)} />
+      <div className="ai-access-strip" aria-label="Zentel AI access summary">
+        <span><strong>{snapshot.subscription?.plan_name || "Credits"}</strong></span>
+        <span>{Number(snapshot.wallet?.total_available || 0).toLocaleString()} credits</span>
+        <Link to="/portal/zentel-ai/plans">Plans</Link>
+        <Link to="/portal/zentel-ai/usage">Usage</Link>
+      </div>
       {status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}
-      {showPlans || !canUse ? <PlanCards snapshot={snapshot} busy={paymentBusy} onSelect={selectPlan} onTrial={activateTrial} /> : null}
-      {canUse && !showPlans ? (
+      {!canUse ? <PlanCards snapshot={snapshot} busy={paymentBusy} onSelect={selectPlan} /> : null}
+      {canUse ? (
         <section className="ai-workspace">
           {drawerOpen ? <button className="ai-drawer-scrim" aria-label="Close conversation history" onClick={() => setDrawerOpen(false)} /> : null}
-          <ConversationSidebar open={drawerOpen} records={conversations} selectedId={selectedId} search={search} setSearch={setSearch} onSelect={(id) => { setSelectedId(id); setStreamMessage(null); setDrawerOpen(false); }} onNew={newConversation} onRename={rename} onArchive={archive} onClose={() => setDrawerOpen(false)} />
+          <ConversationSidebar open={drawerOpen} records={conversations} selectedId={selectedId} search={search} setSearch={setSearch} onSelect={(id) => { setSelectedId(id); setStreamMessage(null); setDrawerOpen(false); navigate(`/portal/zentel-ai/chat/${id}`); }} onNew={newConversation} onRename={rename} onArchive={archive} onClose={() => setDrawerOpen(false)} />
           <div className="ai-chat">
             <div className="ai-chat-topbar"><button type="button" title="Open conversation history" onClick={() => setDrawerOpen(true)}><Menu size={18} /></button><strong>{conversations.find((item) => item.id === selectedId)?.title || "New learning conversation"}</strong><button type="button" title="Start a new conversation" onClick={newConversation}><MessageSquarePlus size={18} /></button></div>
             <div className="ai-message-list" aria-live="polite">
               {messagesQuery.loading ? <div className="route-loader">Loading conversation</div> : null}
-              {!messagesQuery.loading && !messages.length ? <Welcome onSuggestion={setMessage} /> : null}
+              {!messagesQuery.loading && !messages.length ? <Welcome /> : null}
               {messages.map((item, index) => <AiMessage key={item.id || index} message={item} onRegenerate={item.role === "assistant" && lastStudentMessage ? () => send(lastStudentMessage) : null} />)}
               <div ref={bottomRef} />
             </div>
@@ -256,7 +231,7 @@ export default function ZentelAI() {
                 <textarea value={message} maxLength={30000} rows={2} placeholder="Ask Zentel AI to explain, teach, research or review..." onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} />
                 {streaming ? <button className="ai-send" type="button" title="Stop generation" onClick={() => abortRef.current?.abort()}><Square size={18} /><span className="sr-only">Stop generation</span></button> : <button className="ai-send" type="button" title="Send message" disabled={!message.trim() && !attachments.length} onClick={() => send()}><Send size={18} /><span className="sr-only">Send message</span></button>}
               </div>
-              <div className="ai-composer-meta"><label><input type="checkbox" checked={webResearch} onChange={(event) => setWebResearch(event.target.checked)} />Web research</label><span>Estimated {estimate.minimum}-{estimate.maximum} credits</span></div>
+              <div className="ai-composer-meta"><label><input type="checkbox" checked={webResearch} onChange={(event) => { const enabled = event.target.checked; setWebResearch(enabled); window.localStorage.setItem("zentel-ai-web-research", String(enabled)); }} />Web research</label><span>Estimated {estimate.minimum}-{estimate.maximum} credits</span></div>
             </div>
           </div>
         </section>
@@ -308,4 +283,70 @@ export function ZentelAIUsage() {
       <section className="ai-ledger"><div className="ai-section-heading"><div><p className="eyebrow">Recent activity</p><h2>Credit history</h2></div></div><div className="table-scroll"><table><thead><tr><th>Date</th><th>Activity</th><th>Source</th><th>Credits</th><th>Balance</th></tr></thead><tbody>{(snapshot.ledger || []).map((item) => <tr key={item.id}><td>{formatDateTime(item.created_at)}</td><td>{item.description}</td><td>{item.credit_source}</td><td className={item.credits >= 0 ? "positive" : "negative"}>{item.credits > 0 ? "+" : ""}{item.credits}</td><td>{item.balance_after}</td></tr>)}</tbody></table></div>{!(snapshot.ledger || []).length ? <p>No credit activity yet.</p> : null}</section>
     </div>
   );
+}
+
+export function ZentelAIHistory() {
+  const navigate = useNavigate();
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const query = useAsyncData(() => listAiConversations({ search }), [search], { errorMessage: "Conversation history could not be loaded." });
+  usePageMeta({ path: "/portal/zentel-ai/history", title: "Zentel AI History", description: "Search and manage your Zentel AI conversations.", robots: "noindex,nofollow" });
+  const rename = async (item) => {
+    const title = window.prompt("Conversation name", item.title);
+    if (!title || title === item.title) return;
+    try { await renameAiConversation(item.id, title); query.refetch(); }
+    catch (error) { setStatus(error.message); }
+  };
+  const archive = async (id) => {
+    try { await archiveAiConversation(id); query.refetch(); }
+    catch (error) { setStatus(error.message); }
+  };
+  return (
+    <div className="portal-page ai-library-page">
+      <div className="portal-page-heading"><div><p className="eyebrow">Zentel AI</p><h2>Conversation history</h2><p>Open, rename or archive your learning conversations.</p></div><Link className="button button-primary" to="/portal/zentel-ai/new"><MessageSquarePlus size={17} />New conversation</Link></div>
+      <label className="ai-search ai-library-search"><Search size={16} /><span className="sr-only">Search conversations</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by conversation name" /></label>
+      {status ? <div className="form-status warning" role="status">{status}</div> : null}
+      {query.loading ? <div className="route-loader">Loading conversations</div> : null}
+      {query.error ? <div className="notice-card"><h3>History could not be loaded</h3><p>{query.error}</p><button className="button button-primary" onClick={query.refetch}>Try Again</button></div> : null}
+      {!query.loading && !query.error ? <div className="ai-library-list">{(query.data || []).map((item) => <article key={item.id}><button className="ai-library-open" type="button" onClick={() => navigate(`/portal/zentel-ai/chat/${item.id}`)}><MessageSquarePlus size={18} /><span><strong>{item.title}</strong><small>{formatDateTime(item.last_message_at)}</small></span></button><button className="icon-button" type="button" title="Rename conversation" onClick={() => rename(item)}><FileText size={17} /></button><button className="icon-button" type="button" title="Archive conversation" onClick={() => archive(item.id)}><Archive size={17} /></button></article>)}</div> : null}
+      {!query.loading && !query.error && !(query.data || []).length ? <div className="notice-card"><h3>No conversations found</h3><p>Start a new conversation and type what you want Zentel AI to help with.</p></div> : null}
+    </div>
+  );
+}
+
+export function ZentelAIPlans() {
+  const query = useAsyncData(getAiSnapshot, [], { errorMessage: "Zentel AI plans could not be loaded." });
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState("");
+  usePageMeta({ path: "/portal/zentel-ai/plans", title: "Zentel AI Plans", description: "Choose a paid Zentel AI plan.", robots: "noindex,nofollow" });
+  const selectPlan = async (slug) => {
+    setBusy(true); setStatus("");
+    try { const result = await createAiSubscription(slug); window.location.assign(result.authorizationUrl); }
+    catch (error) { setStatus(error.message); }
+    finally { setBusy(false); }
+  };
+  if (query.loading) return <div className="portal-page"><div className="route-loader">Loading plans</div></div>;
+  if (query.error) return <div className="portal-page"><div className="notice-card"><h2>Plans could not be loaded</h2><p>{query.error}</p><button className="button button-primary" onClick={query.refetch}>Try Again</button></div></div>;
+  return <div className="portal-page ai-plans-page"><div className="portal-page-heading"><div><p className="eyebrow">Zentel AI</p><h2>Plans</h2><p>Choose the monthly access that fits your learning workload.</p></div><Link className="button button-secondary" to="/portal/zentel-ai">Open Zentel AI</Link></div>{status ? <div className="form-status warning" role="status">{status}</div> : null}<PlanCards snapshot={query.data || {}} busy={busy} onSelect={selectPlan} /></div>;
+}
+
+export function ZentelAIBilling() {
+  const query = useAsyncData(getAiSnapshot, [], { errorMessage: "Zentel AI billing status could not be loaded." });
+  usePageMeta({ path: "/portal/zentel-ai/billing", title: "Zentel AI Billing", description: "Review active Zentel AI access.", robots: "noindex,nofollow" });
+  if (query.loading) return <div className="portal-page"><div className="route-loader">Loading billing status</div></div>;
+  if (query.error) return <div className="portal-page"><div className="notice-card"><h2>Billing status could not be loaded</h2><p>{query.error}</p><button className="button button-primary" onClick={query.refetch}>Try Again</button></div></div>;
+  const subscription = query.data?.subscription;
+  return <div className="portal-page ai-billing-page"><div className="portal-page-heading"><div><p className="eyebrow">Zentel AI</p><h2>Billing</h2><p>Your current Zentel AI access status.</p></div><Link className="button button-primary" to="/portal/zentel-ai/plans">Manage Plan</Link></div><section className="notice-card ai-billing-summary"><span className="portal-tag success">Active payment</span><h3>{subscription?.plan_name || "Credit access"}</h3><p>{subscription?.next_payment_date ? `Next renewal: ${formatDateTime(subscription.next_payment_date)}` : "No automatic renewal is scheduled."}</p><p>{Number(query.data?.wallet?.total_available || 0).toLocaleString()} credits available</p></section><p className="ai-final-payment">All payments made to Zentel Insight are final and non-refundable.</p></div>;
+}
+
+export function ZentelAISettings() {
+  const [webResearch, setWebResearch] = useState(() => typeof window !== "undefined" && window.localStorage.getItem("zentel-ai-web-research") === "true");
+  const [status, setStatus] = useState("");
+  usePageMeta({ path: "/portal/zentel-ai/settings", title: "Zentel AI Settings", description: "Set your Zentel AI workspace preferences.", robots: "noindex,nofollow" });
+  const save = (event) => {
+    event.preventDefault();
+    window.localStorage.setItem("zentel-ai-web-research", String(webResearch));
+    setStatus("Workspace preferences saved.");
+  };
+  return <div className="portal-page ai-settings-page"><div className="portal-page-heading"><div><p className="eyebrow">Zentel AI</p><h2>Settings</h2><p>Control how new conversations begin on this device.</p></div><Link className="button button-primary" to="/portal/zentel-ai">Open Zentel AI</Link></div><form className="notice-card ai-settings-form" onSubmit={save}><label><span><strong>Web research by default</strong><small>Enable current-source research when a new Zentel AI workspace opens.</small></span><input type="checkbox" checked={webResearch} onChange={(event) => setWebResearch(event.target.checked)} /></label>{status ? <div className="form-status success" role="status">{status}</div> : null}<button className="button button-primary" type="submit">Save Settings</button></form></div>;
 }

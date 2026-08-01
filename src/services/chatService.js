@@ -1,7 +1,10 @@
+import { invokeEdgeFunction } from "./edgeFunctionClient";
 import { getSupabaseClient } from "./supabaseClient";
 
 export const CHAT_IMAGE_BUCKET = "classroom-media";
 export const CHAT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+export const CHAT_MESSAGE_MAX_LENGTH = 2000;
+export const CHAT_REACTIONS = ["like", "helpful", "celebrate"];
 
 const chatImageTypes = {
   "image/jpeg": "jpg",
@@ -15,80 +18,65 @@ function normalizeList(data) {
 
 async function getClient() {
   const supabase = await getSupabaseClient();
-  if (!supabase) throw new Error("Programme chat could not be reached.");
+  if (!supabase) throw new Error("Classroom chat could not be reached.");
   return supabase;
 }
 
-export async function getProgramChatRooms() {
+export async function getProgramChatRooms({ programId = "", trackId = "", roomId = "" } = {}) {
   const supabase = await getClient();
-  const { data, error } = await supabase
-    .from("program_chat_rooms")
-    .select("*, programs(id, slug, title)")
-    .eq("active", true)
-    .order("created_at", { ascending: true });
+  const { data, error } = await supabase.rpc("get_programme_chat_access", {
+    target_program_id: programId || null,
+    target_track_id: trackId || null,
+    target_room_id: roomId || null
+  });
   if (error) throw error;
-  return normalizeList(data);
+  return normalizeList(data).map((room) => ({
+    ...room,
+    programs: { id: room.program_id, title: room.program_title }
+  }));
 }
 
-export async function ensureProgramClassroom({ programId, trackId }) {
+export async function ensureProgramClassroom({ programId, trackId, roomId = "" }) {
+  const rooms = await getProgramChatRooms({ programId, trackId, roomId });
+  return rooms[0] || null;
+}
+
+export async function joinProgramChat(roomId) {
   const supabase = await getClient();
-  if (!programId) return null;
-  const { data, error } = await supabase.rpc("ensure_programme_classroom", {
-    target_program_id: programId,
-    target_track_id: trackId || null
-  });
+  const { data, error } = await supabase.rpc("join_programme_chat", { target_room_id: roomId });
   if (error) throw error;
   return normalizeList(data)[0] || null;
 }
 
 async function withMessageImageUrl(message, supabase) {
   if (!message?.image_path) return message;
-  const { data: signed } = await supabase.storage.from(CHAT_IMAGE_BUCKET).createSignedUrl(message.image_path, 60 * 30);
-  return { ...message, image_url: signed?.signedUrl || "" };
-}
-
-async function getProfilesById(supabase, userIds) {
-  const ids = [...new Set(userIds.filter(Boolean))];
-  if (!ids.length) return new Map();
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, full_name, title, avatar_path")
-    .in("id", ids);
-  if (error) throw error;
-  return new Map(normalizeList(data).map((profile) => [profile.id, profile]));
-}
-
-async function hydrateMessage(message, supabase, profileById = null) {
-  const profiles = profileById || await getProfilesById(supabase, [message?.sender_id]);
-  return withMessageImageUrl({ ...message, profiles: profiles.get(message?.sender_id) || null }, supabase);
+  const { data: signed, error } = await supabase.storage.from(CHAT_IMAGE_BUCKET).createSignedUrl(message.image_path, 60 * 30);
+  return { ...message, image_url: error ? "" : signed?.signedUrl || "" };
 }
 
 export async function getProgramChatMessages(roomId, { limit = 40, before } = {}) {
   const supabase = await getClient();
   let query = supabase
     .from("program_chat_messages")
-    .select("*")
+    .select("*, program_chat_reactions(id, reaction, user_id)")
     .eq("room_id", roomId)
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .limit(Math.min(60, Math.max(1, Number(limit) || 40)));
   if (before) query = query.lt("created_at", before);
   const { data, error } = await query;
   if (error) throw error;
-
-  const messages = normalizeList(data).reverse();
-  const profileById = await getProfilesById(supabase, messages.map((message) => message.sender_id));
-  return Promise.all(messages.map((message) => hydrateMessage(message, supabase, profileById)));
+  return Promise.all(normalizeList(data).reverse().map((message) => withMessageImageUrl(message, supabase)));
 }
 
-function validateChatImage(file) {
+export function validateChatImage(file) {
   if (!file) return "";
   const extension = chatImageTypes[file.type];
   if (!extension) throw new Error("Upload a JPEG, PNG or WebP image.");
-  if (file.size > CHAT_IMAGE_MAX_BYTES) throw new Error("Chat images must be 5 MB or smaller.");
+  if (file.size <= 0 || file.size > CHAT_IMAGE_MAX_BYTES) throw new Error("Chat images must be 5 MB or smaller.");
   return extension;
 }
 
-export async function sendProgramChatMessage({ roomId, senderId, body, imageFile, replyToId }) {
+export async function sendProgramChatMessage({ roomId, senderId, body, imageFile, replyToId, clientMessageId = crypto.randomUUID() }) {
   const supabase = await getClient();
   const extension = validateChatImage(imageFile);
   let imagePath = "";
@@ -97,8 +85,7 @@ export async function sendProgramChatMessage({ roomId, senderId, body, imageFile
     const now = new Date();
     const year = String(now.getFullYear());
     const month = String(now.getMonth() + 1).padStart(2, "0");
-    const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    imagePath = `${roomId}/${senderId}/${year}/${month}/${id}.${extension}`;
+    imagePath = `${roomId}/${senderId}/${year}/${month}/${clientMessageId}.${extension}`;
     const { error: uploadError } = await supabase.storage.from(CHAT_IMAGE_BUCKET).upload(imagePath, imageFile, {
       cacheControl: "3600",
       contentType: imageFile.type,
@@ -112,12 +99,13 @@ export async function sendProgramChatMessage({ roomId, senderId, body, imageFile
     .insert({
       room_id: roomId,
       sender_id: senderId,
+      client_message_id: clientMessageId,
       message_type: imagePath ? "image" : "text",
       body: String(body || "").trim(),
       image_path: imagePath || null,
       reply_to_id: replyToId || null
     })
-    .select("*")
+    .select("*, program_chat_reactions(id, reaction, user_id)")
     .single();
 
   if (error) {
@@ -139,12 +127,11 @@ export async function sendProgramChatMessage({ roomId, senderId, body, imageFile
         supabase.from("program_chat_messages").delete().eq("id", data.id).eq("sender_id", senderId),
         supabase.storage.from(CHAT_IMAGE_BUCKET).remove([imagePath])
       ]);
-      if (import.meta.env.DEV) console.info("Chat attachment record could not be saved", attachmentError);
       throw new Error("The selected image could not be sent. Please try again.");
     }
   }
 
-  return hydrateMessage(data, supabase);
+  return withMessageImageUrl(data, supabase);
 }
 
 export async function getProgramChatUnreadCounts() {
@@ -157,38 +144,54 @@ export async function getProgramChatUnreadCounts() {
   }, {});
 }
 
-export async function markProgramChatRead(roomId, userId) {
-  if (!roomId || !userId) return false;
+export async function markProgramChatRead(roomId) {
+  if (!roomId || (typeof document !== "undefined" && document.visibilityState !== "visible")) return false;
   const supabase = await getClient();
-  const { data: messages, error: messageError } = await supabase
-    .from("program_chat_messages")
-    .select("id")
-    .eq("room_id", roomId)
-    .neq("sender_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(100);
-  if (messageError) throw messageError;
-  const rows = normalizeList(messages).map((message) => ({
-    message_id: message.id,
-    user_id: userId,
-    read_at: new Date().toISOString()
-  }));
-  if (!rows.length) return true;
-  const { error } = await supabase
-    .from("message_read_receipts")
-    .upsert(rows, { onConflict: "message_id,user_id" });
+  const { error } = await supabase.rpc("mark_program_chat_read", { target_room_id: roomId });
   if (error) throw error;
   return true;
+}
+
+export async function toggleProgramChatReaction(messageId, reaction) {
+  if (!CHAT_REACTIONS.includes(reaction)) throw new Error("Select an approved reaction.");
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("toggle_program_chat_reaction", {
+    target_message_id: messageId,
+    reaction_value: reaction
+  });
+  if (error) throw error;
+  return Boolean(data);
+}
+
+export async function getActiveProgramChatCall(roomId) {
+  if (!roomId) return null;
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("chat_calls")
+    .select("id, room_id, status, started_at, started_by")
+    .eq("room_id", roomId)
+    .in("status", ["ringing", "live"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+export function manageProgramChatCall(action, { roomId, callId = "" }) {
+  return invokeEdgeFunction("create-chat-voice-call", {
+    body: { action, roomId, callId },
+    timeoutMs: 30000,
+    unavailableMessage: "Voice calling is temporarily unavailable.",
+    failureMessage: "Voice-call access could not be prepared. Please try again."
+  });
 }
 
 export async function moderateProgramChatMessage(messageId, reason = "Moderated by administrator") {
   const supabase = await getClient();
   const { data, error } = await supabase
     .from("program_chat_messages")
-    .update({
-      deleted_for_moderation_at: new Date().toISOString(),
-      moderation_reason: reason
-    })
+    .update({ deleted_for_moderation_at: new Date().toISOString(), moderation_reason: reason })
     .eq("id", messageId)
     .select("*")
     .maybeSingle();
@@ -196,22 +199,55 @@ export async function moderateProgramChatMessage(messageId, reason = "Moderated 
   return data;
 }
 
-export async function subscribeToProgramChat(roomId, onMessage) {
-  const supabase = await getClient();
-  const channel = supabase
-    .channel(`program-chat:${roomId}`)
-    .on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "program_chat_messages", filter: `room_id=eq.${roomId}` },
-      (payload) => {
-        hydrateMessage(payload.new, supabase)
-          .then((message) => onMessage?.(message))
-          .catch(() => onMessage?.(payload.new));
-      }
-    )
-    .subscribe();
+function extractBroadcastRecord(payload) {
+  return payload?.record || payload?.new || payload?.payload?.record || payload?.payload?.new || null;
+}
 
-  return () => {
-    supabase.removeChannel(channel);
+export async function subscribeToProgramChat(roomId, userId, handlers = {}) {
+  const supabase = await getClient();
+  const channel = supabase.channel(`chat-room:${roomId}`, {
+    config: {
+      private: true,
+      broadcast: { self: false, ack: true },
+      presence: { key: userId }
+    }
+  });
+
+  const handleCommittedChange = async (payload) => {
+    const table = payload?.table || payload?.payload?.table || "";
+    const record = extractBroadcastRecord(payload);
+    if (table === "program_chat_messages" && record) {
+      const hydrated = await withMessageImageUrl(record, supabase);
+      handlers.onMessage?.(hydrated);
+      return;
+    }
+    if (table === "program_chat_reactions") handlers.onReaction?.(record);
+    if (table === "chat_calls") handlers.onCall?.(record);
+  };
+
+  channel
+    .on("broadcast", { event: "INSERT" }, handleCommittedChange)
+    .on("broadcast", { event: "UPDATE" }, handleCommittedChange)
+    .on("broadcast", { event: "DELETE" }, handleCommittedChange)
+    .on("broadcast", { event: "typing" }, ({ payload }) => handlers.onTyping?.(payload || {}))
+    .on("presence", { event: "sync" }, () => handlers.onPresence?.(channel.presenceState()))
+    .on("presence", { event: "leave" }, ({ key }) => handlers.onPresenceLeave?.(key));
+
+  channel.subscribe(async (state) => {
+    handlers.onConnection?.(state);
+    if (state === "SUBSCRIBED") {
+      await channel.track({ userId, viewingRoom: true, onlineAt: new Date().toISOString() });
+      handlers.onReconnect?.();
+    }
+  });
+
+  return {
+    sendTyping(active, name = "") {
+      return channel.send({ type: "broadcast", event: "typing", payload: { userId, name, active, sentAt: Date.now() } });
+    },
+    async unsubscribe() {
+      await channel.untrack().catch(() => undefined);
+      await supabase.removeChannel(channel);
+    }
   };
 }

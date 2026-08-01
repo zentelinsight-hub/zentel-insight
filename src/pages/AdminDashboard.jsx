@@ -79,6 +79,17 @@ const sections = [
   ["settings", "Settings", Settings]
 ];
 
+const adminGroupSpecs = [
+  { label: "Overview", defaultOpen: true, slugs: ["overview"] },
+  { label: "Accounts", slugs: ["accounts", "enrolments"] },
+  { label: "Academics", slugs: ["programmes", "timetable", "assignments", "resources"] },
+  { label: "Classrooms", slugs: ["classrooms", "live-classes"] },
+  { label: "Communication", slugs: ["announcements", "notifications", "articles"] },
+  { label: "Finance", slugs: ["payments", "certificates"] },
+  { label: "Zentel AI", slugs: ["zentel-ai"] },
+  { label: "Operations", slugs: ["support", "audit", "profile", "settings"] }
+];
+
 const emptyProgramForm = {
   slug: "",
   title: "",
@@ -121,11 +132,14 @@ function AdminFrame({ data, onRealtimeChange, children }) {
         navLabel: "Admin dashboard",
         menuLabel: "admin",
         shellClass: "management-shell admin-shell",
-        items: sections.map(([slug, label, Icon]) => ({
-          to: slug === "overview" ? "/admin" : `/admin/${slug}`,
-          label,
-          Icon,
-          end: slug === "overview"
+        groups: adminGroupSpecs.map((group) => ({
+          ...group,
+          items: group.slugs.map((itemSlug) => sections.find(([slug]) => slug === itemSlug)).filter(Boolean).map(([slug, label, Icon]) => ({
+            to: slug === "overview" ? "/admin" : `/admin/${slug}`,
+            label,
+            Icon,
+            end: ["overview", "classrooms", "zentel-ai"].includes(slug)
+          }))
         }))
       }}
       header={{
@@ -1684,12 +1698,12 @@ function AdminSettingsSection() {
   );
 }
 
-export default function AdminDashboard() {
-  const { section, portalId = "" } = useParams();
-  const activeSection = resolveAdminSection(section, portalId);
+export default function AdminDashboard({ forcedSection = "" }) {
+  const { section, portalId = "", roomId = "" } = useParams();
+  const activeSection = forcedSection || resolveAdminSection(section, portalId);
   const activeSectionLabel = sections.find(([slug]) => slug === activeSection)?.[1] || "Overview";
   const dataQuery = useAsyncData(
-    () => getAdminDashboardData(activeSection),
+    () => getAdminDashboardData(activeSection === "classroom-chat" ? "classrooms" : activeSection),
     [activeSection],
     { errorMessage: `${activeSectionLabel} could not be loaded. Please try again.` }
   );
@@ -1749,10 +1763,14 @@ export default function AdminDashboard() {
       {activeSection === "live-classes" ? <LiveClassesSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "classrooms" ? (
         <div className="portal-page">
-          <PageHeading title="Classroom moderation." description="Inspect programme classroom chat rooms and moderate inappropriate messages." />
-          <ProgramChatPanel canModerate />
+          <PageHeading title="Classrooms." description="Open the dedicated moderation workspace for programme conversations." />
+          <div className="classroom-section-links">
+            <NavLink className="classroom-section-link" to="/admin/classrooms/all/chat"><MessageSquare size={20} /><span><strong>Chat Moderation</strong><small>Inspect programme rooms and moderate messages</small></span></NavLink>
+            <NavLink className="classroom-section-link" to="/admin/live-classes"><Video size={20} /><span><strong>Live Classes</strong><small>Review and manage authorised sessions</small></span></NavLink>
+          </div>
         </div>
       ) : null}
+      {activeSection === "classroom-chat" ? <div className="portal-page chat-route-page"><ProgramChatPanel audience="admin" canModerate standalone backTo="/admin/classrooms" roomId={roomId === "all" ? "" : roomId} /></div> : null}
       {activeSection === "zentel-ai" ? <AdminAiSection /> : null}
       {["timetable", "announcements", "assignments", "resources", "articles"].includes(activeSection)
         ? <ContentSection data={data} onSaved={dataQuery.refetch} activeSection={activeSection} />

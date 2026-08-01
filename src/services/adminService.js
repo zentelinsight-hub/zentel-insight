@@ -56,6 +56,7 @@ const adminSectionData = {
   programmes: ["programs"],
   enrolments: ["profiles", "programs", "enrolments"],
   classrooms: [],
+  "classroom-chat": [],
   "zentel-ai": [],
   "live-classes": ["profiles", "tutors", "programs", "liveClasses"],
   timetable: ["programs", "timetable"],

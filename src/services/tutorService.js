@@ -49,6 +49,7 @@ export async function getTutorDashboardData(tutorId) {
     resources,
     articles,
     liveClasses,
+    attendance,
     unreadMessageCounts
   ] = programId
     ? await Promise.all([
@@ -59,9 +60,10 @@ export async function getTutorDashboardData(tutorId) {
         requiredSelect("resources", supabase.from("resources").select("*, programs(id, title), program_levels(id, level_name)").eq("program_id", programId).order("created_at", { ascending: false })),
         requiredSelect("articles", supabase.from("portal_articles").select("*, programs(id, title), program_levels(id, level_name)").eq("program_id", programId).order("created_at", { ascending: false })),
         requiredSelect("live classes", supabase.from("live_class_sessions").select("*, programs(id, title), program_levels(id, level_name)").eq("program_id", programId).order("scheduled_start", { ascending: true })),
+        requiredSelect("attendance", supabase.from("live_class_attendance").select("*, live_class_sessions!inner(id, title, program_id, scheduled_start, scheduled_end, programs(id, title))").eq("live_class_sessions.program_id", programId).order("joined_at", { ascending: false }).limit(200)),
         getProgramChatUnreadCounts()
       ])
-    : [{ records: [], total: 0, page: 1, pageCount: 1 }, [], [], [], [], [], [], {}];
+    : [{ records: [], total: 0, page: 1, pageCount: 1 }, [], [], [], [], [], [], [], {}];
   const [notifications, supportTickets] = await Promise.all([
     requiredSelect("notifications", supabase.from("portal_notifications").select("*").eq("user_id", tutorId).order("created_at", { ascending: false }).limit(100)),
     requiredSelect("support tickets", supabase.from("support_tickets").select("*, support_ticket_messages(*)").eq("user_id", tutorId).order("created_at", { ascending: false }).limit(100))
@@ -86,6 +88,7 @@ export async function getTutorDashboardData(tutorId) {
     resources: scopedToTrack(resources),
     articles: scopedToTrack(articles),
     liveClasses: scopedToTrack(liveClasses, "track_id"),
+    attendance: normalizeList(attendance),
     unreadMessages: Object.values(unreadMessageCounts || {}).reduce((total, count) => total + Number(count || 0), 0),
     notifications: normalizeList(notifications),
     supportTickets: normalizeList(supportTickets)

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ExternalLink, Video } from "lucide-react";
+import { Video } from "lucide-react";
 import { canJoinLiveClass, endLiveClass, getLiveClassState, leaveLiveClass, requestLiveClassToken } from "../services/liveClassService";
 import { formatDateTime } from "../utils/format";
 
@@ -121,7 +121,6 @@ export default function LiveClassCards({ sessions = [], emptyMessage = "No live 
               <div><dt>Ends</dt><dd>{formatDateTime(session.scheduled_end)}</dd></div>
               <div><dt>Status</dt><dd>{state}</dd></div>
               {getTutorName(session) ? <div><dt>Tutor</dt><dd>{getTutorName(session)}</dd></div> : null}
-              <div><dt>Provider</dt><dd>{session.provider || "daily"}</dd></div>
             </dl>
             {joinable ? (
               <button className="button button-primary" type="button" onClick={() => joinClass(session)} disabled={loadingId === session.id}>
@@ -143,12 +142,6 @@ export default function LiveClassCards({ sessions = [], emptyMessage = "No live 
             ) : null}
             {status.id === session.id && status.message ? (
               <div className={`form-status ${status.type || "warning"}`} role="status">{status.message}</div>
-            ) : null}
-            {session.provider_room_url && state !== "cancelled" ? (
-              <small className="muted-line">
-                Access opens through a server-generated token.
-                <ExternalLink size={14} aria-hidden="true" />
-              </small>
             ) : null}
           </article>
         );

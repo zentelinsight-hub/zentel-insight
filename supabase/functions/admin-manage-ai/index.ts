@@ -2,8 +2,8 @@ import { handleOptions, isAllowedOrigin, jsonResponse } from "../_shared/cors.ts
 import { assertVerifiedAdmin, writeAuditLog } from "../_shared/security.ts";
 
 const allowedSettings = new Set([
-  "emergency_disabled", "web_search_enabled", "file_uploads_enabled", "trial_enabled",
-  "trial_credits", "trial_days", "model_mappings", "credit_cost_unit_ngn",
+  "emergency_disabled", "web_search_enabled", "file_uploads_enabled",
+  "model_mappings", "credit_cost_unit_ngn",
   "internal_exchange_rate", "risk_multiplier", "maximum_output_tokens",
   "maximum_input_characters", "maximum_files_per_request", "maximum_file_bytes",
   "maximum_web_searches_per_request", "per_student_daily_credits",
@@ -53,7 +53,7 @@ async function dashboard(supabase: any) {
   const subscriptionRevenueKobo = sum(successfulPayments.filter((item: any) => item.product_type === "zentel_ai_subscription"), "paid_amount_kobo");
   const topupRevenueKobo = sum(successfulPayments.filter((item: any) => item.product_type === "zentel_ai_topup"), "paid_amount_kobo");
   const providerCostUsd = sum(requestRows.filter((item: any) => item.status === "completed"), "provider_cost_usd");
-  const active = subscriptionRows.filter((item: any) => ["active", "trialing"].includes(item.status));
+  const active = subscriptionRows.filter((item: any) => item.status === "active");
   const routeUsage = requestRows.reduce((result: Record<string, number>, item: any) => {
     result[item.model_route] = (result[item.model_route] || 0) + 1;
     return result;
@@ -156,7 +156,7 @@ Deno.serve(async (request) => {
       const planId = cleanText(body.planId, 64);
       const { data: plan, error: planError } = await admin.supabase.from("ai_plans").select("id, name").eq("id", planId).eq("active", true).single();
       if (planError) throw planError;
-      const { data, error } = await admin.supabase.from("ai_subscriptions").update({ plan_id: plan.id }).eq("user_id", targetUserId).in("status", ["trialing", "active", "past_due", "suspended"]).select("*").single();
+      const { data, error } = await admin.supabase.from("ai_subscriptions").update({ plan_id: plan.id }).eq("user_id", targetUserId).in("status", ["active", "past_due", "suspended"]).select("*").single();
       if (error) throw error;
       await admin.supabase.from("portal_notifications").insert({ user_id: targetUserId, title: "Zentel AI plan updated", message: `Your Zentel AI plan is now ${plan.name}.`, notification_type: "zentel_ai_subscription", link_path: "/portal/zentel-ai/usage" });
       await writeAuditLog(admin.supabase, { actorUserId: admin.user.id, action: "ai_plan_changed", targetTable: "ai_subscriptions", targetId: data.id, metadata: { targetUserId, planId } });
@@ -167,7 +167,7 @@ Deno.serve(async (request) => {
       const updates = Object.fromEntries(Object.entries(body.values || {}).filter(([key]) => allowedSettings.has(key)));
       if (!Object.keys(updates).length) throw new Error("No valid Zentel AI settings were supplied.");
       validateSettings(updates);
-      const { data, error } = await admin.supabase.from("ai_system_settings").update({ ...updates, updated_by: admin.user.id }).eq("id", 1).select("*").single();
+      const { data, error } = await admin.supabase.from("ai_system_settings").update({ ...updates, trial_enabled: false, trial_credits: 0, updated_by: admin.user.id }).eq("id", 1).select("*").single();
       if (error) throw error;
       await writeAuditLog(admin.supabase, { actorUserId: admin.user.id, action: "ai_settings_updated", targetTable: "ai_system_settings", targetId: "1", metadata: { fields: Object.keys(updates) } });
       return jsonResponse({ ok: true, data }, 200, request);

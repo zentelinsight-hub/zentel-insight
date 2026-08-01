@@ -49,14 +49,24 @@ const sections = [
   ["programme", "My Programme", GraduationCap],
   ["students", "My Students", Users],
   ["classroom", "Classroom", MessageSquare],
+  ["classroom-chat", "Chat", MessageSquare, "/tutor/classroom/chat"],
   ["timetable", "Timetable", CalendarDays],
-  ["live-classes", "Live Classes", Video],
+  ["live-classes", "Live Classes", Video, "/tutor/classroom/live"],
+  ["attendance", "Attendance", CheckCircle2, "/tutor/classroom/attendance"],
   ["announcements", "Announcements", Megaphone],
   ["assignments", "Assignments", FileCheck2],
   ["resources", "Learning Resources", BookOpen],
   ["notifications", "Notifications", Bell],
   ["support", "Support", LifeBuoy],
   ["settings", "Settings", Settings]
+];
+
+const tutorGroupSpecs = [
+  { label: "Home", defaultOpen: true, slugs: ["dashboard"] },
+  { label: "Teaching", slugs: ["programme", "students", "timetable", "assignments", "resources"] },
+  { label: "Classroom", slugs: ["classroom", "classroom-chat", "live-classes", "attendance"] },
+  { label: "Communication", slugs: ["announcements", "notifications"] },
+  { label: "Account", slugs: ["profile", "support", "settings"] }
 ];
 
 function firstName(value) {
@@ -110,12 +120,15 @@ function TutorFrame({ data, onRealtimeChange, children }) {
         navLabel: "Tutor dashboard",
         menuLabel: "tutor",
         shellClass: "management-shell tutor-shell",
-        items: sections.map(([slug, label, Icon]) => ({
-          to: slug === "dashboard" ? "/tutor" : `/tutor/${slug}`,
-          label,
-          Icon,
-          end: slug === "dashboard",
-          badge: slug === "notifications" ? data.notifications.filter((item) => !item.read_at).length : 0
+        groups: tutorGroupSpecs.map((group) => ({
+          ...group,
+          items: group.slugs.map((itemSlug) => sections.find(([slug]) => slug === itemSlug)).filter(Boolean).map(([slug, label, Icon, route]) => ({
+            to: route || (slug === "dashboard" ? "/tutor" : `/tutor/${slug}`),
+            label,
+            Icon,
+            end: ["dashboard", "classroom"].includes(slug),
+            badge: slug === "notifications" ? data.notifications.filter((item) => !item.read_at).length : slug === "classroom-chat" ? data.unreadMessages : 0
+          }))
         }))
       }}
       header={{ eyebrow: "Welcome back", title: displayName, status: <span className="portal-tag success">Tutor</span> }}
@@ -127,6 +140,8 @@ function TutorFrame({ data, onRealtimeChange, children }) {
         "live_class_sessions",
         "portal_articles",
         "portal_notifications",
+        "program_chat_messages",
+        "program_chat_reactions",
         "program_levels",
         "resources",
         "support_tickets",
@@ -438,7 +453,7 @@ function TutorClassroomSection({ data, onSaved }) {
     <div className="portal-page">
       <PageHeading
         title="Classroom."
-        description="Manage assigned programme students, live sessions and programme chat from one workspace."
+        description="Review your assigned programme and open each classroom workspace."
       />
       <div className="classroom-summary-grid">
         <article className="dashboard-card">
@@ -498,7 +513,11 @@ function TutorClassroomSection({ data, onSaved }) {
           <LiveClassCards audience="tutor" sessions={data.liveClasses.slice(0, 3)} emptyMessage="No live class is scheduled. Create or schedule a session when you are ready to meet your students." onChanged={onSaved} />
           </div>
         </aside>
-        {primaryAssignment?.program_id ? <ProgramChatPanel programId={primaryAssignment.program_id} trackId={primaryAssignment.track_id} /> : <EmptyState message="A programme must be assigned before a Tutor classroom can open." />}
+        <div className="classroom-section-links">
+          <Link className="classroom-section-link" to="/tutor/classroom/chat"><MessageSquare size={20} /><span><strong>Chat</strong><small>Open the programme conversation</small></span></Link>
+          <Link className="classroom-section-link" to="/tutor/classroom/live"><Video size={20} /><span><strong>Live Classes</strong><small>Schedule, start and manage sessions</small></span></Link>
+          <Link className="classroom-section-link" to="/tutor/classroom/attendance"><CheckCircle2 size={20} /><span><strong>Attendance</strong><small>Review class participation</small></span></Link>
+        </div>
       </div>
     </div>
   );
@@ -847,10 +866,10 @@ function TutorNotificationsSection({ records, onSaved }) {
   );
 }
 
-export default function TutorDashboard() {
+export default function TutorDashboard({ forcedSection = "" }) {
   const { user } = useAuth();
   const { section = "dashboard" } = useParams();
-  const activeSection = getActiveSection(section);
+  const activeSection = forcedSection || getActiveSection(section);
   const dataQuery = useAsyncData(() => getTutorDashboardData(user.id), [user?.id], {
     enabled: Boolean(user?.id),
     errorMessage: "We could not load your Tutor dashboard. Please try again."
@@ -891,6 +910,7 @@ export default function TutorDashboard() {
     resources: [],
     articles: [],
     liveClasses: [],
+    attendance: [],
     unreadMessages: 0,
     notifications: [],
     supportTickets: [],
@@ -903,12 +923,16 @@ export default function TutorDashboard() {
       {activeSection === "programme" ? <ProgrammeSection data={data} /> : null}
       {activeSection === "students" ? <StudentsSection data={data} /> : null}
       {activeSection === "classroom" ? <TutorClassroomSection data={data} onSaved={dataQuery.refetch} /> : null}
+      {activeSection === "classroom-chat" ? <div className="portal-page chat-route-page">{data.assignments[0]?.program_id ? <ProgramChatPanel audience="tutor" standalone backTo="/tutor/classroom" programId={data.assignments[0].program_id} trackId={data.assignments[0].track_id} /> : <EmptyState message="A programme must be assigned before Tutor chat can open." />}</div> : null}
       {activeSection === "timetable" ? <TutorTimetableSection data={data} /> : null}
       {activeSection === "live-classes" ? (
         <div className="portal-page">
           <PageHeading title="Live classes." description="Host only approved sessions for assigned programmes." />
           <LiveClassCards audience="tutor" sessions={data.liveClasses} emptyMessage="No live classes have been scheduled yet." onChanged={dataQuery.refetch} />
         </div>
+      ) : null}
+      {activeSection === "attendance" ? (
+        <RecordsSection title="Attendance." description="Review participation in your authorised live classes." records={data.attendance} emptyMessage="No attendance has been recorded yet." render={(item) => <article className="portal-record-card" key={item.id}><div><p className="eyebrow">{item.attendance_status}</p><h3>{item.live_class_sessions?.title || "Live class"}</h3><p>{item.live_class_sessions?.programs?.title || "Programme"}</p></div><dl className="portal-mini-details"><div><dt>Joined</dt><dd>{formatDateTime(item.joined_at)}</dd></div><div><dt>Left</dt><dd>{item.left_at ? formatDateTime(item.left_at) : "Session active"}</dd></div></dl></article>} />
       ) : null}
       {activeSection === "announcements" ? (
         <RecordsSection title="Announcements." description="Programme notices visible to assigned tutors." records={data.announcements} render={(item) => renderTutorRecord("Announcement", item)} emptyMessage="No announcements have been published yet." />

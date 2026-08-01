@@ -8,8 +8,8 @@ describe("Zentel AI server policy", () => {
     expect(classifyAiRequest({ text: "What is the latest React release?" })).toMatchObject({ route: "advanced", webResearch: true });
   });
 
-  it("keeps trials away from expert routing and advanced web research", () => {
-    expect(classifyAiRequest({ text: "Create a deep research synthesis with current sources", trial: true })).toMatchObject({ route: "advanced", webResearch: false });
+  it("routes deep research through the expert path", () => {
+    expect(classifyAiRequest({ text: "Create a deep research synthesis with current sources" })).toMatchObject({ route: "expert", webResearch: true });
   });
 
   it("rejects executable and oversized attachments", () => {

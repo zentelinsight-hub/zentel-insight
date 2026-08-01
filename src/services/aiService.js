@@ -109,13 +109,6 @@ export async function removeAiAttachment(attachment) {
   if (error) throw error;
 }
 
-export async function claimAiTrial() {
-  const supabase = await client();
-  const { data, error } = await supabase.rpc("ai_claim_trial");
-  if (error) throw error;
-  return data;
-}
-
 export function createAiSubscription(planSlug) {
   return invokeEdgeFunction("create-ai-subscription", { body: { planSlug }, timeoutMs: 30000, failureMessage: "Subscription checkout could not be opened." });
 }

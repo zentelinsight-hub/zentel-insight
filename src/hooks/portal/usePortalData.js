@@ -6,6 +6,7 @@ import {
   getStudentClassroom,
   getStudentAnnouncements,
   getStudentAssignments,
+  getStudentAttendance,
   getStudentCertificates,
   getStudentDashboard,
   getStudentEnrolments,
@@ -101,6 +102,10 @@ export function useStudentTimetable(userId) {
 
 export function useStudentLiveClasses(userId) {
   return usePortalQuery(() => getStudentLiveClasses(userId), [userId], { enabled: Boolean(userId) });
+}
+
+export function useStudentAttendance(userId) {
+  return usePortalQuery(() => getStudentAttendance(userId), [userId], { enabled: Boolean(userId) });
 }
 
 export function useStudentClassroom(userId) {

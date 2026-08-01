@@ -6,13 +6,18 @@ import ProgramChatPanel from "./ProgramChatPanel";
 
 const chatMocks = vi.hoisted(() => ({
   ensureProgramClassroom: vi.fn(),
+  getActiveProgramChatCall: vi.fn(),
   getProgramChatMessages: vi.fn(),
   getProgramChatRooms: vi.fn(),
   getProgramChatUnreadCounts: vi.fn(),
+  joinProgramChat: vi.fn(),
+  manageProgramChatCall: vi.fn(),
   markProgramChatRead: vi.fn(),
   moderateProgramChatMessage: vi.fn(),
   sendProgramChatMessage: vi.fn(),
-  subscribeToProgramChat: vi.fn()
+  subscribeToProgramChat: vi.fn(),
+  toggleProgramChatReaction: vi.fn(),
+  validateChatImage: vi.fn()
 }));
 
 vi.mock("../context/authHooks", () => ({
@@ -23,12 +28,13 @@ vi.mock("../context/authHooks", () => ({
 }));
 
 vi.mock("../services/chatService", () => ({
-  CHAT_IMAGE_MAX_BYTES: 5 * 1024 * 1024,
+  CHAT_MESSAGE_MAX_LENGTH: 4000,
   ...chatMocks
 }));
 
 beforeEach(() => {
-  chatMocks.ensureProgramClassroom.mockResolvedValue({ id: "room-1", title: "Data Analysis", programs: { title: "Data Analysis" } });
+  chatMocks.ensureProgramClassroom.mockResolvedValue({ id: "room-1", title: "Data Analysis", program_title: "Data Analysis", joined: true });
+  chatMocks.getActiveProgramChatCall.mockResolvedValue(null);
   chatMocks.getProgramChatMessages.mockResolvedValue([]);
   chatMocks.getProgramChatRooms.mockResolvedValue([]);
   chatMocks.getProgramChatUnreadCounts.mockResolvedValue({ "room-1": 0 });
@@ -64,7 +70,7 @@ describe("Programme Classroom chat", () => {
 
   it("sends with Enter while keeping Shift+Enter for a new line", async () => {
     render(<ProgramChatPanel programId="program-1" trackId="track-1" />);
-    const messageBox = await screen.findByPlaceholderText("Write a message");
+    const messageBox = await screen.findByPlaceholderText("Message your classroom");
     fireEvent.change(messageBox, { target: { value: "Hello Tutor" } });
     fireEvent.keyDown(messageBox, { key: "Enter", shiftKey: true });
     expect(chatMocks.sendProgramChatMessage).not.toHaveBeenCalled();

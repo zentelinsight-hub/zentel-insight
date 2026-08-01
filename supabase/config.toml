@@ -24,7 +24,6 @@ verify_jwt = true
 [functions.admin-manage-ai]
 verify_jwt = true
 
-
 [functions.claim-my-enrolments]
 verify_jwt = true
 
@@ -54,3 +53,9 @@ verify_jwt = true
 
 [functions.leave-live-class]
 verify_jwt = true
+
+[functions.create-chat-voice-call]
+verify_jwt = true
+
+[functions.chat-retention-cleanup]
+verify_jwt = false

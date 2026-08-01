@@ -368,6 +368,19 @@ export async function getStudentLiveClasses(userId) {
   return sessions.map((item) => ({ ...item, profiles: profileById.get(item.tutor_id) || null }));
 }
 
+export async function getStudentAttendance(userId) {
+  if (!userId) return [];
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from("live_class_attendance")
+    .select("*, live_class_sessions(id, title, scheduled_start, scheduled_end, status, programs(id, title))")
+    .eq("user_id", userId)
+    .order("joined_at", { ascending: false })
+    .limit(100);
+  if (error) throw error;
+  return normalizeList(data);
+}
+
 export async function getStudentClassroom(userId) {
   if (!userId) return null;
   const supabase = await getClient();

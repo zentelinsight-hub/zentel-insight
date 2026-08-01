@@ -20,7 +20,6 @@ export function classifyAiRequest(input: {
   text?: string;
   attachmentTypes?: string[];
   webResearchRequested?: boolean;
-  trial?: boolean;
 }): AiRequestClassification {
   const text = String(input.text || "").trim();
   const attachmentTypes = Array.isArray(input.attachmentTypes) ? input.attachmentTypes : [];
@@ -35,10 +34,10 @@ export function classifyAiRequest(input: {
   if (advancedResearchPattern.test(text)) {
     return {
       requestType: "advanced_research",
-      route: input.trial ? "advanced" : "expert",
+      route: "expert",
       minimumCredits: 15,
-      maximumCredits: input.trial ? 20 : 40,
-      webResearch: !input.trial && needsCurrentInformation,
+      maximumCredits: 40,
+      webResearch: needsCurrentInformation,
       fileAnalysis: hasDocument || hasImage
     };
   }

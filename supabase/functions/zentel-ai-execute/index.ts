@@ -188,16 +188,13 @@ Deno.serve(async (request) => {
       .maybeSingle();
     await supabase.rpc("ai_refresh_wallet", { target_user_id: userId });
     const { data: wallet } = await supabase.from("ai_credit_wallets").select("*").eq("user_id", userId).maybeSingle();
-    const validSubscription = Boolean(subscription && ["trialing", "active", "past_due"].includes(subscription.status) && new Date(subscription.current_period_end).getTime() > Date.now());
+    const validSubscription = Boolean(subscription && ["active", "past_due"].includes(subscription.status) && new Date(subscription.current_period_end).getTime() > Date.now());
     if (!validSubscription && Number(wallet?.total_available || 0) <= 0) {
-      return jsonResponse({ error: "Choose a Zentel AI plan or activate an available trial to continue.", code: "subscription_required" }, 402, request);
+      return jsonResponse({ error: "Choose a Zentel AI plan or buy credits to continue.", code: "subscription_required" }, 402, request);
     }
 
     if (attachmentIds.length > Number(settings.maximum_files_per_request)) {
       return jsonResponse({ error: `Attach no more than ${settings.maximum_files_per_request} files to one request.`, code: "file_limit" }, 400, request);
-    }
-    if (subscription?.provider === "trial" && attachmentIds.length > 1) {
-      return jsonResponse({ error: "The trial supports one file per request.", code: "trial_file_limit" }, 400, request);
     }
     if (attachmentIds.length && !settings.file_uploads_enabled) {
       return jsonResponse({ error: "File analysis is temporarily unavailable.", code: "files_disabled" }, 503, request);
@@ -224,12 +221,8 @@ Deno.serve(async (request) => {
     const classification = classifyAiRequest({
       text,
       attachmentTypes: attachments.map((item) => item.mime_type),
-      webResearchRequested: body.webResearch === true,
-      trial: subscription?.provider === "trial"
+      webResearchRequested: body.webResearch === true
     });
-    if (subscription?.provider === "trial" && classification.requestType === "advanced_research") {
-      return jsonResponse({ error: "Advanced research is available with a paid Zentel AI plan.", code: "trial_restriction" }, 403, request);
-    }
     if (classification.webResearch && !settings.web_search_enabled) {
       return jsonResponse({ error: "Web research is temporarily unavailable. You can still ask a learning question without current-source research.", code: "web_disabled" }, 503, request);
     }
@@ -388,7 +381,7 @@ Deno.serve(async (request) => {
       .neq("request_id", aiRequestId)
       .eq("status", "completed")
       .order("created_at", { ascending: false })
-      .limit(subscription?.provider === "trial" ? 8 : 16);
+      .limit(16);
 
     const openAiBody: any = {
       model,

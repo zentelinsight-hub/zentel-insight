@@ -20,7 +20,8 @@ import {
   Settings,
   Sun,
   UserRound,
-  Video
+  Video,
+  WalletCards
 } from "lucide-react";
 import LiveClassCards from "../components/LiveClassCards";
 import PageVisual from "../components/PageVisual";
@@ -35,6 +36,7 @@ import {
   usePortalArticles,
   useStudentAnnouncements,
   useStudentAssignments,
+  useStudentAttendance,
   useStudentCertificates,
   useStudentClassroom,
   useStudentDashboard,
@@ -57,25 +59,18 @@ import {
   updateStudentPreferences,
 } from "../services/portal/portalRepository";
 import { claimMyEnrolments } from "../services/authService";
+import { getProgramChatUnreadCounts } from "../services/chatService";
 import { formatDateTime } from "../utils/format";
 import { usePageMeta } from "../utils/usePageMeta";
+import { useAsyncData } from "../hooks/useAsyncData";
 
-const portalLinks = [
-  ["/portal", "Dashboard", LayoutDashboard],
-  ["/portal/profile", "My Profile", UserRound],
-  ["/portal/my-courses", "My Course", GraduationCap],
-  ["/portal/classroom", "Classroom", MessageSquare],
-  ["/portal/timetable", "Timetable", CalendarDays],
-  ["/portal/announcements", "Announcements", Megaphone],
-  ["/portal/assignments", "Assignments", FileCheck2],
-  ["/portal/resources", "Resources", BookOpen],
-  ["/portal/zentel-ai", "Zentel AI", BrainCircuit],
-  ["/portal/payments", "Active Payment", CreditCard],
-  ["/portal/certificates", "Certificates", Award],
-  ["/portal/notifications", "Notifications", Bell],
-  ["/portal/articles", "Learning Articles", Newspaper],
-  ["/portal/support", "Support", LifeBuoy],
-  ["/portal/settings", "Settings", Settings]
+const portalGroups = [
+  { label: "Home", defaultOpen: true, items: [["/portal", "Dashboard", LayoutDashboard]] },
+  { label: "Learning", items: [["/portal/my-courses", "My Course", GraduationCap], ["/portal/timetable", "Timetable", CalendarDays], ["/portal/assignments", "Assignments", FileCheck2], ["/portal/resources", "Learning Resources", BookOpen]] },
+  { label: "Classroom", items: [["/portal/classroom", "Overview", MessageSquare], ["/portal/classroom/chat", "Chat", MessageSquare], ["/portal/classroom/live", "Live Classes", Video], ["/portal/classroom/attendance", "Attendance", CheckCircle2]] },
+  { label: "Zentel AI", items: [["/portal/zentel-ai", "AI Chat", BrainCircuit], ["/portal/zentel-ai/history", "Conversation History", Clock3], ["/portal/zentel-ai/usage", "Credits and Usage", CreditCard], ["/portal/zentel-ai/plans", "Plans and Billing", WalletCards], ["/portal/zentel-ai/settings", "AI Settings", Settings]] },
+  { label: "Updates", items: [["/portal/announcements", "Announcements", Megaphone], ["/portal/notifications", "Notifications", Bell], ["/portal/articles", "Learning Articles", Newspaper]] },
+  { label: "Account", items: [["/portal/profile", "My Profile", UserRound], ["/portal/payments", "Active Payment", CreditCard], ["/portal/certificates", "Certificates", Award], ["/portal/support", "Support", LifeBuoy], ["/portal/settings", "Settings", Settings]] }
 ];
 
 const pageMeta = {
@@ -229,10 +224,12 @@ export function PortalLayout() {
   const { profile, user } = useAuth();
   const enrolmentsQuery = useStudentEnrolments(user?.id);
   const notificationsQuery = useStudentNotifications(user?.id);
+  const chatUnreadQuery = useAsyncData(getProgramChatUnreadCounts, [], { enabled: Boolean(user?.id), errorMessage: "Classroom unread count could not be loaded." });
   const enrolments = enrolmentsQuery.data || [];
   const refetchEnrolments = enrolmentsQuery.refetch;
   const displayName = profile?.full_name || user?.email || "Learner";
   const unreadNotificationCount = (notificationsQuery.data || []).filter((item) => !item.read_at).length;
+  const unreadChatCount = Object.values(chatUnreadQuery.data || {}).reduce((total, value) => total + Number(value || 0), 0);
 
   useEffect(() => {
     claimMyEnrolments()
@@ -265,12 +262,15 @@ export function PortalLayout() {
         profileInitial: getInitials(profile, user),
         navLabel: "Student portal",
         menuLabel: "portal",
-        items: portalLinks.map(([to, label, Icon]) => ({
-          to,
-          label,
-          Icon,
-          end: to === "/portal",
-          badge: to === "/portal/notifications" ? unreadNotificationCount : 0
+        groups: portalGroups.map((group) => ({
+          ...group,
+          items: group.items.map(([to, label, Icon]) => ({
+            to,
+            label,
+            Icon,
+            end: to === "/portal" || to === "/portal/classroom" || to === "/portal/zentel-ai",
+            badge: to === "/portal/notifications" ? unreadNotificationCount : to === "/portal/classroom/chat" ? unreadChatCount : 0
+          }))
         }))
       }}
       header={{
@@ -291,6 +291,8 @@ export function PortalLayout() {
         "live_class_sessions",
         "portal_articles",
         "portal_notifications",
+        "program_chat_messages",
+        "program_chat_reactions",
         "program_levels",
         "resources",
         "support_ticket_messages",
@@ -437,7 +439,6 @@ function StudentClassroomPage() {
   const { user } = useAuth();
   const classroom = useStudentClassroom(user?.id);
   const liveClasses = useStudentLiveClasses(user?.id);
-  const [chatState, setChatState] = useState({ roomId: "", unreadCount: 0 });
 
   return (
     <PortalPage slug="classroom">
@@ -500,31 +501,49 @@ function StudentClassroomPage() {
               </article>
               <article className="dashboard-card">
                 <MessageSquare size={22} aria-hidden="true" />
-                <span>Unread messages</span>
-                <strong>{chatState.unreadCount}</strong>
-                <small>Chat with your tutor and classmates.</small>
+                <span>Programme chat</span>
+                <strong>Live conversation</strong>
+                <small>Chat with your tutor and classmates</small>
               </article>
               <article className="dashboard-card">
                 <CheckCircle2 size={22} aria-hidden="true" />
-                <span>Room access</span>
-                <strong>{chatState.roomId ? "Connected" : "Preparing"}</strong>
-                <small>Official programme classroom</small>
+                <span>Attendance</span>
+                <strong>Class records</strong>
+                <small>Review your joined sessions</small>
               </article>
             </div>
-            <div className="classroom-workspace">
-              <aside className="classroom-info-panel">
-                {!classroom.data.tutor_id ? <div className="portal-state-card"><h3>Tutor assignment pending</h3><p>A tutor has not yet been assigned. Classroom chat remains available to authorised programme members.</p></div> : <div><p className="eyebrow">Assigned Tutor</p><h3>{tutorName}</h3><p>{classroom.data.tutor_specialisation || "Programme Tutor"}</p></div>}
-                {liveClasses.loading ? <PortalLoading label="Loading live classes" /> : null}
-                {liveClasses.error ? <PortalError message={liveClasses.error} onRetry={liveClasses.refetch} /> : null}
-                {!liveClasses.loading && !liveClasses.error ? <LiveClassCards sessions={scheduledClasses} emptyMessage="No live class is scheduled. Your tutor will notify you when a new classroom session is available." /> : null}
-              </aside>
-              <ProgramChatPanel programId={classroom.data.program_id} trackId={classroom.data.track_id} onRoomState={setChatState} />
+            <div className="classroom-section-links">
+              <Link className="classroom-section-link" to="/portal/classroom/chat"><MessageSquare size={20} /><span><strong>Chat</strong><small>Open your programme conversation</small></span></Link>
+              <Link className="classroom-section-link" to="/portal/classroom/live"><Video size={20} /><span><strong>Live Classes</strong><small>View and join scheduled sessions</small></span></Link>
+              <Link className="classroom-section-link" to="/portal/classroom/attendance"><CheckCircle2 size={20} /><span><strong>Attendance</strong><small>Review your participation history</small></span></Link>
             </div>
           </div>
         );
       }}
     </PortalPage>
   );
+}
+
+export function StudentClassroomChatPage() {
+  const { user } = useAuth();
+  const classroom = useStudentClassroom(user?.id);
+  usePageMeta({ path: "/portal/classroom/chat", title: "Classroom Chat", description: "Your private programme classroom conversation.", robots: "noindex,nofollow" });
+  if (classroom.loading) return <div className="route-loader">Loading classroom chat</div>;
+  if (classroom.error) return <PortalError message={classroom.error} onRetry={classroom.refetch} />;
+  if (!classroom.data) return <PortalEmpty content={{ empty_title: "Programme assignment pending", empty_message: "Chat appears after Admin connects an active programme to your account." }} />;
+  return <div className="portal-page chat-route-page"><ProgramChatPanel audience="student" standalone backTo="/portal/classroom" programId={classroom.data.program_id} trackId={classroom.data.track_id} /></div>;
+}
+
+export function StudentLiveClassesPage() {
+  const { user } = useAuth();
+  const liveClasses = useStudentLiveClasses(user?.id);
+  return <PortalPage slug="classroom">{() => <div className="portal-page"><div className="portal-page-heading"><div><p className="eyebrow">Classroom</p><h2>Live Classes</h2><p>View and join authorised programme sessions.</p></div><Link className="button button-secondary" to="/portal/classroom">Classroom Overview</Link></div>{liveClasses.loading ? <PortalLoading label="Loading live classes" /> : liveClasses.error ? <PortalError message={liveClasses.error} onRetry={liveClasses.refetch} /> : <LiveClassCards sessions={liveClasses.data || []} emptyMessage="No live class is scheduled. Your Tutor will notify you when a session is available." />}</div>}</PortalPage>;
+}
+
+export function StudentAttendancePage() {
+  const { user } = useAuth();
+  const attendance = useStudentAttendance(user?.id);
+  return <PortalPage slug="classroom">{() => <div className="portal-page"><div className="portal-page-heading"><div><p className="eyebrow">Classroom</p><h2>Attendance</h2><p>Your live-class participation history.</p></div><Link className="button button-secondary" to="/portal/classroom">Classroom Overview</Link></div>{attendance.loading ? <PortalLoading label="Loading attendance" /> : attendance.error ? <PortalError message={attendance.error} onRetry={attendance.refetch} /> : (attendance.data || []).length ? <div className="portal-list">{attendance.data.map((record) => <article className="portal-record-card" key={record.id}><div><p className="eyebrow">{record.attendance_status}</p><h3>{record.live_class_sessions?.title || "Live class"}</h3><p>{record.live_class_sessions?.programs?.title || "Programme"}</p></div><dl className="portal-mini-details"><div><dt>Joined</dt><dd>{formatDateTime(record.joined_at)}</dd></div><div><dt>Left</dt><dd>{record.left_at ? formatDateTime(record.left_at) : "Session active"}</dd></div></dl></article>)}</div> : <PortalEmpty content={{ empty_title: "No attendance records yet", empty_message: "Your attendance appears after you join a live class." }} />}</div>}</PortalPage>;
 }
 
 function MyCoursesPage() {
