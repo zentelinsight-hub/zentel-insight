@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ProgramChatPanel from "./ProgramChatPanel";
 
@@ -81,5 +82,21 @@ describe("Programme Classroom chat", () => {
       senderId: "student-1",
       body: "Hello Tutor"
     })));
+  });
+
+  it("resolves classroom access directly and keeps the Back button visible", async () => {
+    chatMocks.getProgramChatRooms.mockResolvedValue([
+      { id: "room-1", classroom_id: "classroom-1", title: "Data Analysis", program_title: "Data Analysis", joined: true }
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ProgramChatPanel audience="student" standalone backTo="/portal/classroom" />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("No messages yet")).toBeInTheDocument();
+    expect(chatMocks.getProgramChatRooms).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("link", { name: "Back to classroom" })).toHaveAttribute("href", "/portal/classroom");
   });
 });

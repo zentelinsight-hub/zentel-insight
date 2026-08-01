@@ -18,6 +18,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AiMessage from "../components/ai/AiMessage";
+import PortalBackButton from "../components/portal/PortalBackButton";
 import { useAsyncData } from "../hooks/useAsyncData";
 import {
   archiveAiConversation,
@@ -202,12 +203,12 @@ export default function ZentelAI() {
   const archive = async (id) => { await archiveAiConversation(id); if (selectedId === id) { setSelectedId(""); navigate("/portal/zentel-ai/new"); } conversationsQuery.refetch(); };
   const lastStudentMessage = [...messages].reverse().find((item) => item.role === "user")?.content?.text;
 
-  if (snapshotQuery.loading) return <div className="portal-page"><div className="route-loader">Loading Zentel AI</div></div>;
-  if (snapshotQuery.error) return <div className="portal-page"><div className="notice-card portal-state-card"><h2>Zentel AI could not be loaded</h2><p>{snapshotQuery.error}</p><button className="button button-primary" onClick={snapshotQuery.refetch}>Try Again</button></div></div>;
+  if (snapshotQuery.loading) return <div className="portal-page"><PortalBackButton fallback="/portal" label="Back to Portal" /><div className="route-loader">Loading Zentel AI</div></div>;
+  if (snapshotQuery.error) return <div className="portal-page"><PortalBackButton fallback="/portal" label="Back to Portal" /><div className="notice-card portal-state-card"><h2>Zentel AI could not be loaded</h2><p>{snapshotQuery.error}</p><button className="button button-primary" onClick={snapshotQuery.refetch}>Try Again</button></div></div>;
 
   return (
     <div className="portal-page ai-page">
-      <header className="ai-page-heading"><div><p className="eyebrow">Student Portal</p><h1><BrainCircuit size={30} />Zentel AI</h1><p>Your personal learning assistant</p></div><button className="ai-history-toggle" type="button" onClick={() => setDrawerOpen(true)}><Menu size={19} />History</button></header>
+      <header className="ai-page-heading"><div><p className="eyebrow">Student Portal</p><h1><BrainCircuit size={30} />Zentel AI</h1><p>Your personal learning assistant</p></div><div className="ai-page-heading-actions"><PortalBackButton fallback="/portal" label="Back to Portal" /><button className="ai-history-toggle" type="button" onClick={() => setDrawerOpen(true)}><Menu size={19} />History</button></div></header>
       <div className="ai-access-strip" aria-label="Zentel AI access summary">
         <span><strong>{snapshot.subscription?.plan_name || "Credits"}</strong></span>
         <span>{Number(snapshot.wallet?.total_available || 0).toLocaleString()} credits</span>

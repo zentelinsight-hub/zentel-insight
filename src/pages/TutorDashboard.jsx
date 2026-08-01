@@ -934,7 +934,7 @@ export default function TutorDashboard({ forcedSection = "" }) {
       {activeSection === "programme" ? <ProgrammeSection data={data} /> : null}
       {activeSection === "students" ? <StudentsSection data={data} /> : null}
       {activeSection === "classroom" ? <TutorClassroomSection data={data} onSaved={dataQuery.refetch} /> : null}
-      {activeSection === "classroom-chat" ? <div className="portal-page chat-route-page">{data.assignments[0]?.program_id ? <ProgramChatPanel audience="tutor" standalone backTo="/tutor/classroom" programId={data.assignments[0].program_id} trackId={data.assignments[0].track_id} /> : <EmptyState message="A programme must be assigned before Tutor chat can open." />}</div> : null}
+      {activeSection === "classroom-chat" ? <div className="portal-page chat-route-page"><ProgramChatPanel audience="tutor" standalone backTo="/tutor/classroom" /></div> : null}
       {activeSection === "timetable" ? <TutorTimetableSection data={data} /> : null}
       {activeSection === "live-classes" ? (
         <div className="portal-page">

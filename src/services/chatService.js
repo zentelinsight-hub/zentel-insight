@@ -22,11 +22,12 @@ async function getClient() {
   return supabase;
 }
 
-export async function getProgramChatRooms({ programId = "", trackId = "", roomId = "" } = {}) {
+export async function getProgramChatRooms({ programId = "", trackId = "", classroomId = "", roomId = "" } = {}) {
   const supabase = await getClient();
-  const { data, error } = await supabase.rpc("get_programme_chat_access", {
+  const { data, error } = await supabase.rpc("get_classroom_chat_access", {
     target_program_id: programId || null,
     target_track_id: trackId || null,
+    target_classroom_id: classroomId || null,
     target_room_id: roomId || null
   });
   if (error) throw error;
@@ -36,8 +37,8 @@ export async function getProgramChatRooms({ programId = "", trackId = "", roomId
   }));
 }
 
-export async function ensureProgramClassroom({ programId, trackId, roomId = "" }) {
-  const rooms = await getProgramChatRooms({ programId, trackId, roomId });
+export async function ensureProgramClassroom({ programId, trackId, classroomId = "", roomId = "" }) {
+  const rooms = await getProgramChatRooms({ programId, trackId, classroomId, roomId });
   return rooms[0] || null;
 }
 

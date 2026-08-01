@@ -105,6 +105,7 @@ export default function ProgramChatPanel({
   canModerate = false,
   programId = "",
   trackId = "",
+  classroomId = "",
   roomId: requestedRoomId = "",
   audience = "student",
   standalone = false,
@@ -114,9 +115,9 @@ export default function ProgramChatPanel({
   const { user, profile } = useAuth();
   const roomsQuery = useAsyncData(
     () => programId || requestedRoomId
-      ? ensureProgramClassroom({ programId, trackId, roomId: requestedRoomId }).then((room) => room ? [room] : [])
+      ? ensureProgramClassroom({ programId, trackId, classroomId, roomId: requestedRoomId }).then((room) => room ? [room] : [])
       : getProgramChatRooms(),
-    [programId, trackId, requestedRoomId],
+    [programId, trackId, classroomId, requestedRoomId],
     { errorMessage: "We could not load your classroom. Please try again." }
   );
   const rooms = useMemo(() => roomsQuery.data || [], [roomsQuery.data]);
@@ -412,13 +413,16 @@ export default function ProgramChatPanel({
     if (canSend) composerRef.current?.requestSubmit();
   }
 
-  if (roomsQuery.loading) return <div className="route-loader">Loading classroom chat</div>;
-  if (roomsQuery.error) return <div className="notice-card portal-state-card"><h2>We could not load your classroom</h2><p>Please try again. If the issue continues, contact Zentel Insight support.</p><button className="button button-secondary" type="button" onClick={roomsQuery.refetch}>Try Again</button></div>;
-  if (!rooms.length) return <div className="notice-card portal-state-card"><MessageSquare size={24} aria-hidden="true" /><h2>Classroom chat is not available yet</h2><p>Your classroom appears after an authorised programme is connected to your active account.</p></div>;
+  const backControl = standalone && backTo ? <Link className="button button-secondary chat-page-back" to={backTo}><ArrowLeft size={17} aria-hidden="true" />Back to Classroom</Link> : null;
+
+  if (roomsQuery.loading) return <div className="chat-standalone-state">{backControl}<div className="route-loader">Loading classroom chat</div></div>;
+  if (roomsQuery.error) return <div className="notice-card portal-state-card chat-standalone-state">{backControl}<h2>We could not load your classroom</h2><p>Please try again. If the issue continues, contact Zentel Insight support.</p><button className="button button-secondary" type="button" onClick={roomsQuery.refetch}>Try Again</button></div>;
+  if (!rooms.length) return <div className="notice-card portal-state-card chat-standalone-state">{backControl}<MessageSquare size={24} aria-hidden="true" /><h2>Classroom chat is not available yet</h2><p>Your classroom appears after an authorised classroom membership is connected to your active account.</p></div>;
 
   if (!joined) {
     return (
       <section className={`chat-join-state ${standalone ? "standalone" : ""}`}>
+        {backControl}
         <MessageSquare size={28} aria-hidden="true" />
         <p className="eyebrow">{selectedRoom?.program_title || selectedRoom?.title}</p>
         <h2>Join Programme Chat</h2>
@@ -436,7 +440,7 @@ export default function ProgramChatPanel({
       <section className="chat-thread" aria-label="Programme chat messages">
         <header className="chat-thread-header">
           <div className="chat-thread-identity">
-            {standalone && backTo ? <Link className="chat-header-action" to={backTo} aria-label="Back to classroom"><ArrowLeft size={19} /></Link> : null}
+            {standalone && backTo ? <Link className="chat-header-action" to={backTo} aria-label="Back to classroom"><ArrowLeft size={19} /><span>Back</span></Link> : null}
             <div><strong>{selectedRoom?.program_title || selectedRoom?.title}</strong><ParticipantState onlineCount={onlineCount} typingNames={typingNames} connection={connection} /></div>
           </div>
           <div className="chat-header-actions">

@@ -516,13 +516,8 @@ function StudentClassroomPage() {
 }
 
 export function StudentClassroomChatPage() {
-  const { user } = useAuth();
-  const classroom = useStudentClassroom(user?.id);
   usePageMeta({ path: "/portal/classroom/chat", title: "Classroom Chat", description: "Your private programme classroom conversation.", robots: "noindex,nofollow" });
-  if (classroom.loading) return <div className="route-loader">Loading classroom chat</div>;
-  if (classroom.error) return <PortalError message={classroom.error} onRetry={classroom.refetch} />;
-  if (!classroom.data) return <PortalEmpty content={{ empty_title: "Programme assignment pending", empty_message: "Chat appears after Admin connects an active programme to your account." }} />;
-  return <div className="portal-page chat-route-page"><ProgramChatPanel audience="student" standalone backTo="/portal/classroom" programId={classroom.data.program_id} trackId={classroom.data.track_id} /></div>;
+  return <div className="portal-page chat-route-page"><ProgramChatPanel audience="student" standalone backTo="/portal/classroom" /></div>;
 }
 
 export function StudentLiveClassesPage() {

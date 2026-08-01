@@ -2527,6 +2527,7 @@ body.portal-route-active .site-footer {
 }
 
 .chat-join-state {
+  position: relative;
   min-height: min(560px, calc(100dvh - var(--portal-header-height) - 5rem));
   display: grid;
   align-content: center;
@@ -2537,6 +2538,22 @@ body.portal-route-active .site-footer {
   border-radius: var(--radius-small);
   background: var(--color-surface);
   text-align: center;
+}
+
+.chat-standalone-state {
+  position: relative;
+}
+
+.chat-page-back {
+  width: fit-content;
+  justify-self: start;
+  margin-bottom: var(--space-3);
+}
+
+.chat-join-state .chat-page-back {
+  position: absolute;
+  top: var(--space-4);
+  left: var(--space-4);
 }
 
 .chat-join-state > svg {
@@ -5225,6 +5242,17 @@ body.portal-route-active .site-footer {
   margin-bottom: 0;
 }
 
+.ai-page-heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.ai-page-heading-actions .portal-back-button {
+  margin-bottom: 0;
+}
+
 .ai-access-strip {
   min-width: 0;
   display: flex;
@@ -6319,6 +6347,11 @@ body.portal-route-active .site-footer {
   .ai-section-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .ai-page-heading-actions {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .ai-page-heading h1 {
