@@ -37,7 +37,7 @@ create table if not exists private.loan_kyc_keys (
 );
 
 insert into private.loan_kyc_keys(singleton, encryption_key)
-values (true, encode(gen_random_bytes(32), 'hex'))
+values (true, encode(extensions.gen_random_bytes(32), 'hex'))
 on conflict (singleton) do nothing;
 
 create table if not exists private.loan_kyc_records (
@@ -188,8 +188,8 @@ begin
   insert into private.loan_kyc_records(application_id, nin_cipher, bvn_cipher, passport_photo_path, identification_path)
   values (
     application_id,
-    pgp_sym_encrypt(applicant_nin, private.loan_encryption_key(), 'cipher-algo=aes256'),
-    pgp_sym_encrypt(applicant_bvn, private.loan_encryption_key(), 'cipher-algo=aes256'),
+    extensions.pgp_sym_encrypt(applicant_nin, private.loan_encryption_key(), 'cipher-algo=aes256'),
+    extensions.pgp_sym_encrypt(applicant_bvn, private.loan_encryption_key(), 'cipher-algo=aes256'),
     passport_photo_path,
     identification_path
   );
@@ -215,7 +215,7 @@ begin
     raise exception 'Enter valid bank details.';
   end if;
   insert into private.loan_bank_accounts(application_id, bank_name, account_name, account_number_cipher)
-  values (application_id, left(btrim(bank_name),120), left(btrim(account_name),160), pgp_sym_encrypt(account_number, private.loan_encryption_key(), 'cipher-algo=aes256'))
+  values (application_id, left(btrim(bank_name),120), left(btrim(account_name),160), extensions.pgp_sym_encrypt(account_number, private.loan_encryption_key(), 'cipher-algo=aes256'))
   on conflict (application_id) do update set bank_name = excluded.bank_name, account_name = excluded.account_name,
     account_number_cipher = excluded.account_number_cipher, updated_at = now();
   update public.loan_applications set disbursement_status = 'bank_details_submitted', updated_at = now()
@@ -254,8 +254,8 @@ as $$
 begin
   if auth.role() <> 'service_role' then raise exception 'Service access is required.'; end if;
   return query select
-    pgp_sym_decrypt(k.nin_cipher, private.loan_encryption_key()),
-    pgp_sym_decrypt(k.bvn_cipher, private.loan_encryption_key()),
+    extensions.pgp_sym_decrypt(k.nin_cipher, private.loan_encryption_key()),
+    extensions.pgp_sym_decrypt(k.bvn_cipher, private.loan_encryption_key()),
     k.passport_photo_path,
     k.identification_path
   from private.loan_kyc_records k where k.application_id = target_application_id;
