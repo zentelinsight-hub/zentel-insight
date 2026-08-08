@@ -23,7 +23,7 @@ async function requiredSelect(label, query, fallback = []) {
 export async function getTutorDashboardData(tutorId) {
   if (!tutorId) return null;
   const supabase = await getClient();
-  const [profile, tutorProfile, assignments] = await Promise.all([
+  const [profile, tutorProfile, assignments, classrooms] = await Promise.all([
     requiredSelect("profile", supabase.from("profiles").select("*").eq("id", tutorId).maybeSingle(), null),
     requiredSelect("tutor profile", supabase.from("tutor_profiles").select("*").eq("user_id", tutorId).maybeSingle(), null),
     requiredSelect(
@@ -35,7 +35,8 @@ export async function getTutorDashboardData(tutorId) {
         .eq("active", true)
         .order("updated_at", { ascending: false })
         .limit(1)
-    )
+    ),
+    requiredSelect("classrooms", supabase.rpc("get_my_tutor_classrooms"))
   ]);
 
   const primaryAssignment = normalizeList(assignments)[0] || null;
@@ -92,7 +93,36 @@ export async function getTutorDashboardData(tutorId) {
     unreadMessages: Object.values(unreadMessageCounts || {}).reduce((total, count) => total + Number(count || 0), 0),
     notifications: normalizeList(notifications),
     supportTickets: normalizeList(supportTickets)
+    ,classrooms: normalizeList(classrooms)
   };
+}
+
+export async function saveTutorLiveClass(values) {
+  const supabase = await getClient();
+  const startsAt = new Date(values.startsAt);
+  const endsAt = new Date(values.endsAt);
+  if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) {
+    throw new Error("Choose a valid start and end time.");
+  }
+  const { data, error } = await supabase.rpc("tutor_save_live_class", {
+    target_session_id: values.id || null,
+    target_classroom_id: values.classroomId,
+    class_name: String(values.title || "").trim(),
+    platform_name: values.provider,
+    meeting_url: String(values.meetingUrl || "").trim(),
+    starts_at: startsAt.toISOString(),
+    ends_at: endsAt.toISOString(),
+    class_instructions: String(values.instructions || "").trim()
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function cancelTutorLiveClass(sessionId) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("tutor_cancel_live_class", { target_session_id: sessionId });
+  if (error) throw error;
+  return data;
 }
 
 export async function updateTutorProfessionalProfile(tutorId, values) {

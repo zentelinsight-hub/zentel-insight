@@ -57,7 +57,8 @@ Deno.serve(async (request) => {
       .from("live_class_sessions")
       .update({
         status: "completed",
-        join_closes_at: now
+        join_closes_at: now,
+        actual_ended_at: now
       })
       .eq("id", session.id)
       .select("*")
@@ -80,7 +81,12 @@ Deno.serve(async (request) => {
       targetId: session.id
     });
 
-    return jsonResponse({ ok: true, session: updated }, 200, request);
+    return jsonResponse({
+      ok: true,
+      session: updated,
+      underlyingMeetingEnded: false,
+      message: "The class is ended in Zentel Insight. Close the external meeting in its provider when finished."
+    }, 200, request);
   } catch (error) {
     console.error("end-live-class", (error as Error).message);
     return jsonResponse({ ok: false, error: "Live class could not be ended." }, 400, request);

@@ -3,10 +3,9 @@ import { EdgeFunctionError, invokeEdgeFunction } from "./edgeFunctionClient";
 export function getLiveClassState(item, now = new Date()) {
   if (!item) return "scheduled";
   if (item.status === "cancelled" || item.status === "completed") return item.status;
-  const start = new Date(item.scheduled_start);
   const end = new Date(item.scheduled_end);
-  if (now >= start && now <= end) return "live";
-  if (now > end) return "completed";
+  if (item.status === "live" && now <= end) return "live";
+  if (item.status === "live" && now > end) return "completed";
   return "scheduled";
 }
 

@@ -126,20 +126,11 @@ describe("AuthForm", () => {
     expect(await screen.findByText("Portal reached")).toBeInTheDocument();
   });
 
-  it("resends a confirmation link from the login page", async () => {
-    authMocks.resendSignupConfirmation.mockResolvedValue({
-      ok: true,
-      message: "If an unverified account exists for this email address, a new verification message has been sent."
-    });
+  it("keeps the login form concise without a permanent verification panel", () => {
     renderAuth("login", ["/login?notice=verify-email"]);
 
     expect(screen.getByText("Check your email and click the verification link before signing in.")).toBeInTheDocument();
-    fireEvent.change(screen.getAllByLabelText("Email address")[1], {
-      target: { value: "new@example.com" }
-    });
-    fireEvent.click(screen.getByRole("button", { name: /Resend verification email/i }));
-
-    expect(await screen.findByText(/a new verification message has been sent/)).toBeInTheDocument();
-    expect(authMocks.resendSignupConfirmation).toHaveBeenCalledWith("new@example.com");
+    expect(screen.getAllByLabelText("Email address")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /Resend verification email/i })).not.toBeInTheDocument();
   });
 });

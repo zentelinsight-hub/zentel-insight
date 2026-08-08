@@ -1,6 +1,7 @@
 const validAdminSections = new Set([
   "overview",
   "accounts",
+  "staff",
   "programmes",
   "enrolments",
   "classrooms",

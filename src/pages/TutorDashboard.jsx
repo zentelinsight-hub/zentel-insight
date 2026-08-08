@@ -29,8 +29,10 @@ import { useAuth } from "../context/authHooks";
 import { useTheme } from "../context/themeHooks";
 import { useAsyncData } from "../hooks/useAsyncData";
 import {
+  cancelTutorLiveClass,
   getTutorDashboardData,
   saveTutorAssignment,
+  saveTutorLiveClass,
   saveTutorResource,
   searchTutorStudents
 } from "../services/tutorService";
@@ -67,15 +69,6 @@ const sections = [
   ["settings", "Settings", Settings]
 ];
 
-const tutorGroupSpecs = [
-  { label: "Home", major: true, slugs: ["dashboard"] },
-  { label: "Teaching", major: true, slugs: ["teaching"] },
-  { label: "Classrooms", major: true, slugs: ["classrooms"] },
-  { label: "Assessment", major: true, slugs: ["assessment"] },
-  { label: "Communication", major: true, slugs: ["notifications"] },
-  { label: "Account", major: true, slugs: ["profile"] }
-];
-
 function firstName(value) {
   return String(value || "Tutor").trim().split(/\s+/)[0] || "Tutor";
 }
@@ -102,6 +95,48 @@ function PageHeading({ title, description, actions }) {
   );
 }
 
+function toLocalInput(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function TutorLiveClassesSection({ data, onSaved }) {
+  const emptyForm = { id: "", classroomId: data.classrooms?.[0]?.classroom_id || "", title: "", provider: "google_meet", meetingUrl: "", startsAt: "", endsAt: "", instructions: "" };
+  const [form, setForm] = useState(emptyForm);
+  const [status, setStatus] = useState({ type: "", message: "" });
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault(); setBusy(true); setStatus({ type: "", message: "" });
+    try {
+      await saveTutorLiveClass(form);
+      setForm({ ...emptyForm, classroomId: form.classroomId });
+      setStatus({ type: "success", message: form.id ? "Live class updated." : "Live class scheduled." });
+      onSaved();
+    } catch (error) {
+      setStatus({ type: "warning", message: error.message || "The live class could not be saved." });
+    } finally { setBusy(false); }
+  }
+
+  function edit(session) {
+    setForm({ id: session.id, classroomId: session.classroom_id || "", title: session.title || "", provider: session.provider || "google_meet", meetingUrl: session.provider_room_url || "", startsAt: toLocalInput(session.scheduled_start), endsAt: toLocalInput(session.scheduled_end), instructions: session.description || "" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function cancel(session) {
+    if (!window.confirm(`Cancel ${session.title}? Students will no longer be able to join.`)) return;
+    setBusy(true);
+    try { await cancelTutorLiveClass(session.id); setStatus({ type: "success", message: "Live class cancelled." }); onSaved(); }
+    catch (error) { setStatus({ type: "warning", message: error.message || "The live class could not be cancelled." }); }
+    finally { setBusy(false); }
+  }
+
+  return <div className="portal-page"><PageHeading title="Live classes" description="Schedule and run secure external classes for your assigned classrooms." />{status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}{data.classrooms?.length ? <form className="form-card management-form" onSubmit={submit}><div className="form-grid"><label><span>Assigned classroom</span><select value={form.classroomId} onChange={(event) => setForm({ ...form, classroomId: event.target.value })} required>{data.classrooms.map((item) => <option key={item.classroom_id} value={item.classroom_id}>{item.classroom_name} | {item.cohort_name}</option>)}</select></label><label><span>Class name</span><input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} maxLength="180" required /></label><label><span>Platform</span><select value={form.provider} onChange={(event) => setForm({ ...form, provider: event.target.value })}><option value="google_meet">Google Meet</option><option value="zoom">Zoom</option></select></label><label><span>Meeting URL</span><input type="url" value={form.meetingUrl} onChange={(event) => setForm({ ...form, meetingUrl: event.target.value })} placeholder={form.provider === "zoom" ? "https://company.zoom.us/j/..." : "https://meet.google.com/..."} required /></label><label><span>Date and start time</span><input type="datetime-local" value={form.startsAt} onChange={(event) => setForm({ ...form, startsAt: event.target.value })} required /></label><label><span>End time</span><input type="datetime-local" value={form.endsAt} onChange={(event) => setForm({ ...form, endsAt: event.target.value })} required /></label></div><label><span>Instructions</span><textarea value={form.instructions} onChange={(event) => setForm({ ...form, instructions: event.target.value })} maxLength="2000" /></label><div className="button-row">{form.id ? <button className="button button-secondary" type="button" onClick={() => setForm(emptyForm)}>Cancel Edit</button> : null}<button className="button button-primary" disabled={busy}>{busy ? "Saving" : form.id ? "Update Class" : "Schedule Class"}</button></div></form> : <div className="notice-card"><p>Admin must assign your account to an active classroom before you can schedule a live class.</p></div>}<LiveClassCards audience="tutor" sessions={data.liveClasses} emptyMessage="No live classes have been scheduled yet." onChanged={onSaved} onEdit={edit} onCancel={cancel} /></div>;
+}
+
 function EmptyState({ title = "Nothing to show yet", message }) {
   return (
     <div className="notice-card portal-state-card">
@@ -114,6 +149,16 @@ function EmptyState({ title = "Nothing to show yet", message }) {
 function TutorFrame({ data, onRealtimeChange, children }) {
   const { profile, user } = useAuth();
   const displayName = tutorDisplayName(data?.profile || profile) || user?.email || "Tutor";
+  const navigationItem = (slug, labelOverride = "") => {
+    const [, label, Icon, route] = sections.find(([itemSlug]) => itemSlug === slug);
+    return {
+      to: route || (slug === "dashboard" ? "/tutor" : `/tutor/${slug}`),
+      label: labelOverride || label,
+      Icon,
+      end: slug === "dashboard",
+      badge: slug === "notifications" ? data.notifications.filter((item) => !item.read_at).length : slug === "classroom-chat" ? data.unreadMessages : 0
+    };
+  };
   return (
     <PortalShell
       sidebar={{
@@ -124,19 +169,16 @@ function TutorFrame({ data, onRealtimeChange, children }) {
           ? `${data.assignments.length} assigned programme${data.assignments.length === 1 ? "" : "s"}`
           : "Programme pending",
         avatarUrl: data?.profile?.avatar_url || profile?.avatar_url,
+        profileTo: "/tutor/profile",
         navLabel: "Tutor dashboard",
-        menuLabel: "tutor",
         shellClass: "management-shell tutor-shell",
-        groups: tutorGroupSpecs.map((group) => ({
-          ...group,
-          items: group.slugs.map((itemSlug) => sections.find(([slug]) => slug === itemSlug)).filter(Boolean).map(([slug, label, Icon, route]) => ({
-            to: route || (slug === "dashboard" ? "/tutor" : `/tutor/${slug}`),
-            label,
-            Icon,
-            end: ["dashboard", "classroom"].includes(slug),
-            badge: slug === "notifications" ? data.notifications.filter((item) => !item.read_at).length : slug === "classroom-chat" ? data.unreadMessages : 0
-          }))
-        }))
+        primaryItems: [
+          navigationItem("dashboard", "Home"),
+          navigationItem("classrooms"),
+          navigationItem("classroom-chat", "Messages"),
+          navigationItem("assessment")
+        ],
+        moreItems: ["teaching", "performance", "students", "live-classes", "timetable", "attendance", "announcements", "assignments", "resources", "notifications", "support", "profile", "settings"].map((slug) => navigationItem(slug))
       }}
       header={{ eyebrow: "Welcome back", title: displayName, status: <span className="portal-tag success">Tutor</span> }}
       idleEnabled={Boolean(data)}
@@ -889,25 +931,11 @@ export default function TutorDashboard({ forcedSection = "" }) {
     robots: "noindex,nofollow"
   });
 
-  if (dataQuery.loading) return <div className="route-loader">Loading tutor dashboard</div>;
-  if (dataQuery.error) {
-    return (
-      <section className="page-section">
-        <div className="container narrow">
-          <div className="notice-card">
-            <h1>Tutor dashboard could not be loaded</h1>
-            <p>We could not load your Tutor dashboard. Please try again. If the issue continues, contact Zentel Insight Support.</p>
-            <button className="button button-primary" type="button" onClick={dataQuery.refetch}>Try Again</button>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
   const data = {
     profile: null,
     tutorProfile: null,
     assignments: [],
+    classrooms: [],
     officialStudents: [],
     preferenceStudents: [],
     studentTotal: 0,
@@ -923,6 +951,23 @@ export default function TutorDashboard({ forcedSection = "" }) {
     supportTickets: [],
     ...(dataQuery.data || {})
   };
+
+  if (dataQuery.loading) {
+    return <TutorFrame data={data}><div className="route-loader">Loading tutor dashboard</div></TutorFrame>;
+  }
+  if (dataQuery.error) {
+    return (
+      <TutorFrame data={data} onRealtimeChange={dataQuery.refetch}>
+        <div className="portal-page">
+          <div className="notice-card portal-state-card">
+            <h1>Tutor dashboard could not be loaded</h1>
+            <p>We could not load your Tutor dashboard. Please try again. If the issue continues, contact Zentel Insight Support.</p>
+            <button className="button button-primary" type="button" onClick={dataQuery.refetch}>Try Again</button>
+          </div>
+        </div>
+      </TutorFrame>
+    );
+  }
   return (
     <TutorFrame data={data} onRealtimeChange={dataQuery.refetch}>
       {activeSection === "dashboard" ? <DashboardSection data={data} onSaved={dataQuery.refetch} /> : null}
@@ -936,12 +981,7 @@ export default function TutorDashboard({ forcedSection = "" }) {
       {activeSection === "classroom" ? <TutorClassroomSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "classroom-chat" ? <div className="portal-page chat-route-page"><ProgramChatPanel audience="tutor" standalone backTo="/tutor/classroom" /></div> : null}
       {activeSection === "timetable" ? <TutorTimetableSection data={data} /> : null}
-      {activeSection === "live-classes" ? (
-        <div className="portal-page">
-          <PageHeading title="Live classes." description="Host only approved sessions for assigned programmes." />
-          <LiveClassCards audience="tutor" sessions={data.liveClasses} emptyMessage="No live classes have been scheduled yet." onChanged={dataQuery.refetch} />
-        </div>
-      ) : null}
+      {activeSection === "live-classes" ? <TutorLiveClassesSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "attendance" ? (
         <RecordsSection title="Attendance." description="Review participation in your authorised live classes." records={data.attendance} emptyMessage="No attendance has been recorded yet." render={(item) => <article className="portal-record-card" key={item.id}><div><p className="eyebrow">{item.attendance_status}</p><h3>{item.live_class_sessions?.title || "Live class"}</h3><p>{item.live_class_sessions?.programs?.title || "Programme"}</p></div><dl className="portal-mini-details"><div><dt>Joined</dt><dd>{formatDateTime(item.joined_at)}</dd></div><div><dt>Left</dt><dd>{item.left_at ? formatDateTime(item.left_at) : "Session active"}</dd></div></dl></article>} />
       ) : null}

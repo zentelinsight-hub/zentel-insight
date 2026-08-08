@@ -7,7 +7,7 @@ function clean(value: unknown) {
 
 function normalizeRole(value: unknown) {
   const role = clean(value).toLowerCase();
-  return ["all", "student", "tutor", "admin"].includes(role) ? role : "all";
+  return ["all", "student", "tutor", "staff", "admin"].includes(role) ? role : "all";
 }
 
 function normalizeStatus(value: unknown) {
@@ -76,6 +76,7 @@ Deno.serve(async (request) => {
       profilesResult,
       rolesResult,
       tutorProfilesResult,
+      staffProfilesResult,
       assignmentsResult,
       enrolmentsResult,
       programsResult,
@@ -85,6 +86,7 @@ Deno.serve(async (request) => {
       admin.supabase.from("profiles").select("id, portal_id, full_name, email, phone, title, avatar_path, date_of_birth, education_level, address, account_status, status_changed_at, status_changed_by, status_reason, profile_completion, failed_login_attempts, created_at, updated_at"),
       admin.supabase.from("user_roles").select("user_id, role"),
       admin.supabase.from("tutor_profiles").select("user_id, title, specialisation, professional_bio, qualifications, teaching_experience, availability"),
+      admin.supabase.from("staff_profiles").select("user_id, job_title, department"),
       admin.supabase.from("tutor_program_assignments").select("id, tutor_id, program_id, track_id, active, created_at, updated_at").eq("active", true),
       admin.supabase.from("enrolments").select("id, user_id, program_id, program_level_id, status, created_at, updated_at").eq("status", "active"),
       admin.supabase.from("programs").select("id, title, active"),
@@ -92,13 +94,14 @@ Deno.serve(async (request) => {
       listAuthUsers(admin.supabase)
     ]);
 
-    for (const result of [profilesResult, rolesResult, tutorProfilesResult, assignmentsResult, enrolmentsResult, programsResult, levelsResult]) {
+    for (const result of [profilesResult, rolesResult, tutorProfilesResult, staffProfilesResult, assignmentsResult, enrolmentsResult, programsResult, levelsResult]) {
       if (result.error) throw result.error;
     }
 
     const profiles = profilesResult.data || [];
     const roles = new Map((rolesResult.data || []).map((item: any) => [item.user_id, item.role]));
     const tutorProfiles = new Map((tutorProfilesResult.data || []).map((item: any) => [item.user_id, item]));
+    const staffProfiles = new Map((staffProfilesResult.data || []).map((item: any) => [item.user_id, item]));
     const programs = new Map((programsResult.data || []).map((item: any) => [item.id, item]));
     const levels = new Map((levelsResult.data || []).map((item: any) => [item.id, item]));
     const authById = new Map((authUsers || []).map((item: any) => [item.id, item]));
@@ -121,6 +124,7 @@ Deno.serve(async (request) => {
       const role = roles.get(profile.id) || "student";
       const authUser = authById.get(profile.id) || {};
       const tutorProfile = tutorProfiles.get(profile.id) || {};
+      const staffProfile = staffProfiles.get(profile.id) || {};
       const tutorAssignments = activeAssignmentsByTutor.get(profile.id) || [];
       const studentEnrolments = activeEnrolmentsByStudent.get(profile.id) || [];
       const primaryTutorAssignment = [...tutorAssignments].sort((left, right) => String(right.updated_at || right.created_at || "").localeCompare(String(left.updated_at || left.created_at || "")))[0] || null;
@@ -136,7 +140,7 @@ Deno.serve(async (request) => {
         user_id: profile.id,
         portal_id: profile.portal_id || "",
         role,
-        title: tutorProfile.title || profile.title || (role === "tutor" ? "Mr" : ""),
+        title: tutorProfile.title || staffProfile.job_title || profile.title || (role === "tutor" ? "Mr" : ""),
         full_name: profile.full_name || "",
         email: profile.email || authUser.email || "",
         phone: profile.phone || "",
@@ -165,7 +169,9 @@ Deno.serve(async (request) => {
         professional_bio: tutorProfile.professional_bio || "",
         qualifications: tutorProfile.qualifications || "",
         teaching_experience: tutorProfile.teaching_experience || "",
-        availability: tutorProfile.availability || ""
+        availability: tutorProfile.availability || "",
+        job_title: staffProfile.job_title || "",
+        department: staffProfile.department || ""
       };
     });
 
@@ -190,12 +196,15 @@ Deno.serve(async (request) => {
       inactiveTutors: people.filter((person: any) => person.role === "tutor" && person.account_status !== "active").length,
       assignedTutors: assignedTutorIds.size,
       unassignedTutors: people.filter((person: any) => person.role === "tutor" && !assignedTutorIds.has(person.id)).length,
-      programmesWithoutTutors: activeProgrammes.filter((program: any) => !programmesWithActiveTutors.has(program.id)).length
+      programmesWithoutTutors: activeProgrammes.filter((program: any) => !programmesWithActiveTutors.has(program.id)).length,
+      totalStaff: people.filter((person: any) => person.role === "staff").length,
+      activeStaff: people.filter((person: any) => person.role === "staff" && person.account_status === "active").length,
+      inactiveStaff: people.filter((person: any) => person.role === "staff" && person.account_status !== "active").length
     };
 
     const filtered = people
       .filter((person: any) => roleFilter === "all"
-        ? ["student", "tutor"].includes(person.role)
+        ? ["student", "tutor", "staff", "admin"].includes(person.role)
         : person.role === roleFilter)
       .filter((person: any) => statusFilter === "all" || person.account_status === statusFilter)
       .filter((person: any) => {

@@ -62,6 +62,7 @@ const EmailVerificationFailed = lazy(() => import("./pages/EmailVerificationFail
 const AdminVerify = lazy(() => import("./pages/AdminVerify"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const TutorDashboard = lazy(() => import("./pages/TutorDashboard"));
+const StaffDashboard = lazy(() => import("./pages/StaffDashboard"));
 const ZentelAI = lazy(() => import("./pages/ZentelAI"));
 const ZentelAIUsage = lazy(() => import("./pages/ZentelAI").then((module) => ({ default: module.ZentelAIUsage })));
 const ZentelAIHistory = lazy(() => import("./pages/ZentelAI").then((module) => ({ default: module.ZentelAIHistory })));
@@ -247,6 +248,14 @@ export default function App() {
             <Route
               path="/tutor"
               element={<ProtectedRoute allowedRoles={[USER_ROLES.TUTOR]}><TutorDashboard /></ProtectedRoute>}
+            />
+            <Route
+              path="/staff"
+              element={<ProtectedRoute allowedRoles={[USER_ROLES.STAFF]}><StaffDashboard /></ProtectedRoute>}
+            />
+            <Route
+              path="/staff/:section"
+              element={<ProtectedRoute allowedRoles={[USER_ROLES.STAFF]}><StaffDashboard /></ProtectedRoute>}
             />
             <Route
               path="/tutor/classroom/chat"

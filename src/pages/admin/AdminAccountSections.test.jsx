@@ -79,8 +79,8 @@ describe("Admin exact account workflow", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole("heading", { name: "Student and Tutor Directory" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Student / Tutor ID" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "All Accounts" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Portal ID" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /edit/i })).not.toBeInTheDocument();
     expect(serviceMocks.searchAdminAccounts).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
     expect(serviceMocks.findAdminAccount).not.toHaveBeenCalled();

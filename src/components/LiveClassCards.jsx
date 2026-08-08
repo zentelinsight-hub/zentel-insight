@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Video } from "lucide-react";
-import { canJoinLiveClass, endLiveClass, getLiveClassState, leaveLiveClass, requestLiveClassToken } from "../services/liveClassService";
+import { canJoinLiveClass, endLiveClass, getLiveClassState, requestLiveClassToken } from "../services/liveClassService";
 import { formatDateTime } from "../utils/format";
 
 function getProgramName(item) {
@@ -14,10 +14,9 @@ function getTutorName(item) {
   return `${profile.title || ""} ${firstName}`.trim();
 }
 
-export default function LiveClassCards({ sessions = [], emptyMessage = "No live classes have been scheduled yet.", audience = "student", onChanged }) {
+export default function LiveClassCards({ sessions = [], emptyMessage = "No live classes have been scheduled yet.", audience = "student", onChanged, onEdit, onCancel }) {
   const [status, setStatus] = useState({ id: "", type: "", message: "" });
   const [loadingId, setLoadingId] = useState("");
-  const [joinedSessionIds, setJoinedSessionIds] = useState(() => new Set());
   const hostView = audience === "tutor" || audience === "admin";
 
   async function joinClass(session) {
@@ -29,8 +28,10 @@ export default function LiveClassCards({ sessions = [], emptyMessage = "No live 
         setStatus({ id: session.id, type: "warning", message: result.message || "Live-class access is not ready." });
         return;
       }
-      const separator = result.roomUrl.includes("?") ? "&" : "?";
-      const openedWindow = window.open(`${result.roomUrl}${separator}t=${encodeURIComponent(result.token)}`, "_blank");
+      const targetUrl = result.token
+        ? `${result.roomUrl}${result.roomUrl.includes("?") ? "&" : "?"}t=${encodeURIComponent(result.token)}`
+        : result.roomUrl;
+      const openedWindow = window.open(targetUrl, "_blank");
       if (!openedWindow) {
         setStatus({ id: session.id, type: "warning", message: "Your browser blocked the class window. Allow pop-ups for Zentel Insight and try again." });
         return;
@@ -40,32 +41,10 @@ export default function LiveClassCards({ sessions = [], emptyMessage = "No live 
       } catch {
         // Cross-origin browser protections may prevent updating opener.
       }
-      if (!hostView) setJoinedSessionIds((current) => new Set(current).add(session.id));
-      setStatus({ id: session.id, type: "success", message: `Opening live class as ${result.permission}.` });
+      setStatus({ id: session.id, type: "success", message: result.permission === "host" ? "Class opened. Zentel will not close the external meeting for you." : "Opening the authorised class link." });
       onChanged?.();
     } catch (error) {
       setStatus({ id: session.id, type: "warning", message: error.message || "Live-class access could not be prepared." });
-    } finally {
-      setLoadingId("");
-    }
-  }
-
-  async function leaveClass(session) {
-    setLoadingId(`leave:${session.id}`);
-    setStatus({ id: session.id, type: "", message: "" });
-    try {
-      const result = await leaveLiveClass(session.id);
-      if (!result.ok) {
-        setStatus({ id: session.id, type: "warning", message: result.message || "Class attendance could not be updated." });
-        return;
-      }
-      setJoinedSessionIds((current) => {
-        const next = new Set(current);
-        next.delete(session.id);
-        return next;
-      });
-      setStatus({ id: session.id, type: "success", message: "You have left the live class." });
-      onChanged?.();
     } finally {
       setLoadingId("");
     }
@@ -80,7 +59,7 @@ export default function LiveClassCards({ sessions = [], emptyMessage = "No live 
         setStatus({ id: session.id, type: "warning", message: result.message || "Live class could not be ended." });
         return;
       }
-      setStatus({ id: session.id, type: "success", message: "Live class ended." });
+      setStatus({ id: session.id, type: "success", message: result.message || "Live class ended in Zentel Insight." });
       onChanged?.();
     } catch (error) {
       setStatus({ id: session.id, type: "warning", message: error.message || "Live class could not be ended." });
@@ -108,7 +87,7 @@ export default function LiveClassCards({ sessions = [], emptyMessage = "No live 
     <div className="portal-list">
       {sessions.map((session) => {
         const state = getLiveClassState(session);
-        const joinable = canJoinLiveClass(session);
+        const joinable = canJoinLiveClass(session) && (hostView || session.status === "live");
         return (
           <article className="portal-record-card" key={session.id}>
             <div>
@@ -120,7 +99,10 @@ export default function LiveClassCards({ sessions = [], emptyMessage = "No live 
               <div><dt>Starts</dt><dd>{formatDateTime(session.scheduled_start)}</dd></div>
               <div><dt>Ends</dt><dd>{formatDateTime(session.scheduled_end)}</dd></div>
               <div><dt>Status</dt><dd>{state}</dd></div>
+              <div><dt>Platform</dt><dd>{session.provider === "google_meet" ? "Google Meet" : session.provider === "zoom" ? "Zoom" : session.provider}</dd></div>
               {getTutorName(session) ? <div><dt>Tutor</dt><dd>{getTutorName(session)}</dd></div> : null}
+              {session.actual_started_at ? <div><dt>Actually started</dt><dd>{formatDateTime(session.actual_started_at)}</dd></div> : null}
+              {session.actual_ended_at ? <div><dt>Actually ended</dt><dd>{formatDateTime(session.actual_ended_at)}</dd></div> : null}
             </dl>
             {joinable ? (
               <button className="button button-primary" type="button" onClick={() => joinClass(session)} disabled={loadingId === session.id}>
@@ -135,11 +117,8 @@ export default function LiveClassCards({ sessions = [], emptyMessage = "No live 
                 {loadingId === `end:${session.id}` ? "Ending Class" : "End Class"}
               </button>
             ) : null}
-            {!hostView && joinedSessionIds.has(session.id) ? (
-              <button className="button button-secondary" type="button" onClick={() => leaveClass(session)} disabled={loadingId === `leave:${session.id}`}>
-                {loadingId === `leave:${session.id}` ? "Leaving Class" : "Leave Class"}
-              </button>
-            ) : null}
+            {audience === "tutor" && session.status === "scheduled" && onEdit ? <button className="button button-secondary" type="button" onClick={() => onEdit(session)}>Edit</button> : null}
+            {audience === "tutor" && session.status === "scheduled" && onCancel ? <button className="button button-secondary" type="button" disabled={loadingId !== ""} onClick={() => onCancel(session)}>Cancel</button> : null}
             {status.id === session.id && status.message ? (
               <div className={`form-status ${status.type || "warning"}`} role="status">{status.message}</div>
             ) : null}

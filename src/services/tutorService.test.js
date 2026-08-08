@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  cancelTutorLiveClass,
   saveTutorAssignment,
+  saveTutorLiveClass,
   saveTutorResource,
   searchTutorStudents,
   updateTutorProfessionalProfile
@@ -107,5 +109,29 @@ describe("Tutor service authorization contracts", () => {
     supabaseMocks.rpc.mockResolvedValue({ data: null, error: new Error("Tutor access is not available") });
 
     await expect(searchTutorStudents()).rejects.toThrow("Tutor access is not available");
+  });
+
+  it("schedules external live classes through the authorized Tutor RPC", async () => {
+    supabaseMocks.rpc.mockResolvedValue({ data: { id: "class-1" }, error: null });
+    await saveTutorLiveClass({
+      classroomId: "room-1",
+      title: "Design review",
+      provider: "google_meet",
+      meetingUrl: "https://meet.google.com/abc-defg-hij",
+      startsAt: "2026-08-08T16:00:00+01:00",
+      endsAt: "2026-08-08T17:00:00+01:00",
+      instructions: "Bring your project."
+    });
+    expect(supabaseMocks.rpc).toHaveBeenCalledWith("tutor_save_live_class", expect.objectContaining({
+      target_classroom_id: "room-1",
+      platform_name: "google_meet",
+      meeting_url: "https://meet.google.com/abc-defg-hij"
+    }));
+  });
+
+  it("cancels a scheduled class through the server RPC", async () => {
+    supabaseMocks.rpc.mockResolvedValue({ data: { id: "class-1", status: "cancelled" }, error: null });
+    await cancelTutorLiveClass("class-1");
+    expect(supabaseMocks.rpc).toHaveBeenCalledWith("tutor_cancel_live_class", { target_session_id: "class-1" });
   });
 });

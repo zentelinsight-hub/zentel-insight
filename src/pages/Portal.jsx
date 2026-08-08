@@ -2,15 +2,18 @@ import { Link, Outlet } from "react-router-dom";
 import { useEffect, useState } from "react";
 import {
   Award,
+  Bell,
   BrainCircuit,
   CalendarDays,
   CheckCircle2,
   Clock3,
   GraduationCap,
   LayoutDashboard,
+  LifeBuoy,
   MessageSquare,
   Moon,
   Sun,
+  Settings,
   UserRound,
   Video
 } from "lucide-react";
@@ -54,15 +57,6 @@ import { getProgramChatUnreadCounts } from "../services/chatService";
 import { formatDateTime } from "../utils/format";
 import { usePageMeta } from "../utils/usePageMeta";
 import { useAsyncData } from "../hooks/useAsyncData";
-
-const portalGroups = [
-  { label: "Home", major: true, items: [["/portal", "Home", LayoutDashboard]] },
-  { label: "Learning", major: true, items: [["/portal/learning", "Learning", GraduationCap]] },
-  { label: "Classroom", major: true, items: [["/portal/classroom", "Classroom", MessageSquare]] },
-  { label: "Progress", major: true, items: [["/portal/progress", "Progress", Award]] },
-  { label: "Zentel AI", major: true, items: [["/portal/zentel-ai", "Zentel AI", BrainCircuit]] },
-  { label: "Account", major: true, items: [["/portal/account", "Account", UserRound]] }
-];
 
 const pageMeta = {
   dashboard: "/portal",
@@ -251,18 +245,22 @@ export function PortalLayout() {
         profileDetail: getProgrammeSummary(enrolments),
         avatarUrl: profile?.avatar_url,
         profileInitial: getInitials(profile, user),
+        profileTo: "/portal/profile",
         navLabel: "Student portal",
-        menuLabel: "portal",
-        groups: portalGroups.map((group) => ({
-          ...group,
-          items: group.items.map(([to, label, Icon]) => ({
-            to,
-            label,
-            Icon,
-            end: to === "/portal" || to === "/portal/classroom" || to === "/portal/zentel-ai",
-            badge: to === "/portal/notifications" ? unreadNotificationCount : to === "/portal/classroom/chat" ? unreadChatCount : 0
-          }))
-        }))
+        primaryItems: [
+          { to: "/portal", label: "Home", Icon: LayoutDashboard, end: true },
+          { to: "/portal/learning", label: "Learning", Icon: GraduationCap },
+          { to: "/portal/classroom/chat", label: "Messages", Icon: MessageSquare, badge: unreadChatCount },
+          { to: "/portal/zentel-ai", label: "Zentel AI", Icon: BrainCircuit }
+        ],
+        moreItems: [
+          { to: "/portal/classroom", label: "Classroom", Icon: MessageSquare, end: true },
+          { to: "/portal/progress", label: "Progress", Icon: Award },
+          { to: "/portal/notifications", label: "Notifications", Icon: Bell, badge: unreadNotificationCount },
+          { to: "/portal/account", label: "Account", Icon: UserRound },
+          { to: "/portal/support", label: "Support", Icon: LifeBuoy },
+          { to: "/portal/settings", label: "Settings", Icon: Settings }
+        ]
       }}
       header={{
         eyebrow: "Welcome back",

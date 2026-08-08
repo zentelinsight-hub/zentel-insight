@@ -11,6 +11,8 @@ import { formatDateTime } from "../../utils/format";
 const emptyStatus = { type: "", message: "" };
 
 function roleLabel(role) {
+  if (role === "admin") return "Admin";
+  if (role === "staff") return "Staff";
   return role === "tutor" ? "Tutor" : "Student";
 }
 
@@ -138,8 +140,8 @@ export function AccountLookupSection() {
       <section className="account-directory" aria-labelledby="account-directory-title">
         <div className="account-directory-heading">
           <div>
-            <h3 id="account-directory-title">Student and Tutor Directory</h3>
-            <p>Read-only account information. Use the exact lookup above to open and edit an account.</p>
+            <h3 id="account-directory-title">All Accounts</h3>
+            <p>Read-only Student, Tutor, Staff and Admin account information. Student and Tutor editing starts from the exact lookup above.</p>
           </div>
           <span className="portal-tag">{directoryQuery.data?.total || 0} accounts</span>
         </div>
@@ -154,7 +156,7 @@ export function AccountLookupSection() {
           <>
             <div className="account-directory-table-wrap">
               <table className="account-directory-table">
-                <thead><tr><th scope="col">Name</th><th scope="col">Account type</th><th scope="col">Student / Tutor ID</th><th scope="col">Email</th><th scope="col">Account status</th></tr></thead>
+                <thead><tr><th scope="col">Name</th><th scope="col">Account type</th><th scope="col">Portal ID</th><th scope="col">Email</th><th scope="col">Account status</th></tr></thead>
                 <tbody>
                   {(directoryQuery.data?.records || []).map((person) => (
                     <tr key={person.id}>
@@ -168,7 +170,7 @@ export function AccountLookupSection() {
                 </tbody>
               </table>
             </div>
-            {!(directoryQuery.data?.records || []).length ? <p className="muted-line">No Student or Tutor accounts are available.</p> : null}
+            {!(directoryQuery.data?.records || []).length ? <p className="muted-line">No accounts are available.</p> : null}
             {directoryQuery.data?.pageCount > 1 ? (
               <nav className="account-directory-pagination" aria-label="Account directory pages">
                 <button className="button button-secondary" type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}><ChevronLeft size={18} aria-hidden="true" />Previous</button>

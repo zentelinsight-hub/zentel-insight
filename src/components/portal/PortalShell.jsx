@@ -1,104 +1,38 @@
-import { useEffect, useId, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { ChevronDown, LogOut, Menu, X } from "lucide-react";
+import { useEffect, useId, useRef } from "react";
+import { ChevronDown, Ellipsis, LogOut, UserRound } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import BrandLogo from "../BrandLogo";
 import IdleSessionGuard from "../IdleSessionGuard";
 import { useAuth } from "../../context/authHooks";
 import { getSupabaseClient } from "../../services/supabaseClient";
 
-function SidebarProfile({ name, detail, avatarUrl, initial }) {
+function ProfileAvatar({ name, avatarUrl, initial }) {
   return (
-    <div className="portal-sidebar-profile">
-      <span className="portal-avatar md">
-        {avatarUrl ? <img src={avatarUrl} alt="" /> : <span>{initial || String(name || "P").slice(0, 1).toUpperCase()}</span>}
-      </span>
-      <div>
-        <strong>{name}</strong>
-        <span>{detail}</span>
-      </div>
-    </div>
+    <span className="portal-avatar sm">
+      {avatarUrl ? <img src={avatarUrl} alt="" /> : <span>{initial || String(name || "P").slice(0, 1).toUpperCase()}</span>}
+    </span>
   );
 }
 
-function SidebarGroup({ group, pathname, onNavigate }) {
-  const isItemActive = (item) => item.end ? pathname === item.to : pathname === item.to || pathname.startsWith(`${item.to}/`);
-  const active = group.items.some(isItemActive);
-  const [open, setOpen] = useState(Boolean(group.defaultOpen || active));
-
-  useEffect(() => {
-    if (active) setOpen(true);
-  }, [active]);
-
-  if (group.major && group.items.length === 1) {
-    const item = group.items[0];
-    return (
-      <NavLink
-        to={item.to}
-        end={item.end}
-        onClick={onNavigate}
-        className={({ isActive }) => isActive ? "portal-link portal-major-link active" : "portal-link portal-major-link"}
-      >
-        <item.Icon size={19} aria-hidden="true" />
-        <span>{item.label}</span>
-        {Number(item.badge || 0) > 0 ? <span className="portal-nav-badge">{item.badge}</span> : null}
-      </NavLink>
-    );
-  }
-
+function PortalNavLink({ item, onNavigate }) {
   return (
-    <details className="portal-nav-group" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary><span>{group.label}</span><ChevronDown size={15} aria-hidden="true" /></summary>
-      <div>
-        {group.items.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            onClick={onNavigate}
-            className={({ isActive }) => isActive ? "portal-link active" : "portal-link"}
-          >
-            <item.Icon size={18} aria-hidden="true" />
-            <span>{item.label}</span>
-            {Number(item.badge || 0) > 0 ? <span className="portal-nav-badge">{item.badge}</span> : null}
-          </NavLink>
-        ))}
-      </div>
-    </details>
+    <NavLink
+      to={item.to}
+      end={item.end}
+      onClick={onNavigate}
+      className={({ isActive }) => isActive ? "portal-top-link active" : "portal-top-link"}
+      aria-label={item.label}
+      title={item.label}
+    >
+      <item.Icon size={18} aria-hidden="true" />
+      <span>{item.label}</span>
+      {Number(item.badge || 0) > 0 ? <span className="portal-nav-badge">{Number(item.badge) > 99 ? "99+" : item.badge}</span> : null}
+    </NavLink>
   );
 }
 
-function SidebarContent({ sidebar, onNavigate, onSignOut }) {
-  const location = useLocation();
-  const groups = sidebar.groups || [{ label: "Navigation", items: sidebar.items || [], defaultOpen: true }];
-  return (
-    <>
-      <div className="portal-sidebar-header">
-        <NavLink className="brand" to={sidebar.homeTo} onClick={onNavigate}>
-          <BrandLogo brand="main" size="portal" />
-          <span>
-            <span className="brand-name">{sidebar.brandLabel}</span>
-            <span className="brand-motto">{sidebar.brandMotto || "Zentel Insight"}</span>
-          </span>
-        </NavLink>
-      </div>
-      <nav className="portal-sidebar-navigation" aria-label={sidebar.navLabel}>
-        {groups.map((group) => <SidebarGroup key={group.label} group={group} pathname={location.pathname} onNavigate={onNavigate} />)}
-      </nav>
-      <div className="portal-sidebar-footer">
-        <SidebarProfile
-          name={sidebar.profileName}
-          detail={sidebar.profileDetail}
-          avatarUrl={sidebar.avatarUrl}
-          initial={sidebar.profileInitial}
-        />
-        <button className="portal-link signout" type="button" onClick={onSignOut}>
-          <LogOut size={18} aria-hidden="true" />
-          Sign Out
-        </button>
-      </div>
-    </>
-  );
+function closeDetails(ref) {
+  if (ref.current) ref.current.open = false;
 }
 
 export default function PortalShell({
@@ -113,61 +47,24 @@ export default function PortalShell({
   const { signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const drawerId = useId().replace(/:/g, "");
-  const menuButtonRef = useRef(null);
-  const scrollYRef = useRef(0);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [portalReady, setPortalReady] = useState(false);
-  const menuLabel = sidebar.menuLabel || "portal";
+  const shellId = useId().replace(/:/g, "");
+  const moreMenuRef = useRef(null);
+  const accountMenuRef = useRef(null);
   const realtimeKey = [...new Set(realtimeTables)].sort().join(",");
+  const fallbackItems = (sidebar.groups || []).flatMap((group) => group.items || []);
+  const primaryItems = sidebar.primaryItems || fallbackItems.slice(0, 4);
+  const primaryPaths = new Set(primaryItems.map((item) => item.to));
+  const moreItems = sidebar.moreItems || fallbackItems.filter((item) => !primaryPaths.has(item.to));
 
   useEffect(() => {
-    setPortalReady(true);
     document.body.classList.add("portal-route-active");
-    return () => {
-      document.body.classList.remove("portal-route-active", "portal-menu-open");
-    };
+    return () => document.body.classList.remove("portal-route-active", "portal-dedicated-workspace");
   }, []);
 
   useEffect(() => {
-    setMenuOpen(false);
+    closeDetails(moreMenuRef);
+    closeDetails(accountMenuRef);
   }, [location.pathname]);
-
-  useEffect(() => {
-    if (!window.matchMedia) return undefined;
-    const mediaQuery = window.matchMedia("(min-width: 920.01px)");
-    const handleResize = (event) => {
-      if (event.matches) setMenuOpen(false);
-    };
-    handleResize(mediaQuery);
-    mediaQuery.addEventListener("change", handleResize);
-    return () => mediaQuery.removeEventListener("change", handleResize);
-  }, []);
-
-  useEffect(() => {
-    if (!menuOpen) return undefined;
-    const restoreFocusTarget = menuButtonRef.current;
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape") setMenuOpen(false);
-    };
-
-    scrollYRef.current = window.scrollY;
-    document.addEventListener("keydown", handleKeyDown);
-    document.body.classList.add("portal-menu-open");
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollYRef.current}px`;
-    document.body.style.width = "100%";
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.classList.remove("portal-menu-open");
-      document.body.style.position = "";
-      document.body.style.top = "";
-      document.body.style.width = "";
-      window.scrollTo(0, scrollYRef.current);
-      restoreFocusTarget?.focus();
-    };
-  }, [menuOpen]);
 
   useEffect(() => {
     if (!realtimeKey || typeof onRealtimeChange !== "function") return undefined;
@@ -180,7 +77,7 @@ export default function PortalShell({
       try {
         client = await getSupabaseClient();
         if (!client || cancelled) return;
-        channel = client.channel(`portal-shell-${drawerId}-${Date.now()}`);
+        channel = client.channel(`portal-shell-${shellId}-${Date.now()}`);
         realtimeKey.split(",").forEach((table) => {
           channel = channel.on(
             "postgres_changes",
@@ -203,58 +100,67 @@ export default function PortalShell({
       window.clearTimeout(refreshTimer);
       if (channel && client) void client.removeChannel(channel);
     };
-  }, [drawerId, onRealtimeChange, realtimeKey]);
+  }, [onRealtimeChange, realtimeKey, shellId]);
 
   async function handleSignOut() {
-    setMenuOpen(false);
+    closeDetails(moreMenuRef);
+    closeDetails(accountMenuRef);
     onBeforeSignOut?.();
     await signOut({ scope: "local" });
     navigate("/login", { replace: true });
   }
 
-  const desktopSidebar = (
-    <aside className="portal-sidebar portal-desktop-sidebar portal-sidebar-desktop">
-      <SidebarContent sidebar={sidebar} onNavigate={() => setMenuOpen(false)} onSignOut={handleSignOut} />
-    </aside>
-  );
-
-  const mobileDrawer = menuOpen && portalReady
-    ? createPortal(
-      <>
-        <button className="portal-drawer-backdrop portal-mobile-backdrop" type="button" aria-label={`Close ${menuLabel} menu`} onClick={() => setMenuOpen(false)} />
-        <aside id={drawerId} className="portal-sidebar portal-mobile-drawer open" aria-label={sidebar.navLabel}>
-          <SidebarContent sidebar={sidebar} onNavigate={() => setMenuOpen(false)} onSignOut={handleSignOut} />
-        </aside>
-      </>,
-      document.body
-    )
-    : null;
+  const closeMenus = () => {
+    closeDetails(moreMenuRef);
+    closeDetails(accountMenuRef);
+  };
 
   return (
     <section className={`portal-shell ${sidebar.shellClass || ""}`.trim()}>
-      {desktopSidebar}
-      {mobileDrawer}
-      <main className="portal-main">
-        <header className="portal-header">
-          <button
-            ref={menuButtonRef}
-            className="icon-button portal-menu-button"
-            type="button"
-            aria-label={menuOpen ? `Close ${menuLabel} menu` : `Open ${menuLabel} menu`}
-            aria-expanded={menuOpen}
-            aria-controls={drawerId}
-            onClick={() => setMenuOpen((current) => !current)}
-          >
-            {menuOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
-          </button>
-          <div>
-            <p className="eyebrow">{header.eyebrow}</p>
-            <h1>{header.title}</h1>
+      <header className="portal-header portal-topbar" aria-label={header?.title || sidebar.navLabel}>
+        <NavLink className="portal-top-brand" to={sidebar.homeTo} onClick={closeMenus} aria-label={sidebar.brandLabel}>
+          <BrandLogo brand="main" size={36} />
+          <span>{sidebar.brandLabel}</span>
+        </NavLink>
+
+        <nav className="portal-top-navigation" aria-label={sidebar.navLabel}>
+          {primaryItems.map((item) => <PortalNavLink key={item.to} item={item} onNavigate={closeMenus} />)}
+          {moreItems.length ? (
+            <details ref={moreMenuRef} className="portal-top-menu portal-more-menu">
+              <summary className="portal-top-link" aria-label="More" title="More">
+                <Ellipsis size={19} aria-hidden="true" />
+                <span>More</span>
+              </summary>
+              <div className="portal-top-menu-panel">
+                {moreItems.map((item) => <PortalNavLink key={`${item.to}-${item.label}`} item={item} onNavigate={closeMenus} />)}
+              </div>
+            </details>
+          ) : null}
+        </nav>
+
+        <details ref={accountMenuRef} className="portal-top-menu portal-account-menu">
+          <summary className="portal-account-trigger" aria-label="Account menu" title="Account menu">
+            <ProfileAvatar name={sidebar.profileName} avatarUrl={sidebar.avatarUrl} initial={sidebar.profileInitial} />
+            <span className="portal-account-copy"><strong>{sidebar.profileName}</strong><small>{sidebar.profileDetail}</small></span>
+            <ChevronDown size={15} aria-hidden="true" />
+          </summary>
+          <div className="portal-top-menu-panel account-panel">
+            <div className="portal-account-summary">
+              <ProfileAvatar name={sidebar.profileName} avatarUrl={sidebar.avatarUrl} initial={sidebar.profileInitial} />
+              <span><strong>{sidebar.profileName}</strong><small>{sidebar.profileDetail}</small></span>
+            </div>
+            {sidebar.profileTo ? (
+              <NavLink className="portal-top-link" to={sidebar.profileTo} onClick={closeMenus}>
+                <UserRound size={18} aria-hidden="true" /><span>Profile</span>
+              </NavLink>
+            ) : null}
+            <button className="portal-top-link signout" type="button" onClick={handleSignOut}>
+              <LogOut size={18} aria-hidden="true" /><span>Sign Out</span>
+            </button>
           </div>
-          {header.status || null}
-        </header>
-        {children}
-      </main>
+        </details>
+      </header>
+      <main className="portal-main">{children}</main>
       <IdleSessionGuard enabled={idleEnabled} onBeforeSignOut={onBeforeSignOut} />
     </section>
   );

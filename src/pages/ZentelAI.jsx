@@ -5,7 +5,6 @@ import {
   Clock3,
   FileText,
   Image as ImageIcon,
-  Menu,
   MessageSquarePlus,
   Paperclip,
   Search,
@@ -80,49 +79,27 @@ function Welcome() {
   );
 }
 
-function ConversationSidebar({ open, records, selectedId, search, setSearch, onSelect, onNew, onRename, onArchive, onClose }) {
-  return (
-    <aside className={`ai-conversations ${open ? "open" : ""}`} aria-label="Conversation history">
-      <div className="ai-conversation-header"><strong>Conversations</strong><button type="button" title="Close conversation history" onClick={onClose}><X size={19} /></button></div>
-      <button className="button button-primary ai-new-chat" type="button" onClick={onNew}><MessageSquarePlus size={17} />New conversation</button>
-      <label className="ai-search"><Search size={16} /><span className="sr-only">Search conversations</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search conversations" /></label>
-      <div className="ai-conversation-list">
-        {records.map((item) => (
-          <div className={selectedId === item.id ? "active" : ""} key={item.id}>
-            <button className="ai-conversation-title" type="button" onClick={() => onSelect(item.id)}><span>{item.title}</span><small>{formatDateTime(item.last_message_at)}</small></button>
-            <button type="button" title="Rename conversation" onClick={() => onRename(item)}>Edit</button>
-            <button type="button" title="Archive conversation" onClick={() => onArchive(item.id)}><Archive size={15} /></button>
-          </div>
-        ))}
-        {!records.length ? <p>No conversations found.</p> : null}
-      </div>
-    </aside>
-  );
-}
-
 export default function ZentelAI() {
   const { conversationId = "" } = useParams();
   const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState(conversationId);
-  const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
   const [attachments, setAttachments] = useState([]);
   const [webResearch, setWebResearch] = useState(() => typeof window !== "undefined" && window.localStorage.getItem("zentel-ai-web-research") === "true");
   const [streaming, setStreaming] = useState(false);
   const [streamMessage, setStreamMessage] = useState(null);
+  const [pendingUserMessage, setPendingUserMessage] = useState(null);
   const [status, setStatus] = useState({ type: "", message: "" });
-  const [paymentBusy, setPaymentBusy] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
   const abortRef = useRef(null);
   const bottomRef = useRef(null);
   const snapshotQuery = useAsyncData(getAiSnapshot, [], { errorMessage: "Zentel AI plan information could not be loaded." });
-  const conversationsQuery = useAsyncData(() => listAiConversations({ search }), [search], { errorMessage: "Conversation history could not be loaded." });
+  const conversationsQuery = useAsyncData(() => listAiConversations(), [], { errorMessage: "Conversation history could not be loaded." });
   const messagesQuery = useAsyncData(() => listAiMessages(selectedId), [selectedId], { enabled: Boolean(selectedId), errorMessage: "This conversation could not be loaded." });
   const snapshot = snapshotQuery.data || {};
   const conversations = conversationsQuery.data || [];
-  const messages = useMemo(() => [...(messagesQuery.data || []), ...(streamMessage ? [streamMessage] : [])], [messagesQuery.data, streamMessage]);
+  const messages = useMemo(() => [...(messagesQuery.data || []), ...(pendingUserMessage ? [pendingUserMessage] : []), ...(streamMessage ? [streamMessage] : [])], [messagesQuery.data, pendingUserMessage, streamMessage]);
   const canAccess = Boolean(snapshot.access?.account_active && snapshot.access?.ai_access_status !== "suspended" && snapshot.access?.system_available);
   const hasCredits = Number(snapshot.wallet?.total_available || 0) > 0;
   const estimate = estimateAiCredits(message, attachments, webResearch);
@@ -138,19 +115,11 @@ export default function ZentelAI() {
   }, []);
   useEffect(() => { bottomRef.current?.scrollIntoView({ block: "end" }); }, [messages]);
 
-  const refresh = () => { snapshotQuery.refetch(); conversationsQuery.refetch(); if (selectedId) messagesQuery.refetch(); };
   const newConversation = async () => {
     const created = await createAiConversation();
     setSelectedId(created.id);
     navigate(`/portal/zentel-ai/chat/${created.id}`);
-    setDrawerOpen(false);
     conversationsQuery.refetch();
-  };
-  const selectPlan = async (slug) => {
-    setPaymentBusy(true); setStatus({ type: "", message: "" });
-    try { const result = await createAiSubscription(slug); window.location.assign(result.authorizationUrl); }
-    catch (error) { setStatus({ type: "warning", message: error.message }); }
-    finally { setPaymentBusy(false); }
   };
   const attach = async (file) => {
     try {
@@ -178,29 +147,28 @@ export default function ZentelAI() {
     try {
       if (!conversationId) { const created = await createAiConversation(); conversationId = created.id; setSelectedId(created.id); navigate(`/portal/zentel-ai/chat/${created.id}`); }
       const controller = new AbortController(); abortRef.current = controller;
-      setStreaming(true); setStatus({ type: "", message: "" }); setMessage("");
+      setStreaming(true); setStatus({ type: "info", message: "Thinking..." }); setMessage("");
+      setPendingUserMessage({ id: `pending-user-${Date.now()}`, role: "user", content: { text: prompt }, status: "completed" });
       setStreamMessage({ id: `stream-${Date.now()}`, role: "assistant", content: { text: "" }, status: "streaming" });
       await executeAiRequest({
         conversationId, message: prompt, attachmentIds: attachments.map((item) => item.id), webResearch, signal: controller.signal,
         onEvent: (event, payload) => {
-          if (event === "delta") setStreamMessage((current) => ({ ...current, content: { ...current.content, text: `${current.content.text}${payload.delta}` } }));
-          if (event === "status") setStatus({ type: "info", message: payload.state === "reviewing_sources" ? "Reviewing current sources" : "Working on your response" });
+          if (event === "delta") { setStatus({ type: "", message: "" }); setStreamMessage((current) => ({ ...current, content: { ...current.content, text: `${current.content.text}${payload.delta}` } })); }
+          if (event === "status") setStatus({ type: "info", message: payload.state === "reviewing_sources" ? "Reviewing current sources..." : "Thinking..." });
           if (event === "done") setStreamMessage((current) => ({ ...current, status: "completed", content: { ...current.content, sources: payload.sources || [] } }));
         }
       });
-      setAttachments([]); setWebResearch(false); refresh();
+      setAttachments([]); setWebResearch(false);
+      await messagesQuery.refetch();
+      setPendingUserMessage(null);
+      setStreamMessage(null);
+      snapshotQuery.refetch(); conversationsQuery.refetch();
     } catch (error) {
       if (error.name !== "AbortError") setStatus({ type: "warning", message: error.message });
       setStreamMessage((current) => current ? { ...current, status: "failed" } : null);
       messagesQuery.refetch(); snapshotQuery.refetch();
     } finally { setStreaming(false); abortRef.current = null; }
   };
-  const rename = async (item) => {
-    const title = window.prompt("Conversation name", item.title);
-    if (!title || title === item.title) return;
-    await renameAiConversation(item.id, title); conversationsQuery.refetch();
-  };
-  const archive = async (id) => { await archiveAiConversation(id); if (selectedId === id) { setSelectedId(""); navigate("/portal/zentel-ai/new"); } conversationsQuery.refetch(); };
   const lastStudentMessage = [...messages].reverse().find((item) => item.role === "user")?.content?.text;
 
   if (snapshotQuery.loading) return <div className="portal-page"><PortalBackButton fallback="/portal" label="Back to Portal" /><div className="route-loader">Loading Zentel AI</div></div>;
@@ -208,23 +176,15 @@ export default function ZentelAI() {
 
   return (
     <div className="portal-page ai-page">
-      <header className="ai-page-heading"><div><p className="eyebrow">Student Portal</p><h1><BrainCircuit size={30} />Zentel AI</h1><p>Your personal learning assistant</p></div><div className="ai-page-heading-actions"><PortalBackButton fallback="/portal" label="Back to Portal" /><button className="ai-history-toggle" type="button" onClick={() => setDrawerOpen(true)}><Menu size={19} />History</button></div></header>
-      <div className="ai-access-strip" aria-label="Zentel AI access summary">
-        <span><strong>{snapshot.subscription?.plan_name || "Credits"}</strong></span>
-        <span>{Number(snapshot.wallet?.total_available || 0).toLocaleString()} credits</span>
-        <Link to="/portal/zentel-ai/plans">Plans</Link>
-        <Link to="/portal/zentel-ai/usage">Usage</Link>
-      </div>
+      <header className="ai-page-heading"><div><p className="eyebrow">Student Portal</p><h1><BrainCircuit size={30} />Zentel AI</h1><p>Your personal learning assistant</p></div><div className="ai-page-heading-actions"><PortalBackButton fallback="/portal" label="Back to Portal" /><button className="icon-button" type="button" title="Start a new conversation" onClick={newConversation}><MessageSquarePlus size={19} /></button></div></header>
+      <nav className="ai-section-nav" aria-label="Zentel AI"><Link to="/portal/zentel-ai">Chat</Link><Link to="/portal/zentel-ai/history">History</Link><Link to="/portal/zentel-ai/usage">Credits</Link><Link to="/portal/zentel-ai/plans">Plans</Link><Link to="/portal/zentel-ai/billing">Billing</Link><Link to="/portal/zentel-ai/settings">Settings</Link></nav>
       {status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}
       {!canAccess ? <div className="notice-card portal-state-card"><h2>Zentel AI is not available for this account</h2><p>Confirm that your Student account is active, or contact Support if access was suspended.</p></div> : null}
       {canAccess && !hasCredits ? <div className="notice-card ai-zero-credit-state"><h2>No AI credits available</h2><p>Choose a paid plan or buy credits to send a message. Zentel AI does not offer free trials.</p><Link className="button button-primary" to="/portal/zentel-ai/usage">Buy credits</Link></div> : null}
-      {canAccess && !hasCredits ? <PlanCards snapshot={snapshot} busy={paymentBusy} onSelect={selectPlan} /> : null}
       {canAccess ? (
         <section className="ai-workspace">
-          {drawerOpen ? <button className="ai-drawer-scrim" aria-label="Close conversation history" onClick={() => setDrawerOpen(false)} /> : null}
-          <ConversationSidebar open={drawerOpen} records={conversations} selectedId={selectedId} search={search} setSearch={setSearch} onSelect={(id) => { setSelectedId(id); setStreamMessage(null); setDrawerOpen(false); navigate(`/portal/zentel-ai/chat/${id}`); }} onNew={newConversation} onRename={rename} onArchive={archive} onClose={() => setDrawerOpen(false)} />
           <div className="ai-chat">
-            <div className="ai-chat-topbar"><button type="button" title="Open conversation history" onClick={() => setDrawerOpen(true)}><Menu size={18} /></button><strong>{conversations.find((item) => item.id === selectedId)?.title || "New learning conversation"}</strong><button type="button" title="Start a new conversation" onClick={newConversation}><MessageSquarePlus size={18} /></button></div>
+            <div className="ai-chat-topbar"><strong>{conversations.find((item) => item.id === selectedId)?.title || "New learning conversation"}</strong><Link className="icon-button" title="Open conversation history" to="/portal/zentel-ai/history"><Clock3 size={18} /><span className="sr-only">Open conversation history</span></Link></div>
             <div className="ai-message-list" aria-live="polite">
               {messagesQuery.loading ? <div className="route-loader">Loading conversation</div> : null}
               {!messagesQuery.loading && !messages.length ? <Welcome /> : null}

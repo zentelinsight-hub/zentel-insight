@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthContext } from "../context/authContextCore";
@@ -182,28 +182,15 @@ afterEach(() => {
 });
 
 describe("Portal routes", () => {
-  it("opens and closes the portal drawer cleanly", () => {
+  it("uses persistent top navigation without a portal drawer", () => {
     renderPortal("/portal");
 
-    const menuButton = screen.getByRole("button", { name: "Open portal menu" });
-
-    fireEvent.click(menuButton);
-
-    const drawer = document.querySelector(".portal-mobile-drawer");
-    expect(drawer).toHaveClass("open");
-    expect(document.body).toHaveClass("portal-menu-open");
-    expect(document.querySelector(".portal-drawer-backdrop")).toBeInTheDocument();
-
-    fireEvent.click(document.querySelector(".portal-drawer-backdrop"));
-
+    expect(screen.getByRole("navigation", { name: "Student portal" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/portal");
+    expect(screen.getByRole("link", { name: "Messages" })).toHaveAttribute("href", "/portal/classroom/chat");
+    expect(screen.getByLabelText("More")).toBeInTheDocument();
+    expect(document.querySelector(".portal-sidebar")).not.toBeInTheDocument();
     expect(document.querySelector(".portal-mobile-drawer")).not.toBeInTheDocument();
-    expect(document.body).not.toHaveClass("portal-menu-open");
-
-    fireEvent.click(screen.getByRole("button", { name: "Open portal menu" }));
-    fireEvent.keyDown(document, { key: "Escape" });
-
-    expect(document.querySelector(".portal-mobile-drawer")).not.toBeInTheDocument();
-    expect(document.body).not.toHaveClass("portal-menu-open");
   });
 
   it.each([

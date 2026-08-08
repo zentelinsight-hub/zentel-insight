@@ -53,6 +53,7 @@ const adminSectionData = {
   students: ["profiles", "roles", "programs", "enrolments"],
   tutors: ["profiles", "roles", "tutors", "tutorAssignments", "programs"],
   accounts: ["programs"],
+  staff: [],
   programmes: ["programs"],
   enrolments: ["profiles", "programs", "enrolments"],
   classrooms: [],
@@ -243,6 +244,62 @@ export async function createTutorAccount(values) {
     failureMessage: "Tutor account could not be created. Please review the details and try again."
   });
   if (!data?.ok) throw new Error(data?.error || "Tutor account could not be created.");
+  return data;
+}
+
+export async function createStaffAccount(values) {
+  const data = await invokeEdgeFunction("create-staff-account", {
+    body: values,
+    unavailableMessage: "Staff account creation is temporarily unavailable. Please try again.",
+    failureMessage: "Staff account could not be created. Please review the details and try again."
+  });
+  if (!data?.ok) throw new Error(data?.error || "Staff account could not be created.");
+  return data;
+}
+
+export async function getAdminStaffData() {
+  const supabase = await getClient();
+  const [people, capabilitiesResult, casesResult, requestsResult] = await Promise.all([
+    listAdminPeople({ role: "staff", pageSize: 50 }),
+    supabase.from("staff_capabilities").select("staff_user_id, capability, enabled, granted_at, updated_at").order("capability"),
+    supabase.from("staff_support_cases").select("id, case_reference, owner_staff_id, status, issue, created_at, updated_at").order("updated_at", { ascending: false }).limit(100),
+    supabase.from("staff_requests").select("id, case_id, staff_user_id, issue, requested_action, reason, status, admin_response, created_at").order("created_at", { ascending: false }).limit(100)
+  ]);
+  const failed = [capabilitiesResult, casesResult, requestsResult].find((result) => result.error);
+  if (failed?.error) throw failed.error;
+  return { staff: people.records || [], capabilities: capabilitiesResult.data || [], cases: casesResult.data || [], requests: requestsResult.data || [] };
+}
+
+export async function setStaffCapability({ staffUserId, capability, enabled }) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("admin_set_staff_capability", {
+    target_staff_id: staffUserId,
+    target_capability: capability,
+    capability_enabled: Boolean(enabled)
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function decideStaffRequest({ requestId, status, response }) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("admin_decide_staff_request", {
+    target_request_id: requestId,
+    next_status: status,
+    response_text: String(response || "").trim()
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function transferStaffCase({ caseId, staffUserId, reason }) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("admin_transfer_staff_case", {
+    target_case_id: caseId,
+    next_staff_id: staffUserId || null,
+    transfer_reason: String(reason || "").trim()
+  });
+  if (error) throw error;
   return data;
 }
 
@@ -598,14 +655,16 @@ export async function scheduleLiveClass(values) {
   const payload = {
     program_id: values.program_id,
     track_id: values.track_id || null,
+    classroom_id: values.classroom_id || null,
+    cohort_id: values.cohort_id || null,
     tutor_id: values.tutor_id || null,
     title: String(values.title || "").trim(),
     description: String(values.description || "").trim(),
     scheduled_start: scheduledStart.toISOString(),
     scheduled_end: scheduledEnd.toISOString(),
     timezone: "Africa/Lagos",
-    provider: values.provider || "daily",
-    provider_room_id: values.provider_room_id || null,
+    provider: values.provider || "google_meet",
+    provider_room_id: null,
     provider_room_url: values.provider_room_url || null,
     status: values.status || "scheduled",
     join_opens_at: new Date(scheduledStart.getTime() - 10 * 60 * 1000).toISOString(),

@@ -66,6 +66,8 @@ describe("Programme Classroom chat", () => {
     expect(screen.getByText("Live chat")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Attach image" })).toBeInTheDocument();
     expect(container.querySelector('input[type="file"]')).toHaveClass("sr-only");
+    expect(container.querySelector(".chat-composer-row")).toContainElement(screen.getByPlaceholderText("Message your classroom"));
+    expect(container.querySelector(".chat-composer-row")).toContainElement(screen.getByRole("button", { name: "Send message" }));
     expect(screen.queryByText(/Choose File/i)).not.toBeInTheDocument();
   });
 

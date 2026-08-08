@@ -413,7 +413,7 @@ export default function ProgramChatPanel({
     if (canSend) composerRef.current?.requestSubmit();
   }
 
-  const backControl = standalone && backTo ? <Link className="button button-secondary chat-page-back" to={backTo}><ArrowLeft size={17} aria-hidden="true" />Back to Classroom</Link> : null;
+  const backControl = standalone && backTo ? <Link className="portal-icon-button chat-page-back" to={backTo} aria-label="Back to classroom" title="Back to classroom"><ArrowLeft size={17} aria-hidden="true" /><span className="sr-only">Back to classroom</span></Link> : null;
 
   if (roomsQuery.loading) return <div className="chat-standalone-state">{backControl}<div className="route-loader">Loading classroom chat</div></div>;
   if (roomsQuery.error) return <div className="notice-card portal-state-card chat-standalone-state">{backControl}<h2>We could not load your classroom</h2><p>Please try again. If the issue continues, contact Zentel Insight support.</p><button className="button button-secondary" type="button" onClick={roomsQuery.refetch}>Try Again</button></div>;
@@ -440,7 +440,7 @@ export default function ProgramChatPanel({
       <section className="chat-thread" aria-label="Programme chat messages">
         <header className="chat-thread-header">
           <div className="chat-thread-identity">
-            {standalone && backTo ? <Link className="chat-header-action" to={backTo} aria-label="Back to classroom"><ArrowLeft size={19} /><span>Back</span></Link> : null}
+            {standalone && backTo ? <Link className="chat-header-action" to={backTo} aria-label="Back to classroom" title="Back to classroom"><ArrowLeft size={19} /><span className="sr-only">Back to classroom</span></Link> : null}
             <div><strong>{selectedRoom?.program_title || selectedRoom?.title}</strong><ParticipantState onlineCount={onlineCount} typingNames={typingNames} connection={connection} /></div>
           </div>
           <div className="chat-header-actions">
@@ -481,10 +481,12 @@ export default function ProgramChatPanel({
         {status.message ? <div className={`form-status chat-inline-status ${status.type}`} role={status.type === "warning" ? "alert" : "status"}>{status.message}</div> : null}
         {!messagesQuery.error ? <form className="chat-composer" ref={composerRef} onSubmit={send}>
           {replyTo ? <div className="chat-composer-reply"><span>Replying to {displayName(replyTo)}</span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply" title="Cancel reply"><X size={16} /></button></div> : null}
-          <input ref={fileInputRef} className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={selectImage} tabIndex="-1" />
-          <button className="chat-composer-icon" type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} aria-label="Attach image" title="Attach image"><Paperclip size={19} /></button>
-          <label className="chat-composer-input"><span className="sr-only">Message</span><textarea ref={textareaRef} value={body} maxLength={CHAT_MESSAGE_MAX_LENGTH} onChange={(event) => updateBody(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Message your classroom" rows="1" />{body.length >= CHAT_MESSAGE_MAX_LENGTH - 200 ? <small>{body.length}/{CHAT_MESSAGE_MAX_LENGTH}</small> : null}</label>
-          <button className="chat-composer-icon send" type="submit" disabled={!canSend} aria-label={sending ? "Sending message" : "Send message"} title="Send message"><Send size={19} /></button>
+          <div className="chat-composer-row">
+            <input ref={fileInputRef} className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={selectImage} tabIndex="-1" />
+            <button className="chat-composer-icon" type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} aria-label="Attach image" title="Attach image"><Paperclip size={19} /></button>
+            <label className="chat-composer-input"><span className="sr-only">Message</span><textarea ref={textareaRef} value={body} maxLength={CHAT_MESSAGE_MAX_LENGTH} onChange={(event) => updateBody(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Message your classroom" rows="1" />{body.length >= CHAT_MESSAGE_MAX_LENGTH - 200 ? <small>{body.length}/{CHAT_MESSAGE_MAX_LENGTH}</small> : null}</label>
+            <button className="chat-composer-icon send" type="submit" disabled={!canSend} aria-label={sending ? "Sending message" : "Send message"} title="Send message"><Send size={19} /></button>
+          </div>
         </form> : null}
       </section>
     </div>

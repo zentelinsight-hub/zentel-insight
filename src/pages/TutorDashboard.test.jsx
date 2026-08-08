@@ -21,6 +21,7 @@ vi.mock("../services/tutorService", () => ({
     resources: [],
     articles: [],
     liveClasses: [],
+    classrooms: [],
     notifications: [],
     supportTickets: [],
     studentTotal: 0,
@@ -29,6 +30,8 @@ vi.mock("../services/tutorService", () => ({
   searchTutorStudents: vi.fn(async () => ({ records: [], total: 0, page: 1, pageCount: 1 })),
   updateTutorProfessionalProfile: vi.fn(),
   saveTutorAssignment: vi.fn(),
+  saveTutorLiveClass: vi.fn(),
+  cancelTutorLiveClass: vi.fn(),
   saveTutorResource: vi.fn()
 }));
 

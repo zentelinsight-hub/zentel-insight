@@ -29,6 +29,7 @@ import PortalDialog from "../components/portal/PortalDialog";
 import PortalShell from "../components/portal/PortalShell";
 import { AccountLookupSection, AccountManagementSection } from "./admin/AdminAccountSections";
 import AdminAiSection from "./admin/AdminAiSection";
+import AdminStaffSection from "./admin/AdminStaffSection";
 import { resolveAdminSection } from "./admin/adminRouteUtils";
 import { useAuth } from "../context/authHooks";
 import { useAsyncData } from "../hooks/useAsyncData";
@@ -61,6 +62,7 @@ import { AdminAcademySection } from "./AcademyWorkspace";
 const sections = [
   ["overview", "Overview", LayoutDashboard],
   ["accounts", "Account Lookup", Search],
+  ["staff", "Staff", Users],
   ["academics", "Academics", GraduationCap],
   ["finance", "Finance", CreditCard],
   ["programmes", "Programmes", GraduationCap],
@@ -80,16 +82,6 @@ const sections = [
   ["audit", "Audit Log", ShieldCheck],
   ["profile", "Profile", UserRound],
   ["settings", "Settings", Settings]
-];
-
-const adminGroupSpecs = [
-  { label: "Overview", major: true, slugs: ["overview"] },
-  { label: "Accounts", major: true, slugs: ["accounts"] },
-  { label: "Academics", major: true, slugs: ["academics"] },
-  { label: "Classrooms", major: true, slugs: ["classrooms"] },
-  { label: "Finance", major: true, slugs: ["finance"] },
-  { label: "Zentel AI", major: true, slugs: ["zentel-ai"] },
-  { label: "Operations", major: true, slugs: ["support"] }
 ];
 
 const emptyProgramForm = {
@@ -123,6 +115,15 @@ function AdminAvatar({ profile, displayName, size = "md" }) {
 function AdminFrame({ data, onRealtimeChange, children }) {
   const { profile } = useAuth();
   const displayName = "Admin";
+  const navigationItem = (slug, labelOverride = "", routeOverride = "") => {
+    const [, label, Icon] = sections.find(([itemSlug]) => itemSlug === slug);
+    return {
+      to: routeOverride || (slug === "overview" ? "/admin" : `/admin/${slug}`),
+      label: labelOverride || label,
+      Icon,
+      end: slug === "overview"
+    };
+  };
   return (
     <PortalShell
       sidebar={{
@@ -131,18 +132,16 @@ function AdminFrame({ data, onRealtimeChange, children }) {
         profileName: displayName,
         profileDetail: "Verified admin session",
         avatarUrl: profile?.avatar_url,
+        profileTo: "/admin/profile",
         navLabel: "Admin dashboard",
-        menuLabel: "admin",
         shellClass: "management-shell admin-shell",
-        groups: adminGroupSpecs.map((group) => ({
-          ...group,
-          items: group.slugs.map((itemSlug) => sections.find(([slug]) => slug === itemSlug)).filter(Boolean).map(([slug, label, Icon]) => ({
-            to: slug === "overview" ? "/admin" : `/admin/${slug}`,
-            label,
-            Icon,
-            end: ["overview", "classrooms", "zentel-ai"].includes(slug)
-          }))
-        }))
+        primaryItems: [
+          navigationItem("overview"),
+          navigationItem("accounts"),
+          navigationItem("classrooms", "Messages", "/admin/classrooms/all/chat"),
+          navigationItem("academics")
+        ],
+        moreItems: ["staff", "classrooms", "programmes", "enrolments", "timetable", "live-classes", "announcements", "assignments", "resources", "finance", "payments", "zentel-ai", "support", "audit", "profile", "settings"].map((slug) => navigationItem(slug))
       }}
       header={{
         eyebrow: "Admin",
@@ -1356,7 +1355,7 @@ function ContentProgramSelect({ data, values, setValues, required = false, inclu
 }
 
 function LiveClassesSection({ data, onSaved }) {
-  const [form, setForm] = useState({ program_id: "", track_id: "", tutor_id: "", title: "", description: "", scheduled_start: "", scheduled_end: "", provider: "daily", provider_room_id: "", provider_room_url: "", status: "scheduled" });
+  const [form, setForm] = useState({ program_id: "", track_id: "", classroom_id: "", cohort_id: "", tutor_id: "", title: "", description: "", scheduled_start: "", scheduled_end: "", provider: "google_meet", provider_room_url: "", status: "scheduled" });
   const [status, setStatus] = useState({ type: "", message: "" });
   const tutors = data.tutors.map((item) => item.profiles).filter(Boolean);
 
@@ -1365,7 +1364,7 @@ function LiveClassesSection({ data, onSaved }) {
     try {
       await scheduleLiveClass(form);
       setStatus({ type: "success", message: "Live class saved." });
-      setForm({ program_id: "", track_id: "", tutor_id: "", title: "", description: "", scheduled_start: "", scheduled_end: "", provider: "daily", provider_room_id: "", provider_room_url: "", status: "scheduled" });
+      setForm({ program_id: "", track_id: "", classroom_id: "", cohort_id: "", tutor_id: "", title: "", description: "", scheduled_start: "", scheduled_end: "", provider: "google_meet", provider_room_url: "", status: "scheduled" });
       onSaved();
     } catch (error) {
       setStatus({ type: "warning", message: error.message || "Live class could not be saved." });
@@ -1374,17 +1373,18 @@ function LiveClassesSection({ data, onSaved }) {
 
   return (
     <div className="portal-page">
-      <PageHeading title="Live classes." description="Schedule provider-backed sessions. Join links open only through server-generated access tokens." />
+      <PageHeading title="Live classes" description="Schedule approved Google Meet or Zoom sessions and review their actual Zentel start and end times." />
       <form className="form-card management-form" onSubmit={submit}>
         <div className="form-grid">
           <label><span>Programme</span><select value={form.program_id} onChange={(event) => setForm({ ...form, program_id: event.target.value })} required><option value="">Choose programme</option>{data.programs.map((program) => <option key={program.id} value={program.id}>{program.title}</option>)}</select></label>
+          <label><span>Classroom</span><select value={form.classroom_id} onChange={(event) => { const classroom = data.classrooms.find((item) => item.id === event.target.value); setForm({ ...form, classroom_id: event.target.value, cohort_id: classroom?.cohort_id || "", program_id: classroom?.program_id || form.program_id, track_id: classroom?.track_id || "" }); }}><option value="">Programme-wide class</option>{data.classrooms.map((item) => <option value={item.id} key={item.id}>{item.name} | {item.code}</option>)}</select></label>
           <label><span>Tutor</span><select value={form.tutor_id} onChange={(event) => setForm({ ...form, tutor_id: event.target.value })}><option value="">No tutor assigned</option>{tutors.map((tutor) => <option key={tutor.id} value={tutor.id}>{tutor.title ? `${tutor.title} ` : ""}{tutor.full_name}</option>)}</select></label>
           <label><span>Title</span><input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
+          <label><span>Platform</span><select value={form.provider} onChange={(event) => setForm({ ...form, provider: event.target.value })}><option value="google_meet">Google Meet</option><option value="zoom">Zoom</option></select></label>
           <label><span>Status</span><select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="scheduled">scheduled</option><option value="live">live</option><option value="completed">completed</option><option value="cancelled">cancelled</option></select></label>
           <label><span>Start</span><input type="datetime-local" value={form.scheduled_start} onChange={(event) => setForm({ ...form, scheduled_start: event.target.value })} required /></label>
           <label><span>End</span><input type="datetime-local" value={form.scheduled_end} onChange={(event) => setForm({ ...form, scheduled_end: event.target.value })} required /></label>
-          <label><span>Provider room ID</span><input value={form.provider_room_id} onChange={(event) => setForm({ ...form, provider_room_id: event.target.value })} /></label>
-          <label><span>Provider room URL</span><input value={form.provider_room_url} onChange={(event) => setForm({ ...form, provider_room_url: event.target.value })} /></label>
+          <label><span>Meeting URL</span><input type="url" value={form.provider_room_url} onChange={(event) => setForm({ ...form, provider_room_url: event.target.value })} required /></label>
         </div>
         <label><span>Description</span><textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
         <button className="button button-primary" type="submit">Save Live Class</button>
@@ -1754,6 +1754,7 @@ export default function AdminDashboard({ forcedSection = "" }) {
           <TutorCreationForm programs={data.programs} onSaved={dataQuery.refetch} />
         </div>
       ) : null}
+      {activeSection === "staff" ? <AdminStaffSection /> : null}
       {activeSection === "programmes" ? <ProgrammesSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "enrolments" ? (
         <AdminRecordsSection

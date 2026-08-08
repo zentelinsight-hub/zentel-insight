@@ -21,6 +21,10 @@ function getRouteKey(location) {
   return `${location.pathname}${location.search}${location.hash}`;
 }
 
+function isPortalRoute(pathname) {
+  return /^\/(portal|tutor|admin|staff)(\/|$)/.test(pathname);
+}
+
 export default function RouteTransitionGate({ children }) {
   const location = useLocation();
   const currentRoute = getRouteKey(location);
@@ -35,6 +39,11 @@ export default function RouteTransitionGate({ children }) {
     if (getRouteKey(displayLocation) === currentRoute) return undefined;
 
     window.clearTimeout(timerRef.current);
+    if (isPortalRoute(location.pathname)) {
+      setDisplayLocation(location);
+      setLoading(false);
+      return undefined;
+    }
     setLoading(true);
     timerRef.current = window.setTimeout(() => {
       setDisplayLocation(location);
@@ -48,7 +57,7 @@ export default function RouteTransitionGate({ children }) {
 
   return (
     <>
-      {loading ? (
+      {loading && !isPortalRoute(location.pathname) ? (
         <div className="route-transition-loader" role="status" aria-live="polite" aria-label="Loading page">
           <div className="route-transition-panel">
             <BrandLogo brand={brand} size="auth" />

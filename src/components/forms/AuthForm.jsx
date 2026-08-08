@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, Eye, EyeOff, Lock, Mail, Send } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import AuthProgressOverlay from "../AuthProgressOverlay";
-import { loginWithEmail, resendSignupConfirmation, signupWithEmail } from "../../services/authService";
+import { loginWithEmail, signupWithEmail } from "../../services/authService";
 import { getHomePathForRole, USER_ROLES } from "../../services/roleService";
 import { isValidEmail } from "../../utils/format";
 import { createProgressState } from "../../utils/authProgress";
@@ -27,6 +27,7 @@ function getLoginDestination(result, returnTo) {
   if (result.role === USER_ROLES.ADMIN) {
     return returnTo.startsWith("/admin") ? `/admin/verify?returnTo=${encodeURIComponent(returnTo)}` : roleHome;
   }
+  if (result.role === USER_ROLES.STAFF) return returnTo.startsWith("/staff") ? returnTo : roleHome;
   if (result.role === USER_ROLES.TUTOR) return returnTo.startsWith("/tutor") ? returnTo : roleHome;
   return returnTo.startsWith("/portal") ? returnTo : roleHome;
 }
@@ -40,10 +41,6 @@ export default function AuthForm({ mode }) {
   const [authProgress, setAuthProgress] = useState(null);
   const [status, setStatus] = useState({ type: "", message: "" });
   const [showCheckEmailModal, setShowCheckEmailModal] = useState(false);
-  const [resendEmail, setResendEmail] = useState(searchParams.get("email") || "");
-  const [resendStatus, setResendStatus] = useState({ type: "", message: "" });
-  const [resendLoading, setResendLoading] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
   const [values, setValues] = useState({
     fullName: "",
     dateOfBirth: "",
@@ -57,9 +54,7 @@ export default function AuthForm({ mode }) {
   });
   const [errors, setErrors] = useState({});
   const submittingRef = useRef(false);
-  const resendRef = useRef(false);
   const modalTimerRef = useRef(null);
-  const cooldownTimerRef = useRef(null);
   const modalRef = useRef(null);
   const primaryModalButtonRef = useRef(null);
   const returnTo = safeRedirectPath(searchParams.get("returnTo") || searchParams.get("redirect"));
@@ -94,15 +89,8 @@ export default function AuthForm({ mode }) {
     };
   }, [navigate, showCheckEmailModal]);
 
-  useEffect(() => {
-    if (cooldown <= 0) return undefined;
-    cooldownTimerRef.current = window.setTimeout(() => setCooldown((current) => Math.max(0, current - 1)), 1000);
-    return () => window.clearTimeout(cooldownTimerRef.current);
-  }, [cooldown]);
-
   useEffect(() => () => {
     window.clearTimeout(modalTimerRef.current);
-    window.clearTimeout(cooldownTimerRef.current);
   }, []);
 
   function updateField(event) {
@@ -181,9 +169,6 @@ export default function AuthForm({ mode }) {
         navigated = true;
         navigate(getLoginDestination(result, returnTo), { replace: true });
       }
-      if (!result.ok && result.unverified) {
-        setResendEmail(payload.email);
-      }
     } catch (error) {
       setStatus({ type: "warning", message: error.message || "Account request failed. Please try again." });
     } finally {
@@ -196,29 +181,6 @@ export default function AuthForm({ mode }) {
         setLoading(false);
         setAuthProgress(null);
       }
-    }
-  }
-
-  async function handleResend(event) {
-    event.preventDefault();
-    if (resendRef.current || cooldown > 0) return;
-    const email = normalizeEmail(resendEmail || values.email);
-    if (!isValidEmail(email)) {
-      setResendStatus({ type: "warning", message: "Enter the email address used for your account." });
-      return;
-    }
-    resendRef.current = true;
-    setResendLoading(true);
-    setResendStatus({ type: "", message: "" });
-    try {
-      const result = await resendSignupConfirmation(email);
-      setResendStatus({ type: result.ok ? "success" : "warning", message: result.message });
-      if (result.ok) setCooldown(60);
-    } catch (error) {
-      setResendStatus({ type: "warning", message: error.message || "A new verification email could not be requested." });
-    } finally {
-      resendRef.current = false;
-      setResendLoading(false);
     }
   }
 
@@ -354,25 +316,6 @@ export default function AuthForm({ mode }) {
           <Link to={isSignup ? "/login" : "/signup"}>{isSignup ? "Log in" : "Create an account"}</Link>
         </p>
       </form>
-
-      {!isSignup ? (
-        <form className="form-card auth-card verification-resend-card" onSubmit={handleResend} noValidate>
-          <div>
-            <p className="eyebrow">Verification email</p>
-            <h2>Need a new verification link?</h2>
-            <p>Enter the email address used for signup and we will send a fresh confirmation link when an unverified account exists.</p>
-          </div>
-          <label>
-            <span>Email address</span>
-            <input type="email" value={resendEmail} onChange={(event) => setResendEmail(event.target.value)} autoComplete="email" />
-          </label>
-          {resendStatus.message ? <div className={`form-status ${resendStatus.type}`} role="status">{resendStatus.message}</div> : null}
-          <button className="button button-secondary" type="submit" disabled={resendLoading || cooldown > 0}>
-            {cooldown > 0 ? `Try again in ${cooldown}s` : resendLoading ? "Sending" : "Resend verification email"}
-            <Send size={18} aria-hidden="true" />
-          </button>
-        </form>
-      ) : null}
 
       {showCheckEmailModal ? (
         <div className="modal-backdrop" role="presentation">

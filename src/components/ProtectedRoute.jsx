@@ -11,14 +11,15 @@ function isEmailVerified(user) {
 
 function AccountRestrictedScreen({ accountStatus, email, phone, onSignOut }) {
   const suspended = accountStatus === ACCOUNT_STATUSES.SUSPENDED;
+  const restricted = accountStatus === ACCOUNT_STATUSES.RESTRICTED;
   return (
     <section className="restricted-account-screen">
       <div className="restricted-account-card">
         <ShieldAlert size={34} aria-hidden="true" />
         <div>
-          <p className="eyebrow">{suspended ? "Account Security" : "Account Status"}</p>
-          <h1>{suspended ? "Account access temporarily restricted" : "Account access currently inactive"}</h1>
-          {suspended ? (
+          <p className="eyebrow">{suspended || restricted ? "Account Security" : "Account Status"}</p>
+          <h1>{suspended || restricted ? "Account access temporarily restricted" : "Account access currently inactive"}</h1>
+          {suspended || restricted ? (
             <>
               <p>We have restricted access to this account following several unsuccessful sign-in attempts. This security measure helps protect your information from unauthorised access.</p>
               <p>Please contact Zentel Insight Support for assistance. Only an authorised administrator can restore access.</p>

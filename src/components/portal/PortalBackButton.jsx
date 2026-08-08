@@ -19,9 +19,9 @@ export default function PortalBackButton({ fallback, label = "Back" }) {
   }
 
   return (
-    <button className="button button-secondary portal-back-button" type="button" onClick={goBack}>
+    <button className="portal-icon-button portal-back-button" type="button" onClick={goBack} aria-label={label} title={label}>
       <ArrowLeft size={17} aria-hidden="true" />
-      {label}
+      <span className="sr-only">{label}</span>
     </button>
   );
 }

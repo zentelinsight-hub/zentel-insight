@@ -3,6 +3,7 @@ import { EdgeFunctionError, invokeEdgeFunction } from "./edgeFunctionClient";
 
 export const USER_ROLES = {
   ADMIN: "admin",
+  STAFF: "staff",
   TUTOR: "tutor",
   STUDENT: "student"
 };
@@ -10,15 +11,17 @@ export const USER_ROLES = {
 export const ACCOUNT_STATUSES = {
   ACTIVE: "active",
   INACTIVE: "inactive",
+  RESTRICTED: "restricted",
   SUSPENDED: "suspended"
 };
 
 export function normalizeRole(role) {
-  return [USER_ROLES.ADMIN, USER_ROLES.TUTOR, USER_ROLES.STUDENT].includes(role) ? role : USER_ROLES.STUDENT;
+  return [USER_ROLES.ADMIN, USER_ROLES.STAFF, USER_ROLES.TUTOR, USER_ROLES.STUDENT].includes(role) ? role : USER_ROLES.STUDENT;
 }
 
 export function normalizeAccountStatus(status) {
   if (status === ACCOUNT_STATUSES.ACTIVE) return ACCOUNT_STATUSES.ACTIVE;
+  if (status === ACCOUNT_STATUSES.RESTRICTED) return ACCOUNT_STATUSES.RESTRICTED;
   if (status === ACCOUNT_STATUSES.SUSPENDED) return ACCOUNT_STATUSES.SUSPENDED;
   return ACCOUNT_STATUSES.INACTIVE;
 }
@@ -26,6 +29,7 @@ export function normalizeAccountStatus(status) {
 export function getHomePathForRole(role, adminVerified = false) {
   const normalizedRole = normalizeRole(role);
   if (normalizedRole === USER_ROLES.ADMIN) return adminVerified ? "/admin" : "/admin/verify";
+  if (normalizedRole === USER_ROLES.STAFF) return "/staff";
   if (normalizedRole === USER_ROLES.TUTOR) return "/tutor";
   return "/portal";
 }
