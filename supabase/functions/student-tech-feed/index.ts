@@ -11,7 +11,7 @@ async function fetchJson(url: URL) {
 }
 
 async function getNewsItems(apiKey: string) {
-  if (!apiKey) return [];
+  if (!apiKey) throw new Error("NEWSDATA_API_KEY is not configured");
   const url = new URL("https://newsdata.io/api/1/latest");
   url.searchParams.set("apikey", apiKey);
   url.searchParams.set("q", "technology OR software OR cybersecurity OR artificial intelligence");
@@ -20,20 +20,22 @@ async function getNewsItems(apiKey: string) {
   url.searchParams.set("size", "10");
   const payload = await fetchJson(url);
   return Array.isArray(payload?.results) ? payload.results.map((item: Record<string, unknown>) => ({
-    id: `news-${clean(item.article_id || item.link)}`,
-    kind: "technology",
-    author: clean(item.source_name || item.source_id) || "Technology News",
+    external_id: `news-${clean(item.article_id || item.link)}`,
+    source_type: "newsdata",
+    source_name: clean(item.source_name || item.source_id) || "Technology News",
     title: clean(item.title),
-    body: clean(item.description || item.content).slice(0, 700),
+    summary: clean(item.description || item.content).slice(0, 700),
     category: "Technology News",
-    imageUrl: clean(item.image_url),
-    externalUrl: clean(item.link),
-    createdAt: clean(item.pubDate) || new Date().toISOString()
-  })).filter((item: { id: string; title: string; externalUrl: string }) => item.id && item.title && item.externalUrl) : [];
+    image_url: clean(item.image_url) || null,
+    external_url: clean(item.link),
+    published_at: clean(item.pubDate) || new Date().toISOString(),
+    imported_at: new Date().toISOString(),
+    active: true
+  })).filter((item: { external_id: string; title: string; external_url: string }) => item.external_id && item.title && item.external_url) : [];
 }
 
 async function getVideoItems(apiKey: string) {
-  if (!apiKey) return [];
+  if (!apiKey) throw new Error("YOUTUBE_API_KEY is not configured");
   const url = new URL("https://www.googleapis.com/youtube/v3/search");
   url.searchParams.set("key", apiKey);
   url.searchParams.set("part", "snippet");
@@ -44,16 +46,18 @@ async function getVideoItems(apiKey: string) {
   url.searchParams.set("maxResults", "8");
   const payload = await fetchJson(url);
   return Array.isArray(payload?.items) ? payload.items.map((item: Record<string, any>) => ({
-    id: `youtube-${clean(item?.id?.videoId)}`,
-    kind: "technology",
-    author: clean(item?.snippet?.channelTitle) || "YouTube",
+    external_id: `youtube-${clean(item?.id?.videoId)}`,
+    source_type: "youtube",
+    source_name: clean(item?.snippet?.channelTitle) || "YouTube",
     title: clean(item?.snippet?.title),
-    body: clean(item?.snippet?.description).slice(0, 700),
+    summary: clean(item?.snippet?.description).slice(0, 700),
     category: "Technology Video",
-    imageUrl: clean(item?.snippet?.thumbnails?.high?.url || item?.snippet?.thumbnails?.medium?.url),
-    externalUrl: item?.id?.videoId ? `https://www.youtube.com/watch?v=${encodeURIComponent(item.id.videoId)}` : "",
-    createdAt: clean(item?.snippet?.publishedAt) || new Date().toISOString()
-  })).filter((item: { id: string; title: string; externalUrl: string }) => item.id && item.title && item.externalUrl) : [];
+    image_url: clean(item?.snippet?.thumbnails?.high?.url || item?.snippet?.thumbnails?.medium?.url) || null,
+    external_url: item?.id?.videoId ? `https://www.youtube.com/watch?v=${encodeURIComponent(item.id.videoId)}` : "",
+    published_at: clean(item?.snippet?.publishedAt) || new Date().toISOString(),
+    imported_at: new Date().toISOString(),
+    active: true
+  })).filter((item: { external_id: string; title: string; external_url: string }) => item.external_id && item.title && item.external_url) : [];
 }
 
 Deno.serve(async (request) => {
@@ -72,13 +76,38 @@ Deno.serve(async (request) => {
     ]);
     if (role !== "student" || status !== "active") return jsonResponse({ ok: false, error: "Active Student access is required." }, 403, request);
 
-    const results = await Promise.allSettled([
-      getNewsItems(Deno.env.get("NEWSDATA_API_KEY") || ""),
-      getVideoItems(Deno.env.get("YOUTUBE_API_KEY") || "")
-    ]);
-    const items = results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
-    return jsonResponse({ ok: true, items }, 200, request);
-  } catch {
+    const sources = [
+      { name: "newsdata", request: getNewsItems(Deno.env.get("NEWSDATA_API_KEY") || "") },
+      { name: "youtube", request: getVideoItems(Deno.env.get("YOUTUBE_API_KEY") || "") }
+    ];
+    const results = await Promise.allSettled(sources.map((source) => source.request));
+    const items = results.flatMap((result, index) => {
+      if (result.status === "fulfilled") return result.value;
+      console.error("student-tech-feed source failed", {
+        source: sources[index].name,
+        message: result.reason instanceof Error ? result.reason.message : "Unknown source failure"
+      });
+      return [];
+    });
+
+    if (!items.length) throw new Error("No external feed source returned usable records");
+    const { error: upsertError } = await supabase
+      .from("technology_feed_items")
+      .upsert(items, { onConflict: "external_id" });
+    if (upsertError) throw upsertError;
+
+    return jsonResponse({
+      ok: true,
+      imported: items.length,
+      sources: {
+        newsdata: results[0].status === "fulfilled" ? results[0].value.length : 0,
+        youtube: results[1].status === "fulfilled" ? results[1].value.length : 0
+      }
+    }, 200, request);
+  } catch (error) {
+    console.error("student-tech-feed import failed", {
+      message: error instanceof Error ? error.message : "Unknown import failure"
+    });
     return jsonResponse({ ok: false, error: "Technology feed is temporarily unavailable." }, 503, request);
   }
 });

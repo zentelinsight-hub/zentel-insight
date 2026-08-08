@@ -114,7 +114,7 @@ export default function PortalShell({
       <header className="portal-header portal-topbar" aria-label={header?.title || sidebar.navLabel}>
         <NavLink className="portal-top-brand" to={sidebar.homeTo} onClick={closeMenus} aria-label={sidebar.brandLabel}>
           <BrandLogo brand="main" size={36} />
-          <span>{sidebar.brandLabel}</span>
+          <span>Zentel Insight</span>
         </NavLink>
 
         <nav className="portal-top-navigation" aria-label={sidebar.navLabel}>

@@ -150,6 +150,7 @@ export default function ProgramChatPanel({
   const [onlineCount, setOnlineCount] = useState(0);
   const [typingUsers, setTypingUsers] = useState({});
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [messageMenuId, setMessageMenuId] = useState("");
   const imagePreviewUrl = useMemo(() => imageFile ? URL.createObjectURL(imageFile) : "", [imageFile]);
   const messageListRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -157,6 +158,7 @@ export default function ProgramChatPanel({
   const textareaRef = useRef(null);
   const channelRef = useRef(null);
   const typingTimerRef = useRef(null);
+  const longPressTimerRef = useRef(null);
   const onRoomStateRef = useRef(onRoomState);
   const messageById = useMemo(() => new Map(messages.map((message) => [message.id, message])), [messages]);
   const canSend = Boolean(joined && !sending && (body.trim() || imageFile) && body.length <= CHAT_MESSAGE_MAX_LENGTH);
@@ -172,6 +174,7 @@ export default function ProgramChatPanel({
   useEffect(() => { onRoomStateRef.current = onRoomState; }, [onRoomState]);
   useEffect(() => { onRoomStateRef.current?.({ roomId: selectedRoom?.id || "", unreadCount: selectedUnreadCount, joined }); }, [joined, selectedRoom?.id, selectedUnreadCount]);
   useEffect(() => () => { if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl); }, [imagePreviewUrl]);
+  useEffect(() => () => window.clearTimeout(longPressTimerRef.current), []);
   useEffect(() => { setMessages(messagesQuery.data || []); }, [messagesQuery.data]);
 
   useEffect(() => {
@@ -413,6 +416,16 @@ export default function ProgramChatPanel({
     if (canSend) composerRef.current?.requestSubmit();
   }
 
+  function beginMessagePress(event, messageId) {
+    if (event.pointerType !== "touch") return;
+    window.clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = window.setTimeout(() => setMessageMenuId(messageId), 450);
+  }
+
+  function endMessagePress() {
+    window.clearTimeout(longPressTimerRef.current);
+  }
+
   const backControl = standalone && backTo ? <Link className="portal-icon-button chat-page-back" to={backTo} aria-label="Back to classroom" title="Back to classroom"><ArrowLeft size={17} aria-hidden="true" /><span className="sr-only">Back to classroom</span></Link> : null;
 
   if (roomsQuery.loading) return <div className="chat-standalone-state">{backControl}<div className="route-loader">Loading classroom chat</div></div>;
@@ -450,7 +463,7 @@ export default function ProgramChatPanel({
           </div>
         </header>
         {detailsOpen ? <div className="chat-room-notice"><Info size={15} aria-hidden="true" /><span>Messages in this classroom are retained for seven days.</span></div> : null}
-        <div className="chat-message-list" ref={messageListRef} aria-live="polite">
+        <div className="chat-message-list" ref={messageListRef} aria-live="polite" onPointerDown={(event) => { if (!event.target.closest?.(".chat-message")) setMessageMenuId(""); }}>
           {!messagesQuery.error && messages.some((message) => !message.client_status) ? <button className="chat-load-older" type="button" onClick={loadOlder} disabled={loadingOlder}>{loadingOlder ? "Loading" : "Load older messages"}</button> : null}
           {messagesQuery.loading ? <div className="route-loader">Loading messages</div> : null}
           {messagesQuery.error ? <div className="form-status warning" role="alert">We could not load your classroom messages. <button className="text-link" type="button" onClick={messagesQuery.refetch}>Try Again</button></div> : null}
@@ -462,16 +475,27 @@ export default function ProgramChatPanel({
             const counts = reactionCounts(message);
             if (message.message_type === "system") return <div className="chat-system-message" key={message.id}>{message.body}</div>;
             return (
-              <article id={`chat-message-${message.id}`} className={`${message.sender_id === user?.id ? "chat-message own" : "chat-message"} ${grouped ? "grouped" : ""}`} key={message.id}>
+              <article
+                id={`chat-message-${message.id}`}
+                className={`${message.sender_id === user?.id ? "chat-message own" : "chat-message"} ${grouped ? "grouped" : ""} ${messageMenuId === message.id ? "context-open" : ""}`.trim()}
+                key={message.id}
+                onPointerDown={(event) => beginMessagePress(event, message.id)}
+                onPointerUp={endMessagePress}
+                onPointerCancel={endMessagePress}
+                onPointerLeave={endMessagePress}
+                onContextMenu={(event) => { event.preventDefault(); setMessageMenuId(message.id); }}
+              >
                 {!grouped ? <div className="chat-message-meta"><div><strong>{displayName(message)}</strong><span>{roleLabel(message)}</span></div><small>{formatDateTime(message.created_at)}</small></div> : null}
                 {message.reply_to_id ? <button className="chat-reply-context" type="button" onClick={() => repliedMessage && document.getElementById(`chat-message-${repliedMessage.id}`)?.scrollIntoView({ block: "center" })}><Reply size={14} aria-hidden="true" /><span>{repliedMessage ? `${displayName(repliedMessage)}: ${repliedMessage.body || "Image"}` : "Original message is no longer available"}</span></button> : null}
                 {message.deleted_for_moderation_at ? <p className="chat-moderated-placeholder">Message removed by moderation</p> : <>{message.body ? <SafeMessageText text={message.body} /> : null}{message.image_pending ? <span className="muted-line">Uploading image...</span> : null}{message.image_path ? <MessageImage src={message.image_url} alt={`Image shared by ${displayName(message)}`} /> : null}</>}
-                {!message.deleted_for_moderation_at && !message.client_status ? <div className="chat-reactions" aria-label="Message reactions">{Object.entries(REACTION_META).map(([reaction, meta]) => { const Icon = meta.Icon; const active = (message.program_chat_reactions || []).some((item) => item.reaction === reaction && item.user_id === user?.id); return <button className={active ? "active" : ""} key={reaction} type="button" onClick={() => react(message.id, reaction)} title={meta.label}><Icon size={14} /><span>{counts[reaction] || ""}</span><span className="sr-only">{meta.label}</span></button>; })}</div> : null}
-                <div className="chat-message-actions">
-                  {!message.client_status && !message.deleted_for_moderation_at ? <button type="button" onClick={() => setReplyTo(message)}><Reply size={14} aria-hidden="true" /><span>Reply</span></button> : null}
-                  {message.client_status === "sending" ? <span className="muted-line">Sending...</span> : null}
-                  {message.client_status === "failed" ? <button className="danger" type="button" onClick={() => submitMessage(message.retry_payload, message.id)} disabled={sending}>Try again</button> : null}
-                  {canModerate && !message.client_status && !message.deleted_for_moderation_at ? <button className="danger" type="button" onClick={() => moderate(message)}><ShieldAlert size={14} aria-hidden="true" /><span>Moderate</span></button> : null}
+                <div className="chat-message-controls">
+                  {!message.deleted_for_moderation_at && !message.client_status ? <div className="chat-reactions" aria-label="Message reactions">{Object.entries(REACTION_META).map(([reaction, meta]) => { const Icon = meta.Icon; const active = (message.program_chat_reactions || []).some((item) => item.reaction === reaction && item.user_id === user?.id); return <button className={active ? "active" : ""} key={reaction} type="button" onClick={() => { setMessageMenuId(""); void react(message.id, reaction); }} title={meta.label}><Icon size={14} /><span>{counts[reaction] || ""}</span><span className="sr-only">{meta.label}</span></button>; })}</div> : null}
+                  <div className="chat-message-actions">
+                    {!message.client_status && !message.deleted_for_moderation_at ? <button type="button" onClick={() => { setReplyTo(message); setMessageMenuId(""); }}><Reply size={14} aria-hidden="true" /><span>Reply</span></button> : null}
+                    {message.client_status === "sending" ? <span className="muted-line">Sending...</span> : null}
+                    {message.client_status === "failed" ? <button className="danger" type="button" onClick={() => submitMessage(message.retry_payload, message.id)} disabled={sending}>Try again</button> : null}
+                    {canModerate && !message.client_status && !message.deleted_for_moderation_at ? <button className="danger" type="button" onClick={() => { setMessageMenuId(""); void moderate(message); }}><ShieldAlert size={14} aria-hidden="true" /><span>Moderate</span></button> : null}
+                  </div>
                 </div>
               </article>
             );

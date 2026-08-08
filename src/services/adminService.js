@@ -54,6 +54,7 @@ const adminSectionData = {
   tutors: ["profiles", "roles", "tutors", "tutorAssignments", "programs"],
   accounts: ["programs"],
   staff: [],
+  finance: [],
   programmes: ["programs"],
   enrolments: ["profiles", "programs", "enrolments"],
   classrooms: [],

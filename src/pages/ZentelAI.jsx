@@ -1,6 +1,5 @@
 import {
   Archive,
-  BrainCircuit,
   CheckCircle2,
   Clock3,
   FileText,
@@ -25,7 +24,6 @@ import {
   cancelAiSubscription,
   createAiConversation,
   createAiSubscription,
-  estimateAiCredits,
   executeAiRequest,
   getAiSnapshot,
   listAiConversations,
@@ -68,17 +66,6 @@ function PlanCards({ snapshot, busy, onSelect }) {
   );
 }
 
-function Welcome() {
-  return (
-    <div className="ai-welcome">
-      <span className="ai-welcome-icon"><Sparkles size={28} /></span>
-      <h2>How can I help you learn today?</h2>
-      <p>Type your question below or attach a document or image for analysis.</p>
-      <p className="ai-caution">Zentel AI can make mistakes. Review important academic, technical and professional information before relying on it.</p>
-    </div>
-  );
-}
-
 export default function ZentelAI() {
   const { conversationId = "" } = useParams();
   const navigate = useNavigate();
@@ -102,7 +89,6 @@ export default function ZentelAI() {
   const messages = useMemo(() => [...(messagesQuery.data || []), ...(pendingUserMessage ? [pendingUserMessage] : []), ...(streamMessage ? [streamMessage] : [])], [messagesQuery.data, pendingUserMessage, streamMessage]);
   const canAccess = Boolean(snapshot.access?.account_active && snapshot.access?.ai_access_status !== "suspended" && snapshot.access?.system_available);
   const hasCredits = Number(snapshot.wallet?.total_available || 0) > 0;
-  const estimate = estimateAiCredits(message, attachments, webResearch);
 
   usePageMeta({ path: "/portal/zentel-ai", title: "Zentel AI", description: "Your personal Zentel Insight learning assistant.", robots: "noindex,nofollow" });
   useEffect(() => {
@@ -147,14 +133,14 @@ export default function ZentelAI() {
     try {
       if (!conversationId) { const created = await createAiConversation(); conversationId = created.id; setSelectedId(created.id); navigate(`/portal/zentel-ai/chat/${created.id}`); }
       const controller = new AbortController(); abortRef.current = controller;
-      setStreaming(true); setStatus({ type: "info", message: "Thinking..." }); setMessage("");
+      setStreaming(true); setStatus({ type: "", message: "" }); setMessage("");
       setPendingUserMessage({ id: `pending-user-${Date.now()}`, role: "user", content: { text: prompt }, status: "completed" });
       setStreamMessage({ id: `stream-${Date.now()}`, role: "assistant", content: { text: "" }, status: "streaming" });
       await executeAiRequest({
         conversationId, message: prompt, attachmentIds: attachments.map((item) => item.id), webResearch, signal: controller.signal,
         onEvent: (event, payload) => {
           if (event === "delta") { setStatus({ type: "", message: "" }); setStreamMessage((current) => ({ ...current, content: { ...current.content, text: `${current.content.text}${payload.delta}` } })); }
-          if (event === "status") setStatus({ type: "info", message: payload.state === "reviewing_sources" ? "Reviewing current sources..." : "Thinking..." });
+          if (event === "status" && payload.state === "reviewing_sources") setStreamMessage((current) => current ? { ...current, content: { ...current.content, state: "reviewing_sources" } } : current);
           if (event === "done") setStreamMessage((current) => ({ ...current, status: "completed", content: { ...current.content, sources: payload.sources || [] } }));
         }
       });
@@ -171,39 +157,39 @@ export default function ZentelAI() {
   };
   const lastStudentMessage = [...messages].reverse().find((item) => item.role === "user")?.content?.text;
 
-  if (snapshotQuery.loading) return <div className="portal-page"><PortalBackButton fallback="/portal" label="Back to Portal" /><div className="route-loader">Loading Zentel AI</div></div>;
-  if (snapshotQuery.error) return <div className="portal-page"><PortalBackButton fallback="/portal" label="Back to Portal" /><div className="notice-card portal-state-card"><h2>Zentel AI could not be loaded</h2><p>{snapshotQuery.error}</p><button className="button button-primary" onClick={snapshotQuery.refetch}>Try Again</button></div></div>;
+  if (snapshotQuery.loading) return <div className="portal-page"><PortalBackButton fallback="/portal/zentel-ai" label="Back to Zentel AI" /><div className="portal-local-loading"><Clock3 className="spin-icon" size={18} /><span>Loading Zentel AI...</span></div></div>;
+  if (snapshotQuery.error) return <div className="portal-page"><PortalBackButton fallback="/portal/zentel-ai" label="Back to Zentel AI" /><div className="form-status warning"><span>Zentel AI could not be loaded.</span><button className="text-link" onClick={snapshotQuery.refetch}>Try Again</button></div></div>;
 
   return (
-    <div className="portal-page ai-page">
-      <header className="ai-page-heading"><div><p className="eyebrow">Student Portal</p><h1><BrainCircuit size={30} />Zentel AI</h1><p>Your personal learning assistant</p></div><div className="ai-page-heading-actions"><PortalBackButton fallback="/portal" label="Back to Portal" /><button className="icon-button" type="button" title="Start a new conversation" onClick={newConversation}><MessageSquarePlus size={19} /></button></div></header>
-      <nav className="ai-section-nav" aria-label="Zentel AI"><Link to="/portal/zentel-ai">Chat</Link><Link to="/portal/zentel-ai/history">History</Link><Link to="/portal/zentel-ai/usage">Credits</Link><Link to="/portal/zentel-ai/plans">Plans</Link><Link to="/portal/zentel-ai/billing">Billing</Link><Link to="/portal/zentel-ai/settings">Settings</Link></nav>
-      {status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}
-      {!canAccess ? <div className="notice-card portal-state-card"><h2>Zentel AI is not available for this account</h2><p>Confirm that your Student account is active, or contact Support if access was suspended.</p></div> : null}
-      {canAccess && !hasCredits ? <div className="notice-card ai-zero-credit-state"><h2>No AI credits available</h2><p>Choose a paid plan or buy credits to send a message. Zentel AI does not offer free trials.</p><Link className="button button-primary" to="/portal/zentel-ai/usage">Buy credits</Link></div> : null}
+    <div className="portal-page ai-page ai-chat-page">
       {canAccess ? (
         <section className="ai-workspace">
           <div className="ai-chat">
-            <div className="ai-chat-topbar"><strong>{conversations.find((item) => item.id === selectedId)?.title || "New learning conversation"}</strong><Link className="icon-button" title="Open conversation history" to="/portal/zentel-ai/history"><Clock3 size={18} /><span className="sr-only">Open conversation history</span></Link></div>
+            <div className="ai-chat-topbar">
+              <PortalBackButton fallback="/portal/zentel-ai" label="Back to Zentel AI" />
+              <strong>{conversations.find((item) => item.id === selectedId)?.title || "New learning conversation"}</strong>
+              <div className="ai-chat-actions"><Link to="/portal/zentel-ai/usage">{Number(snapshot.wallet?.total_available || 0).toLocaleString()} credits</Link><button className="icon-button" type="button" title="Start a new conversation" onClick={newConversation}><MessageSquarePlus size={17} /></button></div>
+            </div>
             <div className="ai-message-list" aria-live="polite">
-              {messagesQuery.loading ? <div className="route-loader">Loading conversation</div> : null}
-              {!messagesQuery.loading && !messages.length ? <Welcome /> : null}
+              {messagesQuery.loading ? <div className="portal-local-loading"><Clock3 className="spin-icon" size={18} /><span>Loading conversation...</span></div> : null}
               {messages.map((item, index) => <AiMessage key={item.id || index} message={item} onRegenerate={item.role === "assistant" && lastStudentMessage ? () => send(lastStudentMessage) : null} />)}
               <div ref={bottomRef} />
             </div>
             <div className="ai-composer-wrap">
+              {!canAccess ? <div className="ai-inline-status">Zentel AI is not available for this account.</div> : null}
+              {canAccess && !hasCredits ? <div className="ai-inline-status">No AI credits available <span aria-hidden="true">&middot;</span> <Link to="/portal/zentel-ai/plans">View plans</Link></div> : null}
+              {status.message ? <div className={`ai-inline-status ${status.type}`} role={status.type === "warning" ? "alert" : "status"}>{status.message}</div> : null}
               {attachments.length || uploading ? <div className="ai-attachments">{uploading ? <span><Clock3 size={15} />Uploading file</span> : null}{attachments.map((item) => <span key={item.id}>{item.mime_type.startsWith("image/") ? <ImageIcon size={15} /> : <FileText size={15} />}{item.file_name}<button type="button" title="Remove attachment" onClick={() => removeAttachment(item)}><X size={14} /></button></span>)}</div> : null}
               <div className="ai-composer">
                 <input ref={fileRef} hidden type="file" accept=".pdf,.docx,.txt,.jpg,.jpeg,.png,.webp" onChange={(event) => event.target.files?.[0] && attach(event.target.files[0])} />
                 <button type="button" title="Attach a document or image" disabled={!hasCredits || streaming || uploading} onClick={() => fileRef.current?.click()}><Paperclip size={19} /><span className="sr-only">Attach a document or image</span></button>
-                <textarea value={message} disabled={!hasCredits} maxLength={30000} rows={2} placeholder={hasCredits ? "Ask Zentel AI to explain, teach, research or review..." : "Buy credits to start a Zentel AI conversation"} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} />
+                <textarea value={message} disabled={!hasCredits} maxLength={30000} rows={1} placeholder="Ask Zentel AI..." onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} />
                 {streaming ? <button className="ai-send" type="button" title="Stop generation" onClick={() => abortRef.current?.abort()}><Square size={18} /><span className="sr-only">Stop generation</span></button> : <button className="ai-send" type="button" title="Send message" disabled={!hasCredits || (!message.trim() && !attachments.length)} onClick={() => send()}><Send size={18} /><span className="sr-only">Send message</span></button>}
               </div>
-              <div className="ai-composer-meta"><label><input type="checkbox" checked={webResearch} onChange={(event) => { const enabled = event.target.checked; setWebResearch(enabled); window.localStorage.setItem("zentel-ai-web-research", String(enabled)); }} />Web research</label><span>Estimated {estimate.minimum}-{estimate.maximum} credits</span></div>
             </div>
           </div>
         </section>
-      ) : null}
+      ) : <div className="ai-inline-status warning">Zentel AI is not available for this account.</div>}
     </div>
   );
 }

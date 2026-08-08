@@ -448,38 +448,33 @@ export async function getPortalArticles(userId) {
   });
 }
 
-function getArticleFeedType(article) {
-  const category = String(article?.category || "Technology").toLowerCase();
-  const url = String(article?.external_url || "").toLowerCase();
-  if (url.includes("youtube.com") || url.includes("youtu.be") || category.includes("video")) return "Video";
-  if (category.includes("event")) return "Event";
-  if (category.includes("news")) return "Technology News";
-  if (category.includes("trend")) return "Trending";
-  return category.includes("blog") ? "Technology Blog" : article?.category || "Technology";
-}
-
 export async function getStudentFeed(userId) {
   const supabase = await getClient();
-  const [articles, postsResult, externalFeed] = await Promise.all([
-    withPortalFallback("feed articles", () => getPortalArticles(userId), []),
+  await withPortalFallback("technology feed import", () => invokeEdgeFunction("student-tech-feed", {
+    body: {},
+    timeoutMs: 15000,
+    failureMessage: "Technology feed import is temporarily unavailable."
+  }), null);
+
+  const [postsResult, technologyResult] = await Promise.all([
     supabase
       .from("student_feed_posts")
       .select("id, user_id, body, image_path, created_at, updated_at")
       .eq("status", "published")
       .order("created_at", { ascending: false })
       .limit(100),
-    withPortalFallback("technology feed", async () => {
-      const payload = await invokeEdgeFunction("student-tech-feed", {
-        body: {},
-        timeoutMs: 12000,
-        failureMessage: "Technology feed is temporarily unavailable."
-      });
-      return normalizeList(payload?.items);
-    }, [])
+    supabase
+      .from("technology_feed_items")
+      .select("id, source_type, source_name, title, summary, category, image_url, external_url, published_at")
+      .eq("active", true)
+      .order("published_at", { ascending: false })
+      .limit(100)
   ]);
 
   if (postsResult.error) logPortalDataIssue("student feed posts", postsResult.error);
+  if (technologyResult.error) logPortalDataIssue("technology feed records", technologyResult.error);
   const posts = postsResult.error ? [] : normalizeList(postsResult.data);
+  const technologyItems = technologyResult.error ? [] : normalizeList(technologyResult.data);
   const authorIds = [...new Set(posts.map((item) => item.user_id).filter(Boolean))];
   let profiles = [];
   if (authorIds.length) {
@@ -505,18 +500,19 @@ export async function getStudentFeed(userId) {
     };
   }));
 
-  const articleItems = articles.map((article) => ({
-    id: `article-${article.id}`,
+  const externalItems = technologyItems.map((item) => ({
+    id: `technology-${item.id}`,
     kind: "technology",
-    author: "Zentel Insight",
-    title: article.title,
-    body: article.summary || article.body,
-    category: getArticleFeedType(article),
-    externalUrl: article.external_url || "",
-    createdAt: article.published_at || article.created_at
+    author: item.source_name,
+    title: item.title,
+    body: item.summary,
+    category: item.category || (item.source_type === "youtube" ? "Technology Video" : "Technology News"),
+    imageUrl: item.image_url || "",
+    externalUrl: item.external_url,
+    createdAt: item.published_at
   }));
 
-  return [...studentItems, ...articleItems, ...normalizeList(externalFeed)]
+  return [...studentItems, ...externalItems]
     .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0));
 }
 

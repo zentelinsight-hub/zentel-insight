@@ -30,6 +30,9 @@ verify_jwt = true
 [functions.student-tech-feed]
 verify_jwt = true
 
+[functions.admin-loan-action]
+verify_jwt = true
+
 [functions.delete-account]
 verify_jwt = true
 

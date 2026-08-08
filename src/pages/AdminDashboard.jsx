@@ -31,6 +31,7 @@ import PortalNavigationPage from "../components/portal/PortalNavigationPage";
 import PortalShell from "../components/portal/PortalShell";
 import { AccountLookupSection, AccountManagementSection } from "./admin/AdminAccountSections";
 import AdminAiSection from "./admin/AdminAiSection";
+import AdminLoanManagement from "./admin/AdminLoanManagement";
 import AdminStaffSection from "./admin/AdminStaffSection";
 import { resolveAdminRoute } from "./admin/adminRouteUtils";
 import { useAuth } from "../context/authHooks";
@@ -1710,6 +1711,26 @@ function AdminSettingsSection() {
   );
 }
 
+function AdminFinanceSection({ pathname }) {
+  if (pathname === "/admin/finance") {
+    return <PortalNavigationPage eyebrow="Admin Portal" title="Finance" description="Open one finance management area." items={[
+      { to: "/admin/finance/loans", label: "Loan Management", description: "Applications, active loans and repayments", Icon: CreditCard },
+      { to: "/admin/payments", label: "Payments", description: "Payment records and reconciliation", Icon: CreditCard }
+    ]} />;
+  }
+  if (pathname === "/admin/finance/loans") {
+    return <PortalNavigationPage eyebrow="Finance" title="Loan Management" description="Open one loan workflow." items={[
+      { to: "/admin/finance/loans/applications", label: "Applications", description: "All submitted applications", Icon: FileCheck2 },
+      { to: "/admin/finance/loans/pending", label: "Pending Review", description: "KYC review and final decisions", Icon: Search },
+      { to: "/admin/finance/loans/approved", label: "Approved and Active", description: "Disbursement and active loans", Icon: CheckCircle2 },
+      { to: "/admin/finance/loans/overdue", label: "Overdue", description: "Authoritative overdue enforcement", Icon: Bell },
+      { to: "/admin/finance/loans/repayments", label: "Repayments", description: "Confirm submitted repayments", Icon: CreditCard }
+    ]} />;
+  }
+  const view = pathname.split("/").filter(Boolean).at(-1);
+  return <AdminLoanManagement view={view} />;
+}
+
 export default function AdminDashboard({ forcedSection = "" }) {
   const location = useLocation();
   const { section: activeSection, portalId, roomId } = resolveAdminRoute(location.pathname, forcedSection);
@@ -1757,7 +1778,7 @@ export default function AdminDashboard({ forcedSection = "" }) {
       {activeSection === "overview" ? <OverviewSection data={data} /> : null}
       {activeSection === "more" ? <AdminMoreSection /> : null}
       {activeSection === "academics" ? <AdminAcademySection view="academics" /> : null}
-      {activeSection === "finance" ? <AdminAcademySection view="finance" /> : null}
+      {activeSection === "finance" ? <AdminFinanceSection pathname={location.pathname} /> : null}
       {activeSection === "accounts" && portalId ? <AccountManagementSection portalId={portalId} programs={data.programs} /> : null}
       {activeSection === "accounts" && !portalId ? (
         <div className="portal-page admin-account-lookup-page">

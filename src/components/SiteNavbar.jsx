@@ -61,13 +61,41 @@ export default function SiteNavbar({
   const menuRef = useRef(null);
   const menuButtonRef = useRef(null);
   const openRef = useRef(open);
+  const lockedScrollRef = useRef(null);
 
   const closeMenu = () => setOpen(false);
 
   useEffect(() => {
     openRef.current = open;
     document.body.classList.toggle("menu-open", open);
-    return () => document.body.classList.remove("menu-open");
+    if (open && lockedScrollRef.current === null) {
+      lockedScrollRef.current = window.scrollY;
+      document.body.style.position = "fixed";
+      document.body.style.top = `-${lockedScrollRef.current}px`;
+      document.body.style.right = "0";
+      document.body.style.left = "0";
+    } else if (!open && lockedScrollRef.current !== null) {
+      const scrollY = lockedScrollRef.current;
+      lockedScrollRef.current = null;
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.right = "";
+      document.body.style.left = "";
+      window.scrollTo(0, scrollY);
+    }
+
+    return () => {
+      document.body.classList.remove("menu-open");
+      if (lockedScrollRef.current !== null) {
+        const scrollY = lockedScrollRef.current;
+        lockedScrollRef.current = null;
+        document.body.style.position = "";
+        document.body.style.top = "";
+        document.body.style.right = "";
+        document.body.style.left = "";
+        window.scrollTo(0, scrollY);
+      }
+    };
   }, [open]);
 
   useEffect(() => {
@@ -98,22 +126,8 @@ export default function SiteNavbar({
       closeMenu();
     }
 
-    function handleScroll(event) {
-      if (!openRef.current) return;
-      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
-      closeMenu();
-    }
-
-    function handleWheel(event) {
-      if (!openRef.current) return;
-      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
-      closeMenu();
-    }
-
     document.addEventListener("keydown", handleKeydown);
     document.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("scroll", handleScroll, true);
-    window.addEventListener("wheel", handleWheel, { passive: true });
     window.addEventListener("resize", handleResize);
     desktopQuery.addEventListener("change", closeForDesktop);
     closeForDesktop(desktopQuery);
@@ -121,8 +135,6 @@ export default function SiteNavbar({
     return () => {
       document.removeEventListener("keydown", handleKeydown);
       document.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("scroll", handleScroll, true);
-      window.removeEventListener("wheel", handleWheel);
       window.removeEventListener("resize", handleResize);
       desktopQuery.removeEventListener("change", closeForDesktop);
     };
@@ -158,9 +170,12 @@ export default function SiteNavbar({
             aria-label={open ? "Close navigation menu" : "Open navigation menu"}
             aria-controls={drawerId}
             aria-expanded={open}
+            aria-hidden={open}
+            disabled={open}
+            tabIndex={open ? -1 : 0}
             onClick={() => setOpen((current) => !current)}
           >
-            {open ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
+            <Menu size={22} aria-hidden="true" />
           </button>
         </div>
       </nav>
@@ -175,8 +190,8 @@ export default function SiteNavbar({
         <div className="mobile-menu-header"><Link className="mobile-drawer-brand" to={brandHref} onClick={closeMenu}><BrandLogo brand={brand} size={34} /><strong>{brandName}</strong></Link><button className="icon-button" type="button" aria-label="Close navigation menu" onClick={closeMenu}><X size={20} /></button></div>
         <nav className="mobile-menu-inner" aria-label={`${ariaLabel} mobile`}>
           {links.map((item) => renderNavItem(item, "mobile-nav-link", closeMenu))}
-          {actions.length ? <div className="mobile-menu-actions">{actions.map((item) => renderNavItem(item, "mobile-nav-link", closeMenu))}</div> : null}
         </nav>
+        {actions.length ? <div className="mobile-menu-actions">{actions.map((item) => renderNavItem(item, "mobile-nav-link", closeMenu))}</div> : null}
       </div>
     </header>
   );

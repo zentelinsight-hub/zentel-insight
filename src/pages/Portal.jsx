@@ -33,6 +33,7 @@ import {
 import LiveClassCards from "../components/LiveClassCards";
 import ProgramChatPanel from "../components/ProgramChatPanel";
 import PortalIdCard from "../components/portal/PortalIdCard";
+import PortalBackButton from "../components/portal/PortalBackButton";
 import PortalNavigationPage from "../components/portal/PortalNavigationPage";
 import PortalShell from "../components/portal/PortalShell";
 import { useAuth } from "../context/authHooks";
@@ -201,8 +202,7 @@ function PortalPage({ slug, children, actions }) {
     <div className="portal-page">
       <div className="portal-page-heading">
         <div>
-          <p className="eyebrow">Student Portal</p>
-          <h2>{content?.title || "Student Portal"}</h2>
+          <div className="portal-title-row"><PortalBackButton fallback={slug === "payments" ? "/portal/finance" : ["my-courses", "classroom", "timetable", "assignments", "resources", "certificates"].includes(slug) ? "/portal/learning" : "/portal/more"} label={`Back from ${content?.title || "page"}`} /><h2>{content?.title || "Student Portal"}</h2></div>
           <p>{content?.description || "Your private Zentel Insight account information is loaded securely."}</p>
         </div>
         {actions}
@@ -339,15 +339,6 @@ export function StudentProgressPage() {
     { to: "/portal/progress/performance", label: "Performance", description: "Overall learning performance", Icon: ListChecks },
     { to: "/portal/attendance", label: "Attendance", description: "Class participation history", Icon: CheckCircle2 }
   ]} />;
-}
-
-export function StudentLoansPage() {
-  return (
-    <div className="portal-page">
-      <header className="portal-compact-heading"><p className="eyebrow">Finance</p><h1>Loans</h1></header>
-      <PortalEmpty content={{ empty_title: "No loan information available", empty_message: "Loan information will appear here only when a loan is connected to your account." }} />
-    </div>
-  );
 }
 
 export function StudentMorePage() {

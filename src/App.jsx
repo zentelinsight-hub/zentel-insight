@@ -1,6 +1,7 @@
 import { lazy, useEffect, useLayoutEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import GuestRoute from "./components/GuestRoute";
+import GlobalToastHost from "./components/GlobalToastHost";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RouteTransitionGate from "./components/RouteTransitionGate";
@@ -15,12 +16,18 @@ import {
   StudentClassroomChatPage,
   StudentFinancePage,
   StudentLearningPage,
-  StudentLoansPage,
   StudentMessagesPage,
   StudentMorePage,
   StudentProgressPage,
   StudentLiveClassesPage
 } from "./pages/Portal";
+import {
+  StudentApprovedLoanPage,
+  StudentLoanApplicationPage,
+  StudentLoanRepaymentPage,
+  StudentLoansPage,
+  StudentLoanStatusPage
+} from "./pages/loans/StudentLoanPages";
 import { USER_ROLES } from "./services/roleService";
 
 function getRouteBrand(location) {
@@ -129,6 +136,7 @@ export default function App() {
     <>
       <BrandRouteSync />
       <ScrollToTop />
+      <GlobalToastHost />
       <WelcomeExperience brand={welcomeBrand}>
         <RouteTransitionGate>
           {(displayLocation) => (
@@ -230,6 +238,10 @@ export default function App() {
               <Route path="finance" element={<StudentFinancePage />} />
               <Route path="finance/payments" element={<PortalSection page="payments" />} />
               <Route path="finance/loans" element={<StudentLoansPage />} />
+              <Route path="finance/loans/apply" element={<StudentLoanApplicationPage />} />
+              <Route path="finance/loans/status" element={<StudentLoanStatusPage />} />
+              <Route path="finance/loans/approved" element={<StudentApprovedLoanPage />} />
+              <Route path="finance/loans/repayment" element={<StudentLoanRepaymentPage />} />
               <Route path="payments" element={<Navigate to="/portal/finance/payments" replace />} />
               <Route path="loans" element={<Navigate to="/portal/finance/loans" replace />} />
               <Route path="live-classes" element={<StudentLiveClassesPage />} />

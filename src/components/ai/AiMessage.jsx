@@ -56,7 +56,7 @@ export default function AiMessage({ message, onRegenerate }) {
             {text}
           </ReactMarkdown>
         ) : <p>{text}</p>}
-        {message.status === "streaming" && !text ? <span className="ai-thinking" role="status">Preparing a helpful response</span> : null}
+        {message.status === "streaming" && !text ? <span className="ai-thinking" role="status">Thinking</span> : null}
         {message.status === "failed" ? <p className="form-status warning">This response was not completed. Reserved credits were returned.</p> : null}
         {sources.length ? (
           <div className="ai-sources">
