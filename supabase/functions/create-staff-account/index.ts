@@ -1,18 +1,6 @@
 import { handleOptions, isAllowedOrigin, jsonResponse } from "../_shared/cors.ts";
 import { assertVerifiedAdmin, writeAuditLog } from "../_shared/security.ts";
 
-const capabilities = [
-  "account_search",
-  "view_basic_profile",
-  "view_programme_assignment",
-  "view_payment_status",
-  "view_loan_status",
-  "correct_contact_information",
-  "send_support_notification",
-  "resolve_support_case",
-  "create_admin_escalation"
-];
-
 function clean(value: unknown) {
   return String(value || "").trim();
 }
@@ -69,37 +57,18 @@ Deno.serve(async (request) => {
 
     const staffUserId = created.user.id;
     try {
-      const { error: profileError } = await admin.supabase.from("profiles").upsert({
-        id: staffUserId,
-        full_name: fullName,
-        email,
-        phone,
-        account_status: "inactive",
-        status_reason: "New Staff account pending Admin activation",
-        status_changed_at: new Date().toISOString(),
-        must_change_password: true,
-        profile_completed: true
-      }, { onConflict: "id" });
-      if (profileError) throw profileError;
-
-      const { error: roleError } = await admin.supabase.from("user_roles").upsert({ user_id: staffUserId, role: "staff" }, { onConflict: "user_id" });
-      if (roleError) throw roleError;
-
-      const { error: staffError } = await admin.supabase.from("staff_profiles").upsert({
-        user_id: staffUserId,
-        job_title: jobTitle,
-        department,
-        created_by: admin.user.id
-      }, { onConflict: "user_id" });
-      if (staffError) throw staffError;
-
-      const { error: capabilityError } = await admin.supabase.from("staff_capabilities").upsert(
-        capabilities.map((capability) => ({ staff_user_id: staffUserId, capability, enabled: false, granted_by: admin.user.id })),
-        { onConflict: "staff_user_id,capability" }
-      );
-      if (capabilityError) throw capabilityError;
-
-      const { data: profile, error: verifyError } = await admin.supabase.from("profiles").select("portal_id, account_status").eq("id", staffUserId).single();
+      const { data: provisioned, error: provisionError } = await admin.supabase.rpc("provision_staff_account", {
+        staff_user_id: staffUserId,
+        admin_user_id: admin.user.id,
+        staff_full_name: fullName,
+        staff_email: email,
+        staff_phone: phone,
+        staff_job_title: jobTitle,
+        staff_department: department
+      });
+      if (provisionError) throw provisionError;
+      const profile = Array.isArray(provisioned) ? provisioned[0] : provisioned;
+      const verifyError = !profile;
       if (verifyError || !/^ZIF-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(profile?.portal_id || "") || profile.account_status !== "inactive") {
         throw new Error("Staff account verification did not pass.");
       }

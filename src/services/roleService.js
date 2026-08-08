@@ -77,10 +77,25 @@ export async function getAdminVerificationStatus(userId) {
   const supabase = await getSupabaseClient();
   if (!supabase) return false;
 
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData?.session?.access_token || "";
+  let sessionId = "";
+  try {
+    const encodedPayload = accessToken.split(".")[1] || "";
+    const normalizedPayload = encodedPayload.replace(/-/g, "+").replace(/_/g, "/");
+    const paddedPayload = normalizedPayload.padEnd(normalizedPayload.length + ((4 - normalizedPayload.length % 4) % 4), "=");
+    const payload = JSON.parse(window.atob(paddedPayload));
+    sessionId = String(payload.session_id || payload.sid || "");
+  } catch {
+    return false;
+  }
+  if (!sessionId) return false;
+
   const { data, error } = await supabase
     .from("admin_session_verifications")
     .select("expires_at")
     .eq("user_id", userId)
+    .eq("session_id", sessionId)
     .gt("expires_at", new Date().toISOString())
     .maybeSingle();
 
