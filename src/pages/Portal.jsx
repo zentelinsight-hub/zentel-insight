@@ -3,24 +3,37 @@ import { useEffect, useState } from "react";
 import {
   Award,
   Bell,
+  BookOpen,
   BrainCircuit,
   CalendarDays,
   CheckCircle2,
   Clock3,
+  CreditCard,
+  FileQuestion,
+  FileText,
   GraduationCap,
+  ImagePlus,
   LayoutDashboard,
   LifeBuoy,
+  ListChecks,
+  LoaderCircle,
   MessageSquare,
+  MoreHorizontal,
   Moon,
+  ReceiptText,
+  School,
+  Send,
+  ShieldCheck,
   Sun,
   Settings,
   UserRound,
-  Video
+  Video,
+  WalletCards
 } from "lucide-react";
 import LiveClassCards from "../components/LiveClassCards";
-import PageVisual from "../components/PageVisual";
 import ProgramChatPanel from "../components/ProgramChatPanel";
 import PortalIdCard from "../components/portal/PortalIdCard";
+import PortalNavigationPage from "../components/portal/PortalNavigationPage";
 import PortalShell from "../components/portal/PortalShell";
 import { useAuth } from "../context/authHooks";
 import { useTheme } from "../context/themeHooks";
@@ -33,7 +46,7 @@ import {
   useStudentAttendance,
   useStudentCertificates,
   useStudentClassroom,
-  useStudentDashboard,
+  useStudentFeed,
   useStudentEnrolments,
   useStudentLiveClasses,
   useStudentNotifications,
@@ -46,6 +59,7 @@ import {
 } from "../hooks/portal/usePortalData";
 import {
   createSupportTicket,
+  createStudentFeedPost,
   calculateProfileCompletion,
   markAllNotificationsRead,
   markNotificationRead,
@@ -96,11 +110,6 @@ function formatScheduleDay(item) {
   return Number.isInteger(day) && day >= 0 && day < dayNames.length ? dayNames[day] : "Schedule pending";
 }
 
-function getFirstName(profile, user) {
-  const name = profile?.full_name || user?.email || "Learner";
-  return String(name).trim().split(/\s+/)[0] || "Learner";
-}
-
 function getCourseName(item) {
   return item?.programs?.title || item?.program_title || item?.product_name || "Zentel Insight programme";
 }
@@ -147,11 +156,9 @@ function PortalAvatar({ profile, user, size = "md" }) {
 
 function PortalLoading({ label = "Loading information" }) {
   return (
-    <div className="portal-skeleton" role="status" aria-live="polite">
-      <span>{label}</span>
-      <div />
-      <div />
-      <div />
+    <div className="portal-local-loading" role="status" aria-live="polite">
+      <LoaderCircle className="spin-icon" size={20} aria-hidden="true" />
+      <span>{label}...</span>
     </div>
   );
 }
@@ -250,16 +257,9 @@ export function PortalLayout() {
         primaryItems: [
           { to: "/portal", label: "Home", Icon: LayoutDashboard, end: true },
           { to: "/portal/learning", label: "Learning", Icon: GraduationCap },
-          { to: "/portal/classroom/chat", label: "Messages", Icon: MessageSquare, badge: unreadChatCount },
-          { to: "/portal/zentel-ai", label: "Zentel AI", Icon: BrainCircuit }
-        ],
-        moreItems: [
-          { to: "/portal/classroom", label: "Classroom", Icon: MessageSquare, end: true },
-          { to: "/portal/progress", label: "Progress", Icon: Award },
-          { to: "/portal/notifications", label: "Notifications", Icon: Bell, badge: unreadNotificationCount },
-          { to: "/portal/account", label: "Account", Icon: UserRound },
-          { to: "/portal/support", label: "Support", Icon: LifeBuoy },
-          { to: "/portal/settings", label: "Settings", Icon: Settings }
+          { to: "/portal/messages", label: "Messages", Icon: MessageSquare, badge: unreadChatCount },
+          { to: "/portal/zentel-ai", label: "Zentel AI", Icon: BrainCircuit },
+          { to: "/portal/more", label: "More", Icon: MoreHorizontal, badge: unreadNotificationCount }
         ]
       }}
       header={{
@@ -296,138 +296,135 @@ export function PortalLayout() {
   );
 }
 
+export function StudentLearningPage() {
+  return <PortalNavigationPage eyebrow="Student Portal" title="Learning" description="Open one learning area at a time." items={[
+    { to: "/portal/learning/programme", label: "My Programme", description: "Programme and assigned track", Icon: GraduationCap },
+    { to: "/portal/learning/classroom", label: "My Classroom", description: "Classroom and Tutor information", Icon: School },
+    { to: "/portal/learning/modules", label: "Modules & Lessons", description: "Published learning modules", Icon: BookOpen },
+    { to: "/portal/learning/timetable", label: "Timetable", description: "Weekly class schedule", Icon: CalendarDays },
+    { to: "/portal/learning/assignments", label: "Assignments", description: "Tasks, submissions and feedback", Icon: FileText },
+    { to: "/portal/learning/quizzes", label: "Quizzes & Tests", description: "Online knowledge checks", Icon: FileQuestion },
+    { to: "/portal/learning/resources", label: "Learning Resources", description: "Approved learning materials", Icon: BookOpen },
+    { to: "/portal/learning/certificates", label: "Certificates", description: "Issued certificates", Icon: Award }
+  ]} />;
+}
+
+export function StudentMessagesPage() {
+  return <PortalNavigationPage eyebrow="Student Portal" title="Messages" description="Choose a conversation." items={[
+    { to: "/portal/messages/classroom", label: "Classroom Chat", description: "Message your Tutor and classmates", Icon: MessageSquare }
+  ]} />;
+}
+
+export function StudentAiPage() {
+  return <PortalNavigationPage eyebrow="Student Portal" title="Zentel AI" description="Choose an AI workspace." items={[
+    { to: "/portal/zentel-ai/new", label: "New Chat", description: "Start a conversation", Icon: BrainCircuit },
+    { to: "/portal/zentel-ai/history", label: "History", description: "Find previous conversations", Icon: Clock3 },
+    { to: "/portal/zentel-ai/usage", label: "Credits & Usage", description: "Review available credits and usage", Icon: ListChecks },
+    { to: "/portal/zentel-ai/plans", label: "Plans", description: "Compare available AI plans", Icon: WalletCards },
+    { to: "/portal/zentel-ai/billing", label: "Billing", description: "AI billing information", Icon: ReceiptText },
+    { to: "/portal/zentel-ai/settings", label: "Settings", description: "Conversation preferences", Icon: Settings }
+  ]} />;
+}
+
+export function StudentFinancePage() {
+  return <PortalNavigationPage eyebrow="Student Portal" title="Finance" description="Open the finance information available to your account." items={[
+    { to: "/portal/finance/payments", label: "Active Payment", description: "Current programme payment status", Icon: CreditCard },
+    { to: "/portal/finance/loans", label: "Loans", description: "Loan status when available", Icon: WalletCards }
+  ]} />;
+}
+
+export function StudentProgressPage() {
+  return <PortalNavigationPage eyebrow="Student Portal" title="Progress" description="Open one progress record at a time." items={[
+    { to: "/portal/progress/grades", label: "Grades", description: "Published assessment results", Icon: Award },
+    { to: "/portal/progress/performance", label: "Performance", description: "Overall learning performance", Icon: ListChecks },
+    { to: "/portal/attendance", label: "Attendance", description: "Class participation history", Icon: CheckCircle2 }
+  ]} />;
+}
+
+export function StudentLoansPage() {
+  return (
+    <div className="portal-page">
+      <header className="portal-compact-heading"><p className="eyebrow">Finance</p><h1>Loans</h1></header>
+      <PortalEmpty content={{ empty_title: "No loan information available", empty_message: "Loan information will appear here only when a loan is connected to your account." }} />
+    </div>
+  );
+}
+
+export function StudentMorePage() {
+  return <PortalNavigationPage eyebrow="Student Portal" title="More" items={[
+    { to: "/portal/progress", label: "Progress", description: "Grades and learning performance", Icon: Award },
+    { to: "/portal/live-classes", label: "Live Classes", description: "Scheduled and active sessions", Icon: Video },
+    { to: "/portal/attendance", label: "Attendance", description: "Class participation records", Icon: CheckCircle2 },
+    { to: "/portal/announcements", label: "Announcements", description: "Academic and platform notices", Icon: Bell },
+    { to: "/portal/notifications", label: "Notifications", description: "Account and classroom updates", Icon: Bell },
+    { to: "/portal/finance", label: "Finance", description: "Active payment and loan status", Icon: CreditCard },
+    { to: "/portal/profile", label: "Profile", description: "Your read-only account credentials", Icon: UserRound },
+    { to: "/portal/support", label: "Support", description: "Tickets and support replies", Icon: LifeBuoy },
+    { to: "/portal/settings", label: "Security & Settings", description: "Theme, preferences and session security", Icon: ShieldCheck }
+  ]} />;
+}
+
 export function PortalOverview() {
   const { user, profile } = useAuth();
-  const dashboard = useStudentDashboard(user?.id);
-  const completion = calculateProfileCompletion(profile);
+  const feed = useStudentFeed(user?.id);
+  const [body, setBody] = useState("");
+  const [image, setImage] = useState(null);
+  const [status, setStatus] = useState({ type: "", message: "" });
+  const [publishing, setPublishing] = useState(false);
+
+  usePageMeta({ path: "/portal", title: "Home", description: "Student and technology feed.", robots: "noindex,nofollow" });
+
+  async function publish(event) {
+    event.preventDefault();
+    setPublishing(true);
+    setStatus({ type: "", message: "" });
+    try {
+      await createStudentFeedPost({ userId: user.id, body, image });
+      setBody("");
+      setImage(null);
+      setStatus({ type: "success", message: "Post published." });
+      feed.refetch();
+    } catch (error) {
+      setStatus({ type: "warning", message: error.message || "Your post could not be published." });
+    } finally {
+      setPublishing(false);
+    }
+  }
 
   return (
-    <PortalPage slug="dashboard">
-      {(content) => {
-        const dashboardVisual = <PageVisual visualKey="studentDashboard" placement="dashboard" />;
-        if (dashboard.loading) return <>{dashboardVisual}<PortalLoading label="Loading dashboard" /></>;
-        if (dashboard.error) return <>{dashboardVisual}<PortalError message={dashboard.error} onRetry={dashboard.refetch} /></>;
-        const data = dashboard.data;
-        if (!data) return <>{dashboardVisual}<PortalEmpty content={content} /></>;
-        const activeEnrolments = data.activeEnrolments || [];
-        const announcements = data.announcements || [];
-        const certificates = data.certificates || [];
-        const activePayments = data.activePayments || [];
-        const pendingAssignments = data.pendingAssignments || [];
-        const resources = data.resources || [];
-        const timetable = data.timetable || [];
-        const unreadNotifications = data.unreadNotifications || [];
-        const resolvedProgrammeName = data.resolvedProgramme?.title || activeEnrolments[0]?.programs?.title || "Assignment pending";
-        return (
-          <>
-            {dashboardVisual}
-            <section className="portal-welcome-card">
-              <PortalAvatar profile={profile} user={user} size="lg" />
-              <div>
-                <p className="eyebrow">Welcome back, {getFirstName(profile, user)}</p>
-                <h3>Your learner workspace is ready</h3>
-                <p>Review your active programmes, published class information, account notices and support records from one secure portal.</p>
-              </div>
-            </section>
-            <div className="dashboard-grid">
-              <article className="dashboard-card">
-                <GraduationCap size={22} aria-hidden="true" />
-                <span>My Programme</span>
-                <strong>{resolvedProgrammeName}</strong>
-                <small>{getProgrammeSourceLabel(data.programmeSource)}</small>
-              </article>
-              <article className="dashboard-card">
-                <Clock3 size={22} aria-hidden="true" />
-                <span>Next Class</span>
-                <strong>{data.upcomingClass ? formatTime(data.upcomingClass.start_time) : "Not published"}</strong>
-                <small>{data.upcomingClass ? `${formatScheduleDay(data.upcomingClass)} - ${getCourseName(data.upcomingClass)}` : data.needsProgrammeSelection ? "Admin programme assignment pending." : "No timetable yet."}</small>
-              </article>
-              <article className="dashboard-card">
-                <CalendarDays size={22} aria-hidden="true" />
-                <span>Today&apos;s Class</span>
-                <strong>{data.todayClass ? formatTime(data.todayClass.start_time) : "No class today"}</strong>
-                <small>{data.todayClass ? `${getCourseName(data.todayClass)} ends ${formatTime(data.todayClass.end_time)}` : "Check the weekly timetable."}</small>
-              </article>
-              <article className="dashboard-card">
-                <LayoutDashboard size={22} aria-hidden="true" />
-                <span>Timetable</span>
-                <strong>View Full Timetable</strong>
-                <small>{timetable.length ? `${timetable.length} weekly class ${timetable.length === 1 ? "entry" : "entries"}.` : "Open your class schedule."}</small>
-                <Link to="/portal/timetable">Open Timetable</Link>
-              </article>
-            </div>
-            <div className="portal-grid">
-              <article className="notice-card">
-                <h3>Next class</h3>
-                {data.upcomingClass ? (
-                  <>
-                    <p>{getCourseName(data.upcomingClass)} on {formatScheduleDay(data.upcomingClass)} from {formatTime(data.upcomingClass.start_time)} to {formatTime(data.upcomingClass.end_time)} {data.upcomingClass.timezone || "Africa/Lagos"}.</p>
-                    {data.upcomingClass.meeting_provider ? <span className="portal-tag">{data.upcomingClass.meeting_provider}</span> : null}
-                  </>
-                ) : (
-                  <p>Your next class appears after an approved timetable entry is published for your programme.</p>
-                )}
-                <Link className="text-link" to="/portal/timetable">View Timetable</Link>
-              </article>
-              <article className="notice-card">
-                <h3>Learning status</h3>
-                <dl className="portal-mini-details">
-                  <div><dt>Profile</dt><dd>{completion}%</dd></div>
-                  <div><dt>Active courses</dt><dd>{activeEnrolments.length}</dd></div>
-                  <div><dt>Assignments</dt><dd>{pendingAssignments.length}</dd></div>
-                  <div><dt>Resources</dt><dd>{resources.length}</dd></div>
-                  <div><dt>Certificates</dt><dd>{certificates.length}</dd></div>
-                  <div><dt>Unread notices</dt><dd>{unreadNotifications.length}</dd></div>
-                </dl>
-              </article>
-              <article className="notice-card">
-                <h3>Recent announcements</h3>
-                {announcements.length ? (
-                  <ul className="portal-clean-list">
-                    {announcements.map((item) => <li key={item.id}>{item.title}</li>)}
-                  </ul>
-                ) : (
-                  <p>Official notices for your account are listed after publication.</p>
-                )}
-                <Link className="text-link" to="/portal/announcements">Read notices</Link>
-              </article>
-              <article className="notice-card">
-                <h3>Active Payment</h3>
-                {activePayments.length ? (
-                  <p>Active Payment is confirmed for your assigned programme.</p>
-                ) : (
-                  <p>Active Payment appears after Admin assigns and activates your programme.</p>
-                )}
-                <Link className="text-link" to="/portal/payments">View Active Payment</Link>
-              </article>
-              <article className="notice-card">
-                <h3>Quick links</h3>
-                <div className="portal-quick-links">
-                  <Link to="/portal/timetable">View Timetable</Link>
-                  <Link to="/portal/my-courses">Open My Courses</Link>
-                  <Link to="/portal/assignments">View Assignments</Link>
-                  <Link to="/portal/resources">Browse Resources</Link>
-                  <Link to="/portal/support">Contact Support</Link>
-                  <Link to="/portal/profile">View Profile</Link>
-                </div>
-              </article>
-              <article className="notice-card">
-                <h3>Session security</h3>
-                <p>For your security, your Portal session will automatically sign out after 10 minutes without activity. You will receive a warning shortly before logout.</p>
-                <span className="portal-tag success"><Clock3 size={14} aria-hidden="true" /> Active session</span>
-              </article>
-            </div>
-          </>
-        );
-      }}
-    </PortalPage>
+    <div className="portal-page student-feed-page">
+      <header className="portal-compact-heading"><p className="eyebrow">Student Portal</p><h1>Home</h1></header>
+      <form className="feed-composer" onSubmit={publish}>
+        <PortalAvatar profile={profile} user={user} size="sm" />
+        <label><span className="sr-only">Create a post</span><textarea rows="2" maxLength="3000" value={body} onChange={(event) => setBody(event.target.value)} placeholder="Share an update with the Zentel Insight community" /></label>
+        <label className="feed-file-button" title="Add image"><ImagePlus size={18} aria-hidden="true" /><span className="sr-only">Add image</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setImage(event.target.files?.[0] || null)} /></label>
+        <button className="feed-publish-button" type="submit" title="Publish post" disabled={publishing || !body.trim()}><Send size={18} aria-hidden="true" /><span className="sr-only">Publish post</span></button>
+        {image ? <small className="feed-file-name">{image.name}</small> : null}
+      </form>
+      {status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}
+      {feed.loading ? <PortalLoading label="Loading feed" /> : null}
+      {feed.error ? <PortalError message={feed.error} onRetry={feed.refetch} /> : null}
+      {!feed.loading && !feed.error ? (
+        <section className="student-feed" aria-label="Student and technology feed">
+          {(feed.data || []).map((item) => (
+            <article className="feed-entry" key={item.id}>
+              <header><span className="portal-avatar sm">{item.kind === "student" ? item.author.slice(0, 1).toUpperCase() : <BrainCircuit size={17} aria-hidden="true" />}</span><div><strong>{item.author}</strong><small>{item.category ? `${item.category} · ` : ""}{formatDateTime(item.createdAt)}</small></div></header>
+              {item.title ? <h2>{item.title}</h2> : null}
+              <p>{item.body}</p>
+              {item.imageUrl ? <img src={item.imageUrl} alt={`${item.author} post`} loading="lazy" width="1200" height="675" /> : null}
+              {item.externalUrl ? <a className="text-link" href={item.externalUrl} target="_blank" rel="noreferrer">Open source</a> : null}
+            </article>
+          ))}
+          {!(feed.data || []).length ? <PortalEmpty content={{ empty_title: "The feed is ready", empty_message: "Student posts and published technology content will appear here." }} /> : null}
+        </section>
+      ) : null}
+    </div>
   );
 }
 
 function StudentClassroomPage() {
   const { user } = useAuth();
   const classroom = useStudentClassroom(user?.id);
-  const liveClasses = useStudentLiveClasses(user?.id);
 
   return (
     <PortalPage slug="classroom">
@@ -449,63 +446,25 @@ function StudentClassroomPage() {
         const tutorName = classroom.data.tutor_id
           ? `${classroom.data.tutor_title || ""} ${classroom.data.tutor_first_name || "Tutor"}`.trim()
           : "Pending assignment";
-        const scheduledClasses = liveClasses.data || [];
-        const nextClass = scheduledClasses.find((session) => new Date(session.scheduled_end || session.scheduled_start || 0).getTime() >= Date.now()) || null;
-        const liveNow = scheduledClasses.some((session) => ["live", "in_progress"].includes(session.status));
-
         return (
           <div className="portal-page">
-            <div className="portal-page-heading">
+            <div className="portal-compact-heading">
               <div>
                 <p className="eyebrow">Classroom</p>
-                <h2>{classroom.data.program_title}</h2>
-                <p>Official programme classroom.</p>
+                <h1>{classroom.data.classroom_name || classroom.data.program_title}</h1>
               </div>
-              <span className="portal-tag success">Official</span>
             </div>
-            <div className="classroom-summary-grid">
-              <article className="dashboard-card">
-                <GraduationCap size={22} aria-hidden="true" />
-                <span>Programme</span>
-                <strong>{classroom.data.program_title}</strong>
-                <small>{classroom.data.track_name || "All tracks"}</small>
-              </article>
-              <article className="dashboard-card">
-                <UserRound size={22} aria-hidden="true" />
-                <span>Tutor</span>
-                <strong>{classroom.data.tutor_id ? tutorName : "Pending"}</strong>
-                <small>{classroom.data.tutor_specialisation || "Tutor assignment status"}</small>
-              </article>
-              <article className="dashboard-card">
-                <CalendarDays size={22} aria-hidden="true" />
-                <span>Next class</span>
-                <strong>{nextClass ? formatDateTime(nextClass.scheduled_start) : "Not scheduled"}</strong>
-                <small>{nextClass?.title || "No upcoming session"}</small>
-              </article>
-              <article className="dashboard-card">
-                <Video size={22} aria-hidden="true" />
-                <span>Live status</span>
-                <strong>{liveNow ? "Live now" : "Offline"}</strong>
-                <small>{liveNow ? "A classroom session is open" : "No session is live"}</small>
-              </article>
-              <article className="dashboard-card">
-                <MessageSquare size={22} aria-hidden="true" />
-                <span>Programme chat</span>
-                <strong>Live conversation</strong>
-                <small>Chat with your tutor and classmates</small>
-              </article>
-              <article className="dashboard-card">
-                <CheckCircle2 size={22} aria-hidden="true" />
-                <span>Attendance</span>
-                <strong>Class records</strong>
-                <small>Review your joined sessions</small>
-              </article>
-            </div>
-            <div className="classroom-section-links">
-              <Link className="classroom-section-link" to="/portal/classroom/chat"><MessageSquare size={20} /><span><strong>Chat</strong><small>Open your programme conversation</small></span></Link>
-              <Link className="classroom-section-link" to="/portal/classroom/live"><Video size={20} /><span><strong>Live Classes</strong><small>View and join scheduled sessions</small></span></Link>
-              <Link className="classroom-section-link" to="/portal/classroom/attendance"><CheckCircle2 size={20} /><span><strong>Attendance</strong><small>Review your participation history</small></span></Link>
-            </div>
+            <dl className="portal-detail-rows">
+              <div><dt>Programme</dt><dd>{classroom.data.program_title}</dd></div>
+              <div><dt>Track</dt><dd>{classroom.data.track_name || "All tracks"}</dd></div>
+              <div><dt>Tutor</dt><dd>{classroom.data.tutor_id ? tutorName : "Pending assignment"}</dd></div>
+              <div><dt>Specialisation</dt><dd>{classroom.data.tutor_specialisation || "Not recorded"}</dd></div>
+            </dl>
+            <nav className="portal-destination-list compact" aria-label="Classroom pages">
+              <Link to="/portal/messages/classroom"><span className="portal-destination-icon"><MessageSquare size={18} /></span><span className="portal-destination-copy"><strong>Chat</strong><small>Open your programme conversation</small></span><span aria-hidden="true">›</span></Link>
+              <Link to="/portal/live-classes"><span className="portal-destination-icon"><Video size={18} /></span><span className="portal-destination-copy"><strong>Live Classes</strong><small>View and join scheduled sessions</small></span><span aria-hidden="true">›</span></Link>
+              <Link to="/portal/attendance"><span className="portal-destination-icon"><CheckCircle2 size={18} /></span><span className="portal-destination-copy"><strong>Attendance</strong><small>Review your participation history</small></span><span aria-hidden="true">›</span></Link>
+            </nav>
           </div>
         );
       }}
@@ -514,20 +473,20 @@ function StudentClassroomPage() {
 }
 
 export function StudentClassroomChatPage() {
-  usePageMeta({ path: "/portal/classroom/chat", title: "Classroom Chat", description: "Your private programme classroom conversation.", robots: "noindex,nofollow" });
-  return <div className="portal-page chat-route-page"><ProgramChatPanel audience="student" standalone backTo="/portal/classroom" /></div>;
+  usePageMeta({ path: "/portal/messages/classroom", title: "Classroom Chat", description: "Your private programme classroom conversation.", robots: "noindex,nofollow" });
+  return <div className="portal-page chat-route-page"><ProgramChatPanel audience="student" standalone backTo="/portal/messages" /></div>;
 }
 
 export function StudentLiveClassesPage() {
   const { user } = useAuth();
   const liveClasses = useStudentLiveClasses(user?.id);
-  return <PortalPage slug="classroom">{() => <div className="portal-page"><div className="portal-page-heading"><div><p className="eyebrow">Classroom</p><h2>Live Classes</h2><p>View and join authorised programme sessions.</p></div><Link className="button button-secondary" to="/portal/classroom">Classroom Overview</Link></div>{liveClasses.loading ? <PortalLoading label="Loading live classes" /> : liveClasses.error ? <PortalError message={liveClasses.error} onRetry={liveClasses.refetch} /> : <LiveClassCards sessions={liveClasses.data || []} emptyMessage="No live class is scheduled. Your Tutor will notify you when a session is available." />}</div>}</PortalPage>;
+  return <PortalPage slug="classroom">{() => <div className="portal-page"><div className="portal-compact-heading"><div><p className="eyebrow">Classroom</p><h1>Live Classes</h1></div></div>{liveClasses.loading ? <PortalLoading label="Loading live classes" /> : liveClasses.error ? <PortalError message={liveClasses.error} onRetry={liveClasses.refetch} /> : <LiveClassCards sessions={liveClasses.data || []} emptyMessage="No live class is scheduled. Your Tutor will notify you when a session is available." />}</div>}</PortalPage>;
 }
 
 export function StudentAttendancePage() {
   const { user } = useAuth();
   const attendance = useStudentAttendance(user?.id);
-  return <PortalPage slug="classroom">{() => <div className="portal-page"><div className="portal-page-heading"><div><p className="eyebrow">Classroom</p><h2>Attendance</h2><p>Your live-class participation history.</p></div><Link className="button button-secondary" to="/portal/classroom">Classroom Overview</Link></div>{attendance.loading ? <PortalLoading label="Loading attendance" /> : attendance.error ? <PortalError message={attendance.error} onRetry={attendance.refetch} /> : (attendance.data || []).length ? <div className="portal-list">{attendance.data.map((record) => <article className="portal-record-card" key={record.id}><div><p className="eyebrow">{record.attendance_status}</p><h3>{record.live_class_sessions?.title || "Live class"}</h3><p>{record.live_class_sessions?.programs?.title || "Programme"}</p></div><dl className="portal-mini-details"><div><dt>Joined</dt><dd>{formatDateTime(record.joined_at)}</dd></div><div><dt>Left</dt><dd>{record.left_at ? formatDateTime(record.left_at) : "Session active"}</dd></div></dl></article>)}</div> : <PortalEmpty content={{ empty_title: "No attendance records yet", empty_message: "Your attendance appears after you join a live class." }} />}</div>}</PortalPage>;
+  return <PortalPage slug="classroom">{() => <div className="portal-page"><div className="portal-compact-heading"><div><p className="eyebrow">Classroom</p><h1>Attendance</h1></div></div>{attendance.loading ? <PortalLoading label="Loading attendance" /> : attendance.error ? <PortalError message={attendance.error} onRetry={attendance.refetch} /> : (attendance.data || []).length ? <div className="portal-list">{attendance.data.map((record) => <article className="portal-record-card" key={record.id}><div><p className="eyebrow">{record.attendance_status}</p><h3>{record.live_class_sessions?.title || "Live class"}</h3><p>{record.live_class_sessions?.programs?.title || "Programme"}</p></div><dl className="portal-mini-details"><div><dt>Joined</dt><dd>{formatDateTime(record.joined_at)}</dd></div><div><dt>Left</dt><dd>{record.left_at ? formatDateTime(record.left_at) : "Session active"}</dd></div></dl></article>)}</div> : <PortalEmpty content={{ empty_title: "No attendance records yet", empty_message: "Your attendance appears after you join a live class." }} />}</div>}</PortalPage>;
 }
 
 function MyCoursesPage() {
@@ -863,29 +822,26 @@ function NotificationsPage() {
   }
 
   return (
-    <PortalPage slug="notifications" actions={<button className="button button-secondary" type="button" onClick={markAll} disabled={busy}>Mark all as read</button>}>
-      {(content) => {
-        if (query.loading) return <PortalLoading label="Loading notifications" />;
-        if (query.error) return <PortalError message={query.error} onRetry={query.refetch} />;
-        const records = query.data || [];
-        if (!records.length) return <PortalEmpty content={content} />;
-        return (
-          <div className="portal-list">
-            {records.map((item) => (
-              <article className={`portal-record-card ${item.read_at ? "" : "unread"}`} key={item.id}>
-                <div>
-                  <p className="eyebrow">{item.notification_type || "Portal update"}</p>
-                  <h3>{item.title}</h3>
-                  <p>{item.message}</p>
-                  <small>{formatDateTime(item.created_at)}</small>
-                </div>
-                {item.read_at ? <span className="portal-tag">Read</span> : <button className="button button-secondary" type="button" onClick={() => markOne(item.id)} disabled={busy}>Mark as read</button>}
-              </article>
-            ))}
-          </div>
-        );
-      }}
-    </PortalPage>
+    <div className="portal-page notification-page">
+      <header className="portal-compact-heading notification-heading">
+        <div><p className="eyebrow">Student Portal</p><h1>Notifications</h1></div>
+        <button className="compact-text-action" type="button" onClick={markAll} disabled={busy}>Mark all read</button>
+      </header>
+      {query.loading ? <PortalLoading label="Loading notifications" /> : null}
+      {query.error ? <PortalError message={query.error} onRetry={query.refetch} /> : null}
+      {!query.loading && !query.error && !(query.data || []).length ? <PortalEmpty content={{ empty_title: "You have no notifications", empty_message: "New account and classroom updates will appear here." }} /> : null}
+      {!query.loading && !query.error ? (
+        <div className="notification-list">
+          {(query.data || []).map((item) => (
+            <button className={`notification-row ${item.read_at ? "" : "unread"}`} type="button" key={item.id} onClick={() => !item.read_at && markOne(item.id)} disabled={busy}>
+              <span className="notification-icon"><Bell size={17} aria-hidden="true" /></span>
+              <span className="notification-copy"><strong>{item.title || "Portal update"}</strong><span>{item.message}</span><small>{formatDateTime(item.created_at)}</small></span>
+              {!item.read_at ? <span className="notification-unread" aria-label="Unread" /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

@@ -27,6 +27,9 @@ verify_jwt = true
 [functions.claim-my-enrolments]
 verify_jwt = true
 
+[functions.student-tech-feed]
+verify_jwt = true
+
 [functions.delete-account]
 verify_jwt = true
 

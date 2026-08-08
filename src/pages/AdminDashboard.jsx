@@ -14,6 +14,7 @@ import {
   LifeBuoy,
   Megaphone,
   MessageSquare,
+  MoreHorizontal,
   Newspaper,
   Settings,
   Search,
@@ -22,15 +23,16 @@ import {
   Users,
   Video
 } from "lucide-react";
-import { NavLink, useNavigate, useParams } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import LiveClassCards from "../components/LiveClassCards";
 import ProgramChatPanel from "../components/ProgramChatPanel";
 import PortalDialog from "../components/portal/PortalDialog";
+import PortalNavigationPage from "../components/portal/PortalNavigationPage";
 import PortalShell from "../components/portal/PortalShell";
 import { AccountLookupSection, AccountManagementSection } from "./admin/AdminAccountSections";
 import AdminAiSection from "./admin/AdminAiSection";
 import AdminStaffSection from "./admin/AdminStaffSection";
-import { resolveAdminSection } from "./admin/adminRouteUtils";
+import { resolveAdminRoute } from "./admin/adminRouteUtils";
 import { useAuth } from "../context/authHooks";
 import { useAsyncData } from "../hooks/useAsyncData";
 import {
@@ -139,9 +141,9 @@ function AdminFrame({ data, onRealtimeChange, children }) {
           navigationItem("overview"),
           navigationItem("accounts"),
           navigationItem("classrooms", "Messages", "/admin/classrooms/all/chat"),
-          navigationItem("academics")
-        ],
-        moreItems: ["staff", "classrooms", "programmes", "enrolments", "timetable", "live-classes", "announcements", "assignments", "resources", "finance", "payments", "zentel-ai", "support", "audit", "profile", "settings"].map((slug) => navigationItem(slug))
+          navigationItem("academics"),
+          { to: "/admin/more", label: "More", Icon: MoreHorizontal }
+        ]
       }}
       header={{
         eyebrow: "Admin",
@@ -176,6 +178,14 @@ function AdminFrame({ data, onRealtimeChange, children }) {
       {children}
     </PortalShell>
   );
+}
+
+function AdminMoreSection() {
+  const slugs = ["staff", "programmes", "enrolments", "classrooms", "live-classes", "timetable", "announcements", "assignments", "resources", "finance", "payments", "zentel-ai", "support", "audit", "profile", "settings"];
+  return <PortalNavigationPage eyebrow="Admin Portal" title="More" description="Open an administration workspace." items={slugs.map((slug) => {
+    const [, label, Icon] = sections.find(([itemSlug]) => itemSlug === slug);
+    return { to: `/admin/${slug}`, label, description: `Open ${label.toLowerCase()}`, Icon };
+  })} />;
 }
 
 function PageHeading({ eyebrow = "Admin", title, description, actions }) {
@@ -1701,17 +1711,17 @@ function AdminSettingsSection() {
 }
 
 export default function AdminDashboard({ forcedSection = "" }) {
-  const { section, portalId = "", roomId = "" } = useParams();
-  const activeSection = forcedSection || resolveAdminSection(section, portalId);
+  const location = useLocation();
+  const { section: activeSection, portalId, roomId } = resolveAdminRoute(location.pathname, forcedSection);
   const activeSectionLabel = sections.find(([slug]) => slug === activeSection)?.[1] || "Overview";
   const dataQuery = useAsyncData(
-    () => getAdminDashboardData(activeSection === "classroom-chat" ? "classrooms" : activeSection),
+    () => getAdminDashboardData(activeSection === "classroom-chat" ? "classrooms" : activeSection === "more" ? "overview" : activeSection),
     [activeSection],
     { errorMessage: `${activeSectionLabel} could not be loaded. Please try again.` }
   );
 
   usePageMeta({
-    path: portalId ? `/admin/accounts/${portalId}` : activeSection === "overview" ? "/admin" : `/admin/${activeSection}`,
+    path: location.pathname,
     title: "Admin Dashboard",
     description: "Protected Zentel Insight admin dashboard.",
     robots: "noindex,nofollow"
@@ -1745,6 +1755,7 @@ export default function AdminDashboard({ forcedSection = "" }) {
   return (
     <AdminFrame data={data} onRealtimeChange={dataQuery.refetch}>
       {activeSection === "overview" ? <OverviewSection data={data} /> : null}
+      {activeSection === "more" ? <AdminMoreSection /> : null}
       {activeSection === "academics" ? <AdminAcademySection view="academics" /> : null}
       {activeSection === "finance" ? <AdminAcademySection view="finance" /> : null}
       {activeSection === "accounts" && portalId ? <AccountManagementSection portalId={portalId} programs={data.programs} /> : null}

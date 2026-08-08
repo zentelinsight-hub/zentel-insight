@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef } from "react";
-import { ChevronDown, Ellipsis, LogOut, UserRound } from "lucide-react";
+import { ChevronDown, LogOut, UserRound } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import BrandLogo from "../BrandLogo";
 import IdleSessionGuard from "../IdleSessionGuard";
@@ -48,13 +48,10 @@ export default function PortalShell({
   const navigate = useNavigate();
   const location = useLocation();
   const shellId = useId().replace(/:/g, "");
-  const moreMenuRef = useRef(null);
   const accountMenuRef = useRef(null);
   const realtimeKey = [...new Set(realtimeTables)].sort().join(",");
   const fallbackItems = (sidebar.groups || []).flatMap((group) => group.items || []);
-  const primaryItems = sidebar.primaryItems || fallbackItems.slice(0, 4);
-  const primaryPaths = new Set(primaryItems.map((item) => item.to));
-  const moreItems = sidebar.moreItems || fallbackItems.filter((item) => !primaryPaths.has(item.to));
+  const primaryItems = sidebar.primaryItems || fallbackItems.slice(0, 5);
 
   useEffect(() => {
     document.body.classList.add("portal-route-active");
@@ -62,7 +59,6 @@ export default function PortalShell({
   }, []);
 
   useEffect(() => {
-    closeDetails(moreMenuRef);
     closeDetails(accountMenuRef);
   }, [location.pathname]);
 
@@ -103,7 +99,6 @@ export default function PortalShell({
   }, [onRealtimeChange, realtimeKey, shellId]);
 
   async function handleSignOut() {
-    closeDetails(moreMenuRef);
     closeDetails(accountMenuRef);
     onBeforeSignOut?.();
     await signOut({ scope: "local" });
@@ -111,7 +106,6 @@ export default function PortalShell({
   }
 
   const closeMenus = () => {
-    closeDetails(moreMenuRef);
     closeDetails(accountMenuRef);
   };
 
@@ -125,17 +119,6 @@ export default function PortalShell({
 
         <nav className="portal-top-navigation" aria-label={sidebar.navLabel}>
           {primaryItems.map((item) => <PortalNavLink key={item.to} item={item} onNavigate={closeMenus} />)}
-          {moreItems.length ? (
-            <details ref={moreMenuRef} className="portal-top-menu portal-more-menu">
-              <summary className="portal-top-link" aria-label="More" title="More">
-                <Ellipsis size={19} aria-hidden="true" />
-                <span>More</span>
-              </summary>
-              <div className="portal-top-menu-panel">
-                {moreItems.map((item) => <PortalNavLink key={`${item.to}-${item.label}`} item={item} onNavigate={closeMenus} />)}
-              </div>
-            </details>
-          ) : null}
         </nav>
 
         <details ref={accountMenuRef} className="portal-top-menu portal-account-menu">

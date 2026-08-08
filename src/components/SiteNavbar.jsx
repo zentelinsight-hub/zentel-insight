@@ -66,6 +66,8 @@ export default function SiteNavbar({
 
   useEffect(() => {
     openRef.current = open;
+    document.body.classList.toggle("menu-open", open);
+    return () => document.body.classList.remove("menu-open");
   }, [open]);
 
   useEffect(() => {
@@ -170,14 +172,11 @@ export default function SiteNavbar({
         onClick={closeMenu}
       />
       <div id={drawerId} className={open ? "mobile-menu open" : "mobile-menu"} ref={menuRef}>
-        <div className="container mobile-menu-inner">
+        <div className="mobile-menu-header"><Link className="mobile-drawer-brand" to={brandHref} onClick={closeMenu}><BrandLogo brand={brand} size={34} /><strong>{brandName}</strong></Link><button className="icon-button" type="button" aria-label="Close navigation menu" onClick={closeMenu}><X size={20} /></button></div>
+        <nav className="mobile-menu-inner" aria-label={`${ariaLabel} mobile`}>
           {links.map((item) => renderNavItem(item, "mobile-nav-link", closeMenu))}
-          {actions.length ? (
-            <div className="mobile-menu-actions">
-              {actions.map((item) => renderNavItem(item, "mobile-nav-link", closeMenu))}
-            </div>
-          ) : null}
-        </div>
+          {actions.length ? <div className="mobile-menu-actions">{actions.map((item) => renderNavItem(item, "mobile-nav-link", closeMenu))}</div> : null}
+        </nav>
       </div>
     </header>
   );

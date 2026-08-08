@@ -449,13 +449,24 @@ export async function updateTutorProfile(values) {
 }
 
 export async function setAccountStatus({ userId, status, reason }) {
+  const normalizedUserId = String(userId || "").trim();
+  const normalizedStatus = String(status || "").trim().toLowerCase();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalizedUserId)) {
+    throw new Error("Choose a valid account.");
+  }
+  if (!["active", "inactive", "restricted", "suspended"].includes(normalizedStatus)) {
+    throw new Error("Choose a valid account status.");
+  }
   const supabase = await getClient();
   const { data, error } = await supabase.rpc("admin_set_account_status", {
-    target_user_id: userId,
-    next_status: status,
+    target_user_id: normalizedUserId,
+    next_status: normalizedStatus,
     status_reason: reason || null
   });
   if (error) throw error;
+  if (!data || data.id !== normalizedUserId || data.account_status !== normalizedStatus) {
+    throw new Error("The account status could not be confirmed.");
+  }
   return data;
 }
 

@@ -10,6 +10,7 @@ import {
   getStudentCertificates,
   getStudentDashboard,
   getStudentEnrolments,
+  getStudentFeed,
   getStudentLiveClasses,
   getStudentNotifications,
   getStudentActivePayments,
@@ -86,6 +87,10 @@ export function usePortalPageContent(pageSlug) {
 
 export function useStudentDashboard(userId) {
   return usePortalQuery(() => getStudentDashboard(userId), [userId], { enabled: Boolean(userId) });
+}
+
+export function useStudentFeed(userId) {
+  return usePortalQuery(() => getStudentFeed(userId), [userId], { enabled: Boolean(userId) });
 }
 
 export function useStudentProfile(user) {

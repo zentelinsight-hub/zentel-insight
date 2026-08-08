@@ -10,6 +10,7 @@ import {
   LifeBuoy,
   Megaphone,
   MessageSquare,
+  MoreHorizontal,
   School,
   Settings,
   Sun,
@@ -18,12 +19,12 @@ import {
   Users,
   Video
 } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import LiveClassCards from "../components/LiveClassCards";
-import PageVisual from "../components/PageVisual";
 import ProgramBanner from "../components/ProgramBanner";
 import ProgramChatPanel from "../components/ProgramChatPanel";
 import PortalIdCard from "../components/portal/PortalIdCard";
+import PortalNavigationPage from "../components/portal/PortalNavigationPage";
 import PortalShell from "../components/portal/PortalShell";
 import { useAuth } from "../context/authHooks";
 import { useTheme } from "../context/themeHooks";
@@ -80,6 +81,23 @@ function tutorDisplayName(profile) {
 
 function getActiveSection(section) {
   return sections.some(([slug]) => slug === section) ? section : "dashboard";
+}
+
+function resolveTutorRoute(pathname, forcedSection = "") {
+  if (forcedSection) return { section: forcedSection, classroomId: "" };
+  const parts = pathname.replace(/^\/tutor\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
+  if (!parts.length) return { section: "dashboard", classroomId: "" };
+  if (parts[0] === "messages") return { section: parts[1] === "classroom" ? "classroom-chat" : "messages", classroomId: "" };
+  if (parts[0] === "classrooms") {
+    if (!parts[1]) return { section: "classrooms", classroomId: "" };
+    const classroomSections = { students: "academy-students", timetable: "academy-timetable", modules: "academy-modules", "live-classes": "live-classes", attendance: "attendance", announcements: "announcements", resources: "resources" };
+    return { section: classroomSections[parts[2]] || "classroom-detail", classroomId: parts[1] };
+  }
+  if (parts[0] === "assessment") {
+    const assessmentSections = { assignments: "assignments", quizzes: "academy-quizzes", submissions: "academy-submissions", gradebook: "academy-gradebook", performance: "academy-performance" };
+    return { section: assessmentSections[parts[1]] || "assessment", classroomId: "" };
+  }
+  return { section: getActiveSection(parts[0]), classroomId: "" };
 }
 
 function PageHeading({ title, description, actions }) {
@@ -173,12 +191,12 @@ function TutorFrame({ data, onRealtimeChange, children }) {
         navLabel: "Tutor dashboard",
         shellClass: "management-shell tutor-shell",
         primaryItems: [
-          navigationItem("dashboard", "Home"),
+          navigationItem("dashboard"),
           navigationItem("classrooms"),
-          navigationItem("classroom-chat", "Messages"),
-          navigationItem("assessment")
-        ],
-        moreItems: ["teaching", "performance", "students", "live-classes", "timetable", "attendance", "announcements", "assignments", "resources", "notifications", "support", "profile", "settings"].map((slug) => navigationItem(slug))
+          { to: "/tutor/messages", label: "Messages", Icon: MessageSquare, badge: data.unreadMessages },
+          navigationItem("assessment"),
+          { to: "/tutor/more", label: "More", Icon: MoreHorizontal, badge: data.notifications.filter((item) => !item.read_at).length }
+        ]
       }}
       header={{ eyebrow: "Welcome back", title: displayName, status: <span className="portal-tag success">Tutor</span> }}
       idleEnabled={Boolean(data)}
@@ -206,73 +224,76 @@ function TutorFrame({ data, onRealtimeChange, children }) {
 }
 
 function DashboardSection({ data, onSaved }) {
-  const primaryAssignment = data.assignments[0] || null;
   const upcomingClasses = data.liveClasses.filter((item) => !item.scheduled_start || new Date(item.scheduled_start).getTime() >= Date.now());
-  const nextClass = upcomingClasses[0] || null;
   const today = new Date().getDay();
   const todayEntries = data.timetable.filter((item) => Number(item.day_of_week) === today);
   return (
-    <div className="portal-page">
-      <PageHeading
-        title="Tutor workspace."
-        description="Review assigned programmes, connected students, upcoming classes and programme communication."
-      />
-      <PageVisual visualKey="tutorDashboard" placement="dashboard" />
-      <div className="dashboard-grid">
-        <article className="dashboard-card">
-          <GraduationCap size={22} aria-hidden="true" />
-          <span>Assigned Programme</span>
-          <strong>{primaryAssignment?.programs?.title || "Pending"}</strong>
-          <small>{primaryAssignment?.program_levels?.level_name || "Administration managed"}</small>
-        </article>
-        <article className="dashboard-card">
-          <Users size={22} aria-hidden="true" />
-          <span>Assigned Students</span>
-          <strong>{data.studentTotal}</strong>
-          <small>Official and preference connections</small>
-        </article>
-        <article className="dashboard-card">
-          <Video size={22} aria-hidden="true" />
-          <span>Next Class</span>
-          <strong>{nextClass ? formatDateTime(nextClass.scheduled_start) : "Not scheduled"}</strong>
-          <small>{nextClass?.title || "No upcoming class"}</small>
-        </article>
-        <article className="dashboard-card">
-          <Bell size={22} aria-hidden="true" />
-          <span>Unread Messages</span>
-          <strong>{data.unreadMessages}</strong>
-          <small>Programme classroom messages</small>
-        </article>
-      </div>
-      <div className="portal-two-column">
-        <article className="notice-card">
-          <h3>Today&apos;s timetable</h3>
-          <div className="portal-list compact-list">
-            {todayEntries.slice(0, 4).map((item) => (
-              <div className="portal-record-card" key={item.id}>
-                <strong>{item.title}</strong>
-                <span>{String(item.start_time || "").slice(0, 5)} - {String(item.end_time || "").slice(0, 5)} WAT</span>
-              </div>
-            ))}
-            {!todayEntries.length ? <p>No classes are scheduled for today.</p> : null}
-          </div>
-        </article>
-        <article className="notice-card">
-          <h3>Quick actions</h3>
-          <div className="portal-quick-links">
-            <Link to="/tutor/classroom">Open Classroom</Link>
-            <Link to="/tutor/students">View My Students</Link>
-            <Link to="/tutor/timetable">View Timetable</Link>
-            <Link to="/tutor/live-classes">Start Scheduled Class</Link>
-            <Link to="/tutor/assignments">Create Assignment</Link>
-            <Link to="/tutor/resources">Publish Resource</Link>
-            <Link to="/tutor/support">Contact Support</Link>
-          </div>
-        </article>
-      </div>
-      <LiveClassCards audience="tutor" sessions={data.liveClasses.slice(0, 3)} emptyMessage="No upcoming tutor classes have been assigned yet." onChanged={onSaved} />
+    <div className="portal-page tutor-operational-dashboard">
+      <header className="portal-compact-heading"><p className="eyebrow">Tutor Portal</p><h1>Dashboard</h1></header>
+      <section className="portal-flat-section"><h2>Today&apos;s timetable</h2><div className="portal-structured-list">{todayEntries.slice(0, 6).map((item) => <div key={item.id}><span><strong>{item.title}</strong><small>{String(item.start_time || "").slice(0, 5)} - {String(item.end_time || "").slice(0, 5)} WAT</small></span></div>)}{!todayEntries.length ? <p>No classes are scheduled for today.</p> : null}</div></section>
+      <section className="portal-flat-section"><h2>Upcoming live classes</h2><LiveClassCards audience="tutor" sessions={upcomingClasses.slice(0, 4)} emptyMessage="No upcoming tutor classes have been assigned yet." onChanged={onSaved} /></section>
+      <section className="portal-flat-section"><h2>Recent announcements</h2><div className="portal-structured-list">{data.announcements.slice(0, 5).map((item) => <div key={item.id}><span><strong>{item.title}</strong><small>{formatDateTime(item.created_at)}</small></span></div>)}{!data.announcements.length ? <p>No announcements have been published.</p> : null}</div></section>
     </div>
   );
+}
+
+function TutorClassroomsPage({ data }) {
+  return (
+    <div className="portal-page">
+      <header className="portal-compact-heading"><p className="eyebrow">Tutor Portal</p><h1>Classrooms</h1><p>Open an assigned classroom.</p></header>
+      <div className="portal-destination-list">
+        {data.classrooms.map((room) => <Link to={`/tutor/classrooms/${room.classroom_id}`} key={room.classroom_id}><span className="portal-destination-icon"><School size={18} /></span><span className="portal-destination-copy"><strong>{room.classroom_name}</strong><small>{room.program_title} | {room.track_title} | {room.cohort_name}</small></span><span aria-hidden="true">›</span></Link>)}
+      </div>
+      {!data.classrooms.length ? <EmptyState title="No assigned classrooms" message="Admin-assigned classrooms will appear here." /> : null}
+    </div>
+  );
+}
+
+function TutorClassroomPage({ data, classroomId }) {
+  const room = data.classrooms.find((item) => item.classroom_id === classroomId);
+  if (!room) return <EmptyState title="Classroom not found" message="This classroom is not assigned to your Tutor account." />;
+  const base = `/tutor/classrooms/${room.classroom_id}`;
+  return <PortalNavigationPage eyebrow="Classroom" title={room.classroom_name} description={`${room.program_title} | ${room.track_title} | ${room.cohort_name}`} items={[
+    { to: `${base}/students`, label: "Students", description: "Assigned Student list", Icon: Users },
+    { to: `${base}/timetable`, label: "Timetable", description: "Class schedule", Icon: CalendarDays },
+    { to: `${base}/modules`, label: "Modules & Lessons", description: "Published learning structure", Icon: BookOpen },
+    { to: `${base}/live-classes`, label: "Live Classes", description: "Schedule and manage sessions", Icon: Video },
+    { to: `${base}/attendance`, label: "Attendance", description: "Class participation", Icon: CheckCircle2 },
+    { to: `${base}/announcements`, label: "Announcements", description: "Class notices", Icon: Megaphone },
+    { to: `${base}/resources`, label: "Resources", description: "Learning materials", Icon: BookOpen }
+  ]} />;
+}
+
+function TutorAssessmentPage() {
+  return <PortalNavigationPage eyebrow="Tutor Portal" title="Assessment" description="Open one assessment workspace." items={[
+    { to: "/tutor/assessment/assignments", label: "Assignments", description: "Create and publish assignments", Icon: FileCheck2 },
+    { to: "/tutor/assessment/quizzes", label: "Quizzes & Tests", description: "Build objective assessments", Icon: CheckCircle2 },
+    { to: "/tutor/assessment/submissions", label: "Submissions", description: "Review submitted work", Icon: BookOpen },
+    { to: "/tutor/assessment/gradebook", label: "Gradebook", description: "Grade and publish results", Icon: GraduationCap },
+    { to: "/tutor/assessment/performance", label: "Student Performance", description: "Classroom performance records", Icon: Users }
+  ]} />;
+}
+
+function TutorMessagesPage() {
+  return <PortalNavigationPage eyebrow="Tutor Portal" title="Messages" description="Choose a conversation." items={[
+    { to: "/tutor/messages/classroom", label: "Classroom Chat", description: "Programme classroom conversations", Icon: MessageSquare }
+  ]} />;
+}
+
+function TutorMorePage() {
+  return <PortalNavigationPage eyebrow="Tutor Portal" title="More" items={[
+    { to: "/tutor/profile", label: "Profile", description: "Professional account information", Icon: UserRound },
+    { to: "/tutor/programme", label: "Programme", description: "Assigned programme and track", Icon: GraduationCap },
+    { to: "/tutor/students", label: "Students", description: "Assigned Student directory", Icon: Users },
+    { to: "/tutor/live-classes", label: "Live Classes", description: "Scheduled online sessions", Icon: Video },
+    { to: "/tutor/timetable", label: "Timetable", description: "Teaching schedule", Icon: CalendarDays },
+    { to: "/tutor/attendance", label: "Attendance", description: "Participation records", Icon: CheckCircle2 },
+    { to: "/tutor/announcements", label: "Announcements", description: "Programme notices", Icon: Megaphone },
+    { to: "/tutor/resources", label: "Resources", description: "Published learning materials", Icon: BookOpen },
+    { to: "/tutor/notifications", label: "Notifications", description: "Account and class updates", Icon: Bell },
+    { to: "/tutor/support", label: "Support", description: "Support tickets", Icon: LifeBuoy },
+    { to: "/tutor/settings", label: "Security & Settings", description: "Theme and session controls", Icon: Settings }
+  ]} />;
 }
 
 function ProfileSection({ data }) {
@@ -917,15 +938,15 @@ function TutorNotificationsSection({ records, onSaved }) {
 
 export default function TutorDashboard({ forcedSection = "" }) {
   const { user } = useAuth();
-  const { section = "dashboard" } = useParams();
-  const activeSection = forcedSection || getActiveSection(section);
+  const location = useLocation();
+  const { section: activeSection, classroomId } = resolveTutorRoute(location.pathname, forcedSection);
   const dataQuery = useAsyncData(() => getTutorDashboardData(user.id), [user?.id], {
     enabled: Boolean(user?.id),
     errorMessage: "We could not load your Tutor dashboard. Please try again."
   });
 
   usePageMeta({
-    path: activeSection === "dashboard" ? "/tutor" : `/tutor/${activeSection}`,
+    path: location.pathname,
     title: "Tutor Dashboard",
     description: "Protected Zentel Insight tutor dashboard.",
     robots: "noindex,nofollow"
@@ -972,14 +993,24 @@ export default function TutorDashboard({ forcedSection = "" }) {
     <TutorFrame data={data} onRealtimeChange={dataQuery.refetch}>
       {activeSection === "dashboard" ? <DashboardSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "teaching" ? <TutorAcademySection view="teaching" /> : null}
-      {activeSection === "classrooms" ? <TutorAcademySection view="classrooms" /> : null}
-      {activeSection === "assessment" ? <TutorAcademySection view="assessment" /> : null}
+      {activeSection === "classrooms" ? <TutorClassroomsPage data={data} /> : null}
+      {activeSection === "classroom-detail" ? <TutorClassroomPage data={data} classroomId={classroomId} /> : null}
+      {activeSection === "academy-students" ? <TutorAcademySection view="students" classroomIdOverride={classroomId} /> : null}
+      {activeSection === "academy-timetable" ? <TutorAcademySection view="timetable" classroomIdOverride={classroomId} /> : null}
+      {activeSection === "academy-modules" ? <TutorAcademySection view="modules" classroomIdOverride={classroomId} /> : null}
+      {activeSection === "academy-quizzes" ? <TutorAcademySection view="quizzes" /> : null}
+      {activeSection === "academy-submissions" ? <TutorAcademySection view="submissions" /> : null}
+      {activeSection === "academy-gradebook" ? <TutorAcademySection view="gradebook" /> : null}
+      {activeSection === "academy-performance" ? <TutorAcademySection view="performance" /> : null}
+      {activeSection === "assessment" ? <TutorAssessmentPage /> : null}
       {activeSection === "performance" ? <TutorAcademySection view="performance" /> : null}
+      {activeSection === "messages" ? <TutorMessagesPage /> : null}
+      {activeSection === "more" ? <TutorMorePage /> : null}
       {activeSection === "profile" ? <ProfileSection data={data} /> : null}
       {activeSection === "programme" ? <ProgrammeSection data={data} /> : null}
       {activeSection === "students" ? <StudentsSection data={data} /> : null}
       {activeSection === "classroom" ? <TutorClassroomSection data={data} onSaved={dataQuery.refetch} /> : null}
-      {activeSection === "classroom-chat" ? <div className="portal-page chat-route-page"><ProgramChatPanel audience="tutor" standalone backTo="/tutor/classroom" /></div> : null}
+      {activeSection === "classroom-chat" ? <div className="portal-page chat-route-page"><ProgramChatPanel audience="tutor" standalone backTo="/tutor/messages" /></div> : null}
       {activeSection === "timetable" ? <TutorTimetableSection data={data} /> : null}
       {activeSection === "live-classes" ? <TutorLiveClassesSection data={data} onSaved={dataQuery.refetch} /> : null}
       {activeSection === "attendance" ? (

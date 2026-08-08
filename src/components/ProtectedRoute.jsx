@@ -98,7 +98,7 @@ export default function ProtectedRoute({
   }
 
   if (roleLoading) {
-    return <div className="route-loader">Preparing secure workspace</div>;
+    return <div className="route-loader">Checking account access</div>;
   }
 
   if (allowedRoles.length && !allowedRoles.includes(role)) {
@@ -107,7 +107,7 @@ export default function ProtectedRoute({
 
   if (role !== USER_ROLES.ADMIN) {
     if (profileLoading || accountStatusLoading) {
-      return <div className="route-loader">Preparing secure workspace</div>;
+      return <div className="route-loader">Checking account access</div>;
     }
     if (accountStatus !== ACCOUNT_STATUSES.ACTIVE) {
       return (
@@ -134,7 +134,7 @@ export default function ProtectedRoute({
   }
 
   if (profileLoading) {
-    return <div className="route-loader">Preparing secure workspace</div>;
+    return <div className="route-loader">Checking account access</div>;
   }
 
   if (profileError) {

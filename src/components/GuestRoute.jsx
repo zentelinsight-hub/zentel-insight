@@ -16,7 +16,7 @@ export default function GuestRoute({ children }) {
   }
 
   if (session && isEmailVerified(user || session.user)) {
-    if (roleLoading) return <div className="route-loader">Preparing secure workspace</div>;
+    if (roleLoading) return <div className="route-loader">Checking account access</div>;
     const requestedPath = safeRedirectPath(searchParams.get("returnTo") || searchParams.get("redirect"));
     const roleHome = getHomePathForRole(role, adminVerified);
     return <Navigate to={requestedPath === "/portal" ? roleHome : requestedPath} replace />;

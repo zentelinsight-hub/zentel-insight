@@ -1,7 +1,10 @@
 import { getSupabaseClient } from "../supabaseClient";
+import { invokeEdgeFunction } from "../edgeFunctionClient";
 
 export const PROFILE_AVATAR_BUCKET = "profile-avatars";
 export const PROFILE_AVATAR_MAX_BYTES = 3 * 1024 * 1024;
+export const STUDENT_FEED_MEDIA_BUCKET = "student-feed-media";
+export const STUDENT_FEED_MEDIA_MAX_BYTES = 5 * 1024 * 1024;
 
 const defaultPageContent = {
   dashboard: {
@@ -443,6 +446,105 @@ export async function getPortalArticles(userId) {
     if (!scope.programIds.includes(item.program_id)) return false;
     return !item.program_level_id || scope.trackIds.includes(item.program_level_id);
   });
+}
+
+function getArticleFeedType(article) {
+  const category = String(article?.category || "Technology").toLowerCase();
+  const url = String(article?.external_url || "").toLowerCase();
+  if (url.includes("youtube.com") || url.includes("youtu.be") || category.includes("video")) return "Video";
+  if (category.includes("event")) return "Event";
+  if (category.includes("news")) return "Technology News";
+  if (category.includes("trend")) return "Trending";
+  return category.includes("blog") ? "Technology Blog" : article?.category || "Technology";
+}
+
+export async function getStudentFeed(userId) {
+  const supabase = await getClient();
+  const [articles, postsResult, externalFeed] = await Promise.all([
+    withPortalFallback("feed articles", () => getPortalArticles(userId), []),
+    supabase
+      .from("student_feed_posts")
+      .select("id, user_id, body, image_path, created_at, updated_at")
+      .eq("status", "published")
+      .order("created_at", { ascending: false })
+      .limit(100),
+    withPortalFallback("technology feed", async () => {
+      const payload = await invokeEdgeFunction("student-tech-feed", {
+        body: {},
+        timeoutMs: 12000,
+        failureMessage: "Technology feed is temporarily unavailable."
+      });
+      return normalizeList(payload?.items);
+    }, [])
+  ]);
+
+  if (postsResult.error) logPortalDataIssue("student feed posts", postsResult.error);
+  const posts = postsResult.error ? [] : normalizeList(postsResult.data);
+  const authorIds = [...new Set(posts.map((item) => item.user_id).filter(Boolean))];
+  let profiles = [];
+  if (authorIds.length) {
+    const profileResult = await supabase.from("profiles").select("id, full_name, avatar_path").in("id", authorIds);
+    if (!profileResult.error) profiles = normalizeList(profileResult.data);
+  }
+  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+
+  const studentItems = await Promise.all(posts.map(async (post) => {
+    let imageUrl = "";
+    if (post.image_path) {
+      const { data } = await supabase.storage.from(STUDENT_FEED_MEDIA_BUCKET).createSignedUrl(post.image_path, 60 * 60);
+      imageUrl = data?.signedUrl || "";
+    }
+    const author = profileById.get(post.user_id);
+    return {
+      id: `student-${post.id}`,
+      kind: "student",
+      author: author?.full_name || "Zentel Insight Student",
+      body: post.body,
+      imageUrl,
+      createdAt: post.created_at
+    };
+  }));
+
+  const articleItems = articles.map((article) => ({
+    id: `article-${article.id}`,
+    kind: "technology",
+    author: "Zentel Insight",
+    title: article.title,
+    body: article.summary || article.body,
+    category: getArticleFeedType(article),
+    externalUrl: article.external_url || "",
+    createdAt: article.published_at || article.created_at
+  }));
+
+  return [...studentItems, ...articleItems, ...normalizeList(externalFeed)]
+    .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0));
+}
+
+export async function createStudentFeedPost({ userId, body, image }) {
+  const text = String(body || "").trim();
+  if (!text) throw new Error("Write something before publishing.");
+  const supabase = await getClient();
+  let imagePath = null;
+
+  if (image) {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(image.type)) throw new Error("Choose a JPEG, PNG or WebP image.");
+    if (image.size > STUDENT_FEED_MEDIA_MAX_BYTES) throw new Error("The image must be 5 MB or smaller.");
+    const extension = image.type === "image/png" ? "png" : image.type === "image/webp" ? "webp" : "jpg";
+    imagePath = `${userId}/${crypto.randomUUID()}.${extension}`;
+    const { error: uploadError } = await supabase.storage.from(STUDENT_FEED_MEDIA_BUCKET).upload(imagePath, image, { contentType: image.type, upsert: false });
+    if (uploadError) throw uploadError;
+  }
+
+  const { data, error } = await supabase
+    .from("student_feed_posts")
+    .insert({ user_id: userId, body: text, image_path: imagePath })
+    .select("id")
+    .single();
+  if (error) {
+    if (imagePath) await supabase.storage.from(STUDENT_FEED_MEDIA_BUCKET).remove([imagePath]);
+    throw error;
+  }
+  return data;
 }
 
 export async function getStudentActivePayments(userId) {

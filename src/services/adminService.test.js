@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { findAdminAccount, getAdminDashboardData, searchAdminStudents, searchAdminTutors } from "./adminService";
+import { findAdminAccount, getAdminDashboardData, searchAdminStudents, searchAdminTutors, setAccountStatus } from "./adminService";
 
 const serviceMocks = vi.hoisted(() => ({
   getSupabaseClient: vi.fn(),
@@ -207,5 +207,23 @@ describe("Admin dashboard data loading", () => {
       status_filter: "suspended"
     }));
     expect(serviceMocks.invokeEdgeFunction).not.toHaveBeenCalled();
+  });
+
+  it("confirms an account status change against the same immutable user UUID", async () => {
+    const userId = "b7cb76b5-d1db-4b45-b778-d7ed7195cb95";
+    const supabase = createSupabaseMock({}, { data: { id: userId, account_status: "restricted" }, error: null });
+    serviceMocks.getSupabaseClient.mockResolvedValue(supabase.client);
+
+    await expect(setAccountStatus({ userId, status: "restricted", reason: "Admin security review" })).resolves.toMatchObject({ id: userId, account_status: "restricted" });
+    expect(supabase.rpc).toHaveBeenCalledWith("admin_set_account_status", {
+      target_user_id: userId,
+      next_status: "restricted",
+      status_reason: "Admin security review"
+    });
+  });
+
+  it("refuses non-UUID account identifiers before calling Supabase", async () => {
+    await expect(setAccountStatus({ userId: "1", status: "active" })).rejects.toThrow("Choose a valid account");
+    expect(serviceMocks.getSupabaseClient).not.toHaveBeenCalled();
   });
 });

@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import PortalDialog from "../../components/portal/PortalDialog";
 import PortalIdCard from "../../components/portal/PortalIdCard";
 import { useAsyncData } from "../../hooks/useAsyncData";
-import { findAdminAccount, searchAdminAccounts, updateStudentProfile, updateTutorProfile } from "../../services/adminService";
+import { findAdminAccount, searchAdminAccounts, setAccountStatus, updateStudentProfile, updateTutorProfile } from "../../services/adminService";
 import { requestPasswordReset } from "../../services/authService";
 import { formatDateTime } from "../../utils/format";
 
@@ -229,14 +229,13 @@ export function AccountManagementSection({ portalId, programs = [] }) {
     setSaving(true);
     setStatus(emptyStatus);
     try {
-      const statusValue = statusChanged ? form.account_status : "";
       const programmeId = programmeChanged ? form.program_id : "";
       const trackId = programmeChanged ? form.track_id : "";
       if (account.role === "student") {
         await updateStudentProfile({
           id: account.profile.id,
           ...form,
-          account_status: statusValue,
+          account_status: "",
           program_id: programmeId,
           program_level_id: trackId
         });
@@ -244,12 +243,13 @@ export function AccountManagementSection({ portalId, programs = [] }) {
         await updateTutorProfile({
           user_id: account.profile.id,
           ...form,
-          account_status: statusValue,
+          account_status: "",
           program_id: programmeId,
           track_id: trackId
         });
       }
-      setStatus({ type: "success", message: `${roleLabel(account.role)} account changes were saved.` });
+      if (statusChanged) await setAccountStatus({ userId: account.profile.id, status: form.account_status, reason: form.status_reason });
+      setStatus({ type: "success", message: statusChanged ? `Account ${form.account_status === "active" ? "activated" : form.account_status === "inactive" ? "deactivated" : form.account_status}.` : `${roleLabel(account.role)} account changes were saved.` });
       setConfirmation("");
       accountQuery.refetch();
     } catch (error) {
@@ -378,7 +378,7 @@ export function AccountManagementSection({ portalId, programs = [] }) {
         <section className="account-management-block" aria-labelledby="account-control-title">
           <h3 id="account-control-title">Account Control</h3>
           <div className="form-grid">
-            <label><span>Account status</span><select value={form.account_status} onChange={(event) => setForm({ ...form, account_status: event.target.value })}><option value="active">Active</option><option value="inactive">Inactive</option>{form.account_status === "suspended" ? <option value="suspended" disabled>Suspended</option> : null}</select></label>
+            <label><span>Account status</span><select value={form.account_status} onChange={(event) => setForm({ ...form, account_status: event.target.value })}><option value="active">Active</option><option value="inactive">Inactive</option><option value="restricted">Restricted</option><option value="suspended">Suspended</option></select></label>
             <label><span>Status reason</span><input value={form.status_reason} onChange={(event) => setForm({ ...form, status_reason: event.target.value })} placeholder="Required when changing account status" /></label>
           </div>
           <button className="button button-secondary" type="button" onClick={sendReset}><KeyRound size={18} aria-hidden="true" />Send Password Reset</button>

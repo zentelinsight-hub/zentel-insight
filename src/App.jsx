@@ -5,7 +5,22 @@ import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RouteTransitionGate from "./components/RouteTransitionGate";
 import WelcomeExperience from "./components/WelcomeExperience";
-import { PortalLayout, PortalOverview, PortalProfile, PortalSection, StudentAttendancePage, StudentClassroomChatPage, StudentLiveClassesPage } from "./pages/Portal";
+import {
+  PortalLayout,
+  PortalOverview,
+  PortalProfile,
+  PortalSection,
+  StudentAiPage,
+  StudentAttendancePage,
+  StudentClassroomChatPage,
+  StudentFinancePage,
+  StudentLearningPage,
+  StudentLoansPage,
+  StudentMessagesPage,
+  StudentMorePage,
+  StudentProgressPage,
+  StudentLiveClassesPage
+} from "./pages/Portal";
 import { USER_ROLES } from "./services/roleService";
 
 function getRouteBrand(location) {
@@ -171,33 +186,39 @@ export default function App() {
             <Route path="/portal" element={<ProtectedRoute><PortalLayout /></ProtectedRoute>}>
               <Route index element={<PortalOverview />} />
               <Route path="programs" element={<Navigate to="/programs" replace />} />
-              <Route path="enrolments" element={<Navigate to="/portal/my-courses" replace />} />
-              <Route path="my-courses" element={<Navigate to="/portal/learning" replace />} />
+              <Route path="enrolments" element={<Navigate to="/portal/learning/programme" replace />} />
+              <Route path="my-courses" element={<Navigate to="/portal/learning/programme" replace />} />
               <Route path="my-course" element={<Navigate to="/portal/my-courses" replace />} />
-              <Route path="classroom" element={<PortalSection page="classroom" />} />
-              <Route path="classroom/chat" element={<StudentClassroomChatPage />} />
-              <Route path="classroom/live" element={<StudentLiveClassesPage />} />
-              <Route path="classroom/attendance" element={<StudentAttendancePage />} />
-              <Route path="learning" element={<StudentAcademyPage view="learning" />} />
+              <Route path="classroom" element={<Navigate to="/portal/learning/classroom" replace />} />
+              <Route path="classroom/chat" element={<Navigate to="/portal/messages/classroom" replace />} />
+              <Route path="classroom/live" element={<Navigate to="/portal/live-classes" replace />} />
+              <Route path="classroom/attendance" element={<Navigate to="/portal/attendance" replace />} />
+              <Route path="learning" element={<StudentLearningPage />} />
+              <Route path="learning/programme" element={<PortalSection page="my-courses" />} />
+              <Route path="learning/classroom" element={<PortalSection page="classroom" />} />
               <Route path="learning/modules" element={<StudentAcademyPage view="learning" />} />
               <Route path="learning/timetable" element={<StudentAcademyPage view="timetable" />} />
               <Route path="learning/assignments" element={<StudentAcademyPage view="assignments" />} />
               <Route path="learning/quizzes" element={<StudentAcademyPage view="quizzes" />} />
               <Route path="learning/tests" element={<StudentAcademyPage view="tests" />} />
               <Route path="learning/projects" element={<StudentAcademyPage view="projects" />} />
+              <Route path="learning/resources" element={<PortalSection page="resources" />} />
+              <Route path="learning/certificates" element={<PortalSection page="certificates" />} />
               <Route path="learning/assessments/:assessmentId" element={<StudentAcademyPage view="assessment-detail" />} />
-              <Route path="progress" element={<StudentAcademyPage view="progress" />} />
+              <Route path="messages" element={<StudentMessagesPage />} />
+              <Route path="messages/classroom" element={<StudentClassroomChatPage />} />
+              <Route path="progress" element={<StudentProgressPage />} />
               <Route path="progress/grades" element={<StudentAcademyPage view="grades" />} />
               <Route path="progress/grades/:assessmentId" element={<StudentAcademyPage view="grades" />} />
               <Route path="progress/performance" element={<StudentAcademyPage view="performance" />} />
-              <Route path="progress/attendance" element={<StudentAcademyPage view="attendance" />} />
-              <Route path="account" element={<StudentAcademyPage view="account" />} />
-              <Route path="account/payments" element={<StudentAcademyPage view="transactions" />} />
+              <Route path="progress/attendance" element={<Navigate to="/portal/attendance" replace />} />
+              <Route path="account" element={<Navigate to="/portal/profile" replace />} />
+              <Route path="account/payments" element={<Navigate to="/portal/finance/payments" replace />} />
               <Route path="timetable" element={<Navigate to="/portal/learning/timetable" replace />} />
               <Route path="announcements" element={<PortalSection page="announcements" />} />
               <Route path="assignments" element={<Navigate to="/portal/learning/assignments" replace />} />
-              <Route path="resources" element={<PortalSection page="resources" />} />
-              <Route path="zentel-ai" element={<ZentelAI />} />
+              <Route path="resources" element={<Navigate to="/portal/learning/resources" replace />} />
+              <Route path="zentel-ai" element={<StudentAiPage />} />
               <Route path="zentel-ai/new" element={<ZentelAI />} />
               <Route path="zentel-ai/chat/:conversationId" element={<ZentelAI />} />
               <Route path="zentel-ai/history" element={<ZentelAIHistory />} />
@@ -205,8 +226,15 @@ export default function App() {
               <Route path="zentel-ai/usage" element={<ZentelAIUsage />} />
               <Route path="zentel-ai/billing" element={<ZentelAIBilling />} />
               <Route path="zentel-ai/settings" element={<ZentelAISettings />} />
-              <Route path="payments" element={<Navigate to="/portal/account/payments" replace />} />
-              <Route path="certificates" element={<PortalSection page="certificates" />} />
+              <Route path="more" element={<StudentMorePage />} />
+              <Route path="finance" element={<StudentFinancePage />} />
+              <Route path="finance/payments" element={<PortalSection page="payments" />} />
+              <Route path="finance/loans" element={<StudentLoansPage />} />
+              <Route path="payments" element={<Navigate to="/portal/finance/payments" replace />} />
+              <Route path="loans" element={<Navigate to="/portal/finance/loans" replace />} />
+              <Route path="live-classes" element={<StudentLiveClassesPage />} />
+              <Route path="attendance" element={<StudentAttendancePage />} />
+              <Route path="certificates" element={<Navigate to="/portal/learning/certificates" replace />} />
               <Route path="notifications" element={<PortalSection page="notifications" />} />
               <Route path="articles" element={<PortalSection page="articles" />} />
               <Route path="support" element={<PortalSection page="support" />} />
@@ -217,66 +245,9 @@ export default function App() {
               path="/admin/verify"
               element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]}><AdminVerify /></ProtectedRoute>}
             />
-            <Route
-              path="/admin"
-              element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard /></ProtectedRoute>}
-            />
-            <Route
-              path="/admin/accounts/:portalId"
-              element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard /></ProtectedRoute>}
-            />
-            <Route path="/admin/accounts/activity" element={<Navigate to="/admin/audit" replace />} />
-            <Route path="/admin/tutors/create" element={<Navigate to="/admin/accounts" replace />} />
-            <Route path="/admin/programmes/:programId" element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard forcedSection="programmes" /></ProtectedRoute>} />
-            <Route path="/admin/pricing" element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard forcedSection="programmes" /></ProtectedRoute>} />
-            <Route path="/admin/classrooms/:roomId" element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard forcedSection="classrooms" /></ProtectedRoute>} />
-            <Route
-              path="/admin/classrooms/:roomId/chat"
-              element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard forcedSection="classroom-chat" /></ProtectedRoute>}
-            />
-            <Route path="/admin/voice-calls" element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard forcedSection="classrooms" /></ProtectedRoute>} />
-            <Route path="/admin/attendance" element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard forcedSection="classrooms" /></ProtectedRoute>} />
-            <Route path="/admin/academics/*" element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard forcedSection="academics" /></ProtectedRoute>} />
-            <Route path="/admin/finance/*" element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard forcedSection="finance" /></ProtectedRoute>} />
-            {['plans', 'subscriptions', 'usage', 'requests', 'configuration', 'budgets'].map((aiSection) => (
-              <Route key={aiSection} path={`/admin/zentel-ai/${aiSection}`} element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard forcedSection="zentel-ai" /></ProtectedRoute>} />
-            ))}
-            <Route
-              path="/admin/:section"
-              element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard /></ProtectedRoute>}
-            />
-            <Route
-              path="/tutor"
-              element={<ProtectedRoute allowedRoles={[USER_ROLES.TUTOR]}><TutorDashboard /></ProtectedRoute>}
-            />
-            <Route
-              path="/staff"
-              element={<ProtectedRoute allowedRoles={[USER_ROLES.STAFF]}><StaffDashboard /></ProtectedRoute>}
-            />
-            <Route
-              path="/staff/:section"
-              element={<ProtectedRoute allowedRoles={[USER_ROLES.STAFF]}><StaffDashboard /></ProtectedRoute>}
-            />
-            <Route
-              path="/tutor/classroom/chat"
-              element={<ProtectedRoute allowedRoles={[USER_ROLES.TUTOR]}><TutorDashboard forcedSection="classroom-chat" /></ProtectedRoute>}
-            />
-            <Route
-              path="/tutor/classroom/live"
-              element={<ProtectedRoute allowedRoles={[USER_ROLES.TUTOR]}><TutorDashboard forcedSection="live-classes" /></ProtectedRoute>}
-            />
-            <Route
-              path="/tutor/classroom/attendance"
-              element={<ProtectedRoute allowedRoles={[USER_ROLES.TUTOR]}><TutorDashboard forcedSection="attendance" /></ProtectedRoute>}
-            />
-            <Route path="/tutor/classrooms/*" element={<ProtectedRoute allowedRoles={[USER_ROLES.TUTOR]}><TutorDashboard forcedSection="classrooms" /></ProtectedRoute>} />
-            <Route path="/tutor/teaching/*" element={<ProtectedRoute allowedRoles={[USER_ROLES.TUTOR]}><TutorDashboard forcedSection="teaching" /></ProtectedRoute>} />
-            <Route path="/tutor/assessment/*" element={<ProtectedRoute allowedRoles={[USER_ROLES.TUTOR]}><TutorDashboard forcedSection="assessment" /></ProtectedRoute>} />
-            <Route path="/tutor/performance/*" element={<ProtectedRoute allowedRoles={[USER_ROLES.TUTOR]}><TutorDashboard forcedSection="performance" /></ProtectedRoute>} />
-            <Route
-              path="/tutor/:section"
-              element={<ProtectedRoute allowedRoles={[USER_ROLES.TUTOR]}><TutorDashboard /></ProtectedRoute>}
-            />
+            <Route path="/admin/*" element={<ProtectedRoute allowedRoles={[USER_ROLES.ADMIN]} requireAdminVerification><AdminDashboard /></ProtectedRoute>} />
+            <Route path="/tutor/*" element={<ProtectedRoute allowedRoles={[USER_ROLES.TUTOR]}><TutorDashboard /></ProtectedRoute>} />
+            <Route path="/staff/*" element={<ProtectedRoute allowedRoles={[USER_ROLES.STAFF]}><StaffDashboard /></ProtectedRoute>} />
             </Routes>
           )}
         </RouteTransitionGate>

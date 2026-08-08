@@ -5,7 +5,6 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthContext } from "../context/authContextCore";
 import { ThemeProvider } from "../context/ThemeContext";
-import { pageVisualMap } from "../data/pageVisuals";
 import TutorDashboard from "./TutorDashboard";
 
 vi.mock("../services/tutorService", () => ({
@@ -49,8 +48,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("Tutor Dashboard visual", () => {
-  it("shows the tutor-only illustration on the dashboard overview", async () => {
+describe("Tutor Dashboard", () => {
+  it("shows the compact operational overview and five direct navigation links", async () => {
     render(
       <AuthContext.Provider
         value={{
@@ -73,7 +72,11 @@ describe("Tutor Dashboard visual", () => {
       </AuthContext.Provider>
     );
 
-    const visual = pageVisualMap.tutorDashboard;
-    expect(await screen.findByRole("img", { name: visual.alt })).toHaveAttribute("src", visual.src);
+    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Today's timetable" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Classrooms" })).toHaveAttribute("href", "/tutor/classrooms");
+    expect(screen.getByRole("link", { name: "Messages" })).toHaveAttribute("href", "/tutor/messages");
+    expect(screen.getByRole("link", { name: "Assessment" })).toHaveAttribute("href", "/tutor/assessment");
+    expect(screen.getByRole("link", { name: "More" })).toHaveAttribute("href", "/tutor/more");
   });
 });

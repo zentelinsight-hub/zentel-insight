@@ -5,7 +5,6 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthContext } from "../context/authContextCore";
 import { ThemeProvider } from "../context/ThemeContext";
-import { pageVisualMap } from "../data/pageVisuals";
 import { PortalLayout, PortalOverview, PortalProfile, PortalSection } from "./Portal";
 
 const hookMocks = vi.hoisted(() => ({
@@ -22,7 +21,8 @@ const hookMocks = vi.hoisted(() => ({
   useStudentCertificates: vi.fn(),
   useStudentNotifications: vi.fn(),
   useStudentPreferences: vi.fn(),
-  useStudentSupportTickets: vi.fn()
+  useStudentSupportTickets: vi.fn(),
+  useStudentFeed: vi.fn()
 }));
 
 vi.mock("../hooks/portal/usePortalData", () => hookMocks);
@@ -36,6 +36,7 @@ vi.mock("../services/portal/portalRepository", async () => {
   return {
     ...actual,
     createSupportTicket: vi.fn(),
+    createStudentFeedPost: vi.fn(),
     markAllNotificationsRead: vi.fn(),
     markNotificationRead: vi.fn(),
     replyToSupportTicket: vi.fn()
@@ -174,6 +175,7 @@ beforeEach(() => {
     session_security_warnings: true
   }));
   hookMocks.useStudentSupportTickets.mockReturnValue(query([]));
+  hookMocks.useStudentFeed.mockReturnValue(query([]));
 });
 
 afterEach(() => {
@@ -187,14 +189,14 @@ describe("Portal routes", () => {
 
     expect(screen.getByRole("navigation", { name: "Student portal" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/portal");
-    expect(screen.getByRole("link", { name: "Messages" })).toHaveAttribute("href", "/portal/classroom/chat");
-    expect(screen.getByLabelText("More")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Messages" })).toHaveAttribute("href", "/portal/messages");
+    expect(screen.getByRole("link", { name: "More" })).toHaveAttribute("href", "/portal/more");
     expect(document.querySelector(".portal-sidebar")).not.toBeInTheDocument();
     expect(document.querySelector(".portal-mobile-drawer")).not.toBeInTheDocument();
   });
 
   it.each([
-    ["/portal", "Student Dashboard", "useStudentDashboard"],
+    ["/portal", "Home", "useStudentFeed"],
     ["/portal/profile", "Student Profile", "useStudentProfile"],
     ["/portal/my-courses", "My Courses", "useStudentEnrolments"],
     ["/portal/timetable", "Class Timetable", "useStudentTimetable"],
@@ -216,10 +218,9 @@ describe("Portal routes", () => {
 
   it("does not allow a Student to choose or change a programme", () => {
     renderPortal("/portal");
-    const visual = pageVisualMap.studentDashboard;
-    expect(screen.getByRole("img", { name: visual.alt })).toHaveAttribute("src", visual.src);
+    expect(screen.getByRole("heading", { name: "Home" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Choose Your Programme" })).not.toBeInTheDocument();
-    expect(screen.getAllByText("Programme assignment pending").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /save programme/i })).not.toBeInTheDocument();
   });
 
   it("shows programme and credentials as Admin-managed in settings", () => {

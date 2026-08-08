@@ -8,6 +8,7 @@ import { AccountLookupSection, AccountManagementSection } from "./AdminAccountSe
 const serviceMocks = vi.hoisted(() => ({
   findAdminAccount: vi.fn(),
   searchAdminAccounts: vi.fn(),
+  setAccountStatus: vi.fn(),
   updateStudentProfile: vi.fn(),
   updateTutorProfile: vi.fn(),
   requestPasswordReset: vi.fn()
@@ -16,6 +17,7 @@ const serviceMocks = vi.hoisted(() => ({
 vi.mock("../../services/adminService", () => ({
   findAdminAccount: serviceMocks.findAdminAccount,
   searchAdminAccounts: serviceMocks.searchAdminAccounts,
+  setAccountStatus: serviceMocks.setAccountStatus,
   updateStudentProfile: serviceMocks.updateStudentProfile,
   updateTutorProfile: serviceMocks.updateTutorProfile
 }));
@@ -60,6 +62,7 @@ beforeEach(() => {
   });
   serviceMocks.updateStudentProfile.mockResolvedValue({ id: "student-1" });
   serviceMocks.updateTutorProfile.mockResolvedValue({ id: "tutor-1" });
+  serviceMocks.setAccountStatus.mockResolvedValue({ id: "student-1", account_status: "active" });
   serviceMocks.requestPasswordReset.mockResolvedValue({ ok: true, message: "Reset instructions sent." });
 });
 
