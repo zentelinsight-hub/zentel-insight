@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { findAdminAccount, getAdminDashboardData, searchAdminStudents, searchAdminTutors, setAccountStatus } from "./adminService";
+import { findAdminAccount, getAdminDashboardData, getAdminPaymentDetails, searchAdminPayments, searchAdminStudents, searchAdminTutors, setAccountStatus } from "./adminService";
 
 const serviceMocks = vi.hoisted(() => ({
   getSupabaseClient: vi.fn(),
@@ -225,5 +225,33 @@ describe("Admin dashboard data loading", () => {
   it("refuses non-UUID account identifiers before calling Supabase", async () => {
     await expect(setAccountStatus({ userId: "1", status: "active" })).rejects.toThrow("Choose a valid account");
     expect(serviceMocks.getSupabaseClient).not.toHaveBeenCalled();
+  });
+
+  it("searches authoritative payments through the paginated Admin RPC", async () => {
+    const supabase = createSupabaseMock({}, {
+      data: [{ id: "payment-1", reference: "ZI-REF-100", exact_reference_match: true, total_count: 26 }],
+      error: null
+    });
+    serviceMocks.getSupabaseClient.mockResolvedValue(supabase.client);
+
+    const result = await searchAdminPayments({ query: "ZI-REF-100", status: "success", page: 2, pageSize: 25 });
+
+    expect(supabase.rpc).toHaveBeenCalledWith("admin_search_payments", {
+      search_text: "ZI-REF-100",
+      status_filter: "success",
+      page_number: 2,
+      page_size: 25
+    });
+    expect(result).toMatchObject({ total: 26, page: 2, pageCount: 2 });
+    expect(result.records[0].exact_reference_match).toBe(true);
+  });
+
+  it("loads one read-only Payment Details projection by immutable payment UUID", async () => {
+    const details = { id: "payment-1", reference: "ZI-REF-100", transactions: [], fulfilments: [] };
+    const supabase = createSupabaseMock({}, { data: details, error: null });
+    serviceMocks.getSupabaseClient.mockResolvedValue(supabase.client);
+
+    await expect(getAdminPaymentDetails("payment-1")).resolves.toEqual(details);
+    expect(supabase.rpc).toHaveBeenCalledWith("admin_get_payment_details", { payment_id: "payment-1" });
   });
 });
