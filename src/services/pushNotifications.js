@@ -29,7 +29,7 @@ export async function enableDeviceNotifications() {
   if (permission === "denied") throw new Error("Notifications are blocked in your browser or device settings.");
   if (permission !== "granted") throw new Error("Notification permission was not granted.");
 
-  const publicKey = String(import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY || "").trim();
+  const publicKey = String(import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY || "BE19mxD4eH3pRxHjZ7Y-TOg-xcb-DnjqY9sHuhQNAun7maOC2BlpgOf4zFtJGZMzAT8lK9W2BRDWm1WIAc4JCvc").trim();
   if (!publicKey) throw new Error("Device notifications are not configured for this website yet.");
   const registration = await getRegistration();
   const existing = await registration.pushManager.getSubscription();
