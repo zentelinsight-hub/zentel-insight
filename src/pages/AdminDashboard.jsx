@@ -209,10 +209,11 @@ function StatusMessage({ status }) {
 function AccountStatusBadge({ status }) {
   const active = status === "active";
   const suspended = status === "suspended";
+  const restricted = status === "restricted";
   return (
-    <span className={active ? "portal-tag success" : suspended ? "portal-tag danger" : "portal-tag warning"}>
+    <span className={active ? "portal-tag success" : suspended || restricted ? "portal-tag danger" : "portal-tag warning"}>
       {active ? <CheckCircle2 size={14} aria-hidden="true" /> : null}
-      {active ? "Active" : suspended ? "Suspended" : "Inactive"}
+      {active ? "Active" : suspended ? "Suspended" : restricted ? "Restricted" : "Inactive"}
     </span>
   );
 }
@@ -224,7 +225,8 @@ function getStatusChangedBy(profile, profiles = []) {
 }
 
 function AccountStatusControls({ profile, profiles, onSaved }) {
-  const currentStatus = ["active", "suspended"].includes(profile?.account_status) ? profile.account_status : "inactive";
+  const navigate = useNavigate();
+  const currentStatus = ["active", "inactive", "restricted", "suspended"].includes(profile?.account_status) ? profile.account_status : "inactive";
   const nextStatus = currentStatus === "active" ? "inactive" : "active";
   const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState("");
@@ -242,6 +244,10 @@ function AccountStatusControls({ profile, profiles, onSaved }) {
       setReason("");
       onSaved();
     } catch (error) {
+      if (/Admin security verification is required/i.test(error?.message || "")) {
+        navigate("/admin/verify", { replace: true, state: { returnTo: window.location.pathname } });
+        return;
+      }
       setStatus({ type: "warning", message: error.message || "Account status could not be changed." });
     } finally {
       setLoading(false);

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const staffSql = readFileSync(new URL("../migrations/202608080001_staff_case_security_foundation.sql", import.meta.url), "utf8");
 const liveSql = readFileSync(new URL("../migrations/202608080002_external_live_class_workflow.sql", import.meta.url), "utf8");
+const staffProvisionRepairSql = readFileSync(new URL("../migrations/202608090001_staff_provision_service_role_repair.sql", import.meta.url), "utf8");
 
 describe("Staff case security migration", () => {
   it("limits Staff search to Student and Tutor records and rate limits searches", () => {
@@ -34,5 +35,15 @@ describe("External live-class migration", () => {
     expect(liveSql).toContain("live_class_enabled");
     expect(liveSql).toContain("actual_started_at");
     expect(liveSql).toContain("actual_ended_at");
+  });
+});
+
+describe("Staff provisioning repair migration", () => {
+  it("keeps provisioning service-only while avoiding request-setting and conflict ambiguity", () => {
+    expect(staffProvisionRepairSql).toContain("coalesce(auth.role(), '') <> 'service_role'");
+    expect(staffProvisionRepairSql).toContain("on conflict on constraint staff_capabilities_pkey");
+    expect(staffProvisionRepairSql).toContain("from public, anon, authenticated");
+    expect(staffProvisionRepairSql).toContain("to service_role");
+    expect(staffProvisionRepairSql).not.toContain("request.jwt.claim.role");
   });
 });

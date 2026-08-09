@@ -258,6 +258,23 @@ export async function createStaffAccount(values) {
   return data;
 }
 
+export async function updateAccountCredentials(values) {
+  const data = await invokeEdgeFunction("admin-update-account-credentials", {
+    body: {
+      userId: values.userId,
+      email: String(values.email || "").trim().toLowerCase(),
+      newPassword: values.newPassword || "",
+      dateOfBirth: values.dateOfBirth || null,
+      educationLevel: String(values.educationLevel || "").trim(),
+      address: String(values.address || "").trim()
+    },
+    unavailableMessage: "Secure account editing is temporarily unavailable. Please try again.",
+    failureMessage: "Account credentials could not be updated. Please review the details and try again."
+  });
+  if (!data?.ok) throw new Error(data?.error || "Account credentials could not be updated.");
+  return data;
+}
+
 export async function getAdminStaffData() {
   const supabase = await getClient();
   const [people, capabilitiesResult, casesResult, requestsResult] = await Promise.all([

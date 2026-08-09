@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ShieldCheck, UserPlus, Users } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import {
   createStaffAccount,
@@ -30,6 +31,7 @@ function StaffStatus({ value }) {
 }
 
 export default function AdminStaffSection() {
+  const navigate = useNavigate();
   const query = useAsyncData(getAdminStaffData, [], { errorMessage: "Staff accounts could not be loaded." });
   const [form, setForm] = useState(emptyForm);
   const [busy, setBusy] = useState("");
@@ -41,7 +43,13 @@ export default function AdminStaffSection() {
   async function run(key, action, success, failure) {
     setBusy(key); setStatus({ type: "", message: "" });
     try { await action(); setStatus({ type: "success", message: success }); await query.refetch(); }
-    catch { setStatus({ type: "warning", message: failure }); }
+    catch (error) {
+      if (/Admin security verification is required/i.test(error?.message || "")) {
+        navigate("/admin/verify", { replace: true, state: { returnTo: window.location.pathname } });
+        return;
+      }
+      setStatus({ type: "warning", message: error?.message || failure });
+    }
     finally { setBusy(""); }
   }
 

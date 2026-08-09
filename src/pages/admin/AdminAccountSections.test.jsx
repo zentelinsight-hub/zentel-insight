@@ -9,6 +9,7 @@ const serviceMocks = vi.hoisted(() => ({
   findAdminAccount: vi.fn(),
   searchAdminAccounts: vi.fn(),
   setAccountStatus: vi.fn(),
+  updateAccountCredentials: vi.fn(),
   updateStudentProfile: vi.fn(),
   updateTutorProfile: vi.fn(),
   requestPasswordReset: vi.fn()
@@ -18,6 +19,7 @@ vi.mock("../../services/adminService", () => ({
   findAdminAccount: serviceMocks.findAdminAccount,
   searchAdminAccounts: serviceMocks.searchAdminAccounts,
   setAccountStatus: serviceMocks.setAccountStatus,
+  updateAccountCredentials: serviceMocks.updateAccountCredentials,
   updateStudentProfile: serviceMocks.updateStudentProfile,
   updateTutorProfile: serviceMocks.updateTutorProfile
 }));
@@ -62,6 +64,7 @@ beforeEach(() => {
   });
   serviceMocks.updateStudentProfile.mockResolvedValue({ id: "student-1" });
   serviceMocks.updateTutorProfile.mockResolvedValue({ id: "tutor-1" });
+  serviceMocks.updateAccountCredentials.mockResolvedValue({ ok: true, email: "ada@example.com" });
   serviceMocks.setAccountStatus.mockResolvedValue({ id: "student-1", account_status: "active" });
   serviceMocks.requestPasswordReset.mockResolvedValue({ ok: true, message: "Reset instructions sent." });
 });
@@ -114,6 +117,23 @@ describe("Admin exact account workflow", () => {
     await waitFor(() => expect(serviceMocks.updateStudentProfile).toHaveBeenCalledWith(expect.objectContaining({
       id: "student-1",
       full_name: "Ada Updated"
+    })));
+  });
+
+  it("uses the protected credential service when the registered email changes", async () => {
+    render(
+      <MemoryRouter initialEntries={["/admin/accounts/ZIS-ABCD-2345"]}>
+        <AccountManagementSection portalId="ZIS-ABCD-2345" programs={[]} />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Ada Student")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Registered email"), { target: { value: "ada.updated@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(serviceMocks.updateAccountCredentials).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "student-1",
+      email: "ada.updated@example.com"
     })));
   });
 });

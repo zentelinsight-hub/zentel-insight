@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import PortalDialog from "../../components/portal/PortalDialog";
 import PortalIdCard from "../../components/portal/PortalIdCard";
 import { useAsyncData } from "../../hooks/useAsyncData";
-import { findAdminAccount, searchAdminAccounts, setAccountStatus, updateStudentProfile, updateTutorProfile } from "../../services/adminService";
+import { findAdminAccount, searchAdminAccounts, setAccountStatus, updateAccountCredentials, updateStudentProfile, updateTutorProfile } from "../../services/adminService";
 import { requestPasswordReset } from "../../services/authService";
 import { formatDateTime } from "../../utils/format";
 
@@ -32,6 +32,8 @@ function buildAccountForm(account) {
   const assignment = account?.role === "tutor" ? account?.tutorAssignment : account?.enrolment;
   return {
     full_name: profile.full_name || "",
+    email: profile.email || "",
+    new_password: "",
     phone: profile.phone || "",
     date_of_birth: profile.date_of_birth || "",
     education_level: profile.education_level || "",
@@ -213,6 +215,7 @@ export function AccountManagementSection({ portalId, programs = [] }) {
   const tracks = useMemo(() => getTrackOptions(programs, form.program_id), [form.program_id, programs]);
   const programmeChanged = form.program_id !== baseline.program_id || form.track_id !== baseline.track_id;
   const statusChanged = form.account_status !== baseline.account_status;
+  const credentialsChanged = form.email !== baseline.email || Boolean(form.new_password);
 
   useEffect(() => {
     function warnBeforeLeave(event) {
@@ -229,6 +232,16 @@ export function AccountManagementSection({ portalId, programs = [] }) {
     setSaving(true);
     setStatus(emptyStatus);
     try {
+      if (credentialsChanged) {
+        await updateAccountCredentials({
+          userId: account.profile.id,
+          email: form.email,
+          newPassword: form.new_password,
+          dateOfBirth: form.date_of_birth,
+          educationLevel: form.education_level,
+          address: form.address
+        });
+      }
       const programmeId = programmeChanged ? form.program_id : "";
       const trackId = programmeChanged ? form.track_id : "";
       if (account.role === "student") {
@@ -254,7 +267,11 @@ export function AccountManagementSection({ portalId, programs = [] }) {
       accountQuery.refetch();
     } catch (error) {
       if (import.meta.env.DEV) console.info("Admin account update failed", error);
-      setStatus({ type: "warning", message: "We could not save these account changes. No success was recorded. Please try again." });
+      if (/Admin security verification is required/i.test(error?.message || "")) {
+        navigate("/admin/verify", { replace: true, state: { returnTo: window.location.pathname } });
+        return;
+      }
+      setStatus({ type: "warning", message: error?.message || "We could not save these account changes. No success was recorded. Please try again." });
     } finally {
       setSaving(false);
     }
@@ -340,7 +357,8 @@ export function AccountManagementSection({ portalId, programs = [] }) {
           <h3 id="personal-information-title">Personal Information</h3>
           <div className="form-grid">
             <label><span>Full name</span><input value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} required /></label>
-            <label><span>Registered email</span><input type="email" value={profile.email || ""} readOnly /></label>
+            <label><span>Registered email</span><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label>
+            <label><span>New password</span><input type="password" minLength="8" value={form.new_password} onChange={(event) => setForm({ ...form, new_password: event.target.value })} placeholder="Leave blank to keep current password" autoComplete="new-password" /></label>
             <label><span>Phone number</span><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} required /></label>
             <label><span>Date of birth</span><input type="date" value={form.date_of_birth} onChange={(event) => setForm({ ...form, date_of_birth: event.target.value })} /></label>
             <label><span>Education level</span><input value={form.education_level} onChange={(event) => setForm({ ...form, education_level: event.target.value })} /></label>
