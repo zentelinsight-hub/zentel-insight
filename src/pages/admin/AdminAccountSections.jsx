@@ -27,6 +27,11 @@ function getTrackOptions(programs, programId) {
   return programs.find((program) => program.id === programId)?.program_levels || [];
 }
 
+function DirectoryAvatar({ person }) {
+  const [failed, setFailed] = useState(false);
+  return <span className="portal-avatar sm">{person.avatar_url && !failed ? <img src={person.avatar_url} alt="" onError={() => setFailed(true)} /> : <UserRound size={17} aria-hidden="true" />}</span>;
+}
+
 function buildAccountForm(account) {
   const profile = account?.profile || {};
   const tutor = account?.tutorProfile || {};
@@ -163,7 +168,7 @@ export function AccountLookupSection() {
                 <tbody>
                   {(directoryQuery.data?.records || []).map((person) => (
                     <tr key={person.id}>
-                      <td data-label="Name"><strong>{person.full_name || "Name not recorded"}</strong></td>
+                      <td data-label="Name"><span className="account-directory-person"><DirectoryAvatar person={person} /><strong>{person.full_name || "Name not recorded"}</strong></span></td>
                       <td data-label="Account type"><span className="portal-tag">{roleLabel(person.role)}</span></td>
                       <td data-label={`${roleLabel(person.role)} ID`}><span className="account-directory-id">{person.portal_id || "Not assigned"}</span></td>
                       <td data-label="Email"><span className="account-directory-email">{person.email || "Not recorded"}</span></td>

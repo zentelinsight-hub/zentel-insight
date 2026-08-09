@@ -465,7 +465,7 @@ export async function getStudentFeed() {
       .limit(100),
     supabase
       .from("technology_feed_items")
-      .select("id, source_type, source_name, title, summary, category, image_url, external_url, published_at")
+      .select("id, source_type, source_name, source_icon_url, source_domain, title, summary, category, image_url, external_url, published_at")
       .eq("active", true)
       .order("published_at", { ascending: false })
       .limit(100)
@@ -478,7 +478,7 @@ export async function getStudentFeed() {
   const authorIds = [...new Set(posts.map((item) => item.user_id).filter(Boolean))];
   let profiles = [];
   if (authorIds.length) {
-    const profileResult = await supabase.from("profiles").select("id, full_name, avatar_path").in("id", authorIds);
+    const profileResult = await supabase.from("profiles").select("id, full_name, avatar_url").in("id", authorIds);
     if (!profileResult.error) profiles = normalizeList(profileResult.data);
   }
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
@@ -494,6 +494,7 @@ export async function getStudentFeed() {
       id: `student-${post.id}`,
       kind: "student",
       author: author?.full_name || "Zentel Insight Student",
+      avatarUrl: author?.avatar_url || "",
       body: post.body,
       imageUrl,
       createdAt: post.created_at
@@ -504,6 +505,9 @@ export async function getStudentFeed() {
     id: `technology-${item.id}`,
     kind: "technology",
     author: item.source_name,
+    sourceType: item.source_type,
+    sourceIconUrl: item.source_icon_url || "",
+    sourceDomain: item.source_domain || "",
     title: item.title,
     body: item.summary,
     category: item.category || (item.source_type === "youtube" ? "Technology Video" : "Technology News"),

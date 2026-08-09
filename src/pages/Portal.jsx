@@ -36,6 +36,7 @@ import PortalIdCard from "../components/portal/PortalIdCard";
 import PortalBackButton from "../components/portal/PortalBackButton";
 import PortalNavigationPage from "../components/portal/PortalNavigationPage";
 import PortalShell from "../components/portal/PortalShell";
+import PortalSwitch from "../components/portal/PortalSwitch";
 import { useAuth } from "../context/authHooks";
 import { useTheme } from "../context/themeHooks";
 import { siteConfig } from "../data/site";
@@ -69,6 +70,7 @@ import {
 } from "../services/portal/portalRepository";
 import { claimMyEnrolments } from "../services/authService";
 import { getProgramChatUnreadCounts } from "../services/chatService";
+import { disableDeviceNotifications, enableDeviceNotifications, getDeviceNotificationState } from "../services/pushNotifications";
 import { formatDateTime } from "../utils/format";
 import { usePageMeta } from "../utils/usePageMeta";
 import { useAsyncData } from "../hooks/useAsyncData";
@@ -155,6 +157,31 @@ function PortalAvatar({ profile, user, size = "md" }) {
   );
 }
 
+function FeedSourceIcon({ item }) {
+  const [failed, setFailed] = useState(false);
+  if (item.kind === "student") {
+    return <span className="portal-avatar sm">{item.avatarUrl && !failed ? <img src={item.avatarUrl} alt="" onError={() => setFailed(true)} /> : <span>{item.author.slice(0, 1).toUpperCase()}</span>}</span>;
+  }
+  return <span className="feed-source-icon">{item.sourceIconUrl && !failed ? <img src={item.sourceIconUrl} alt="" width="32" height="32" loading="lazy" onError={() => setFailed(true)} /> : <BrainCircuit size={17} aria-hidden="true" />}</span>;
+}
+
+function FeedMedia({ item }) {
+  const [failed, setFailed] = useState(false);
+  if (!item.imageUrl || failed) return null;
+  return <img className="feed-entry-media" src={item.imageUrl} alt={`${item.title || item.author} preview`} loading="lazy" decoding="async" width="1200" height="675" onError={() => setFailed(true)} />;
+}
+
+function formatRelativeTime(value) {
+  const timestamp = new Date(value || 0).getTime();
+  if (!Number.isFinite(timestamp)) return "Published recently";
+  const minutes = Math.max(0, Math.round((Date.now() - timestamp) / 60000));
+  if (minutes < 60) return `${Math.max(1, minutes)}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return days < 30 ? `${days}d ago` : formatDateTime(value);
+}
+
 function PortalLoading({ label = "Loading information" }) {
   return (
     <div className="portal-local-loading" role="status" aria-live="polite">
@@ -222,6 +249,16 @@ export function PortalLayout() {
   const displayName = profile?.full_name || user?.email || "Learner";
   const unreadNotificationCount = (notificationsQuery.data || []).filter((item) => !item.read_at).length;
   const unreadChatCount = Object.values(chatUnreadQuery.data || {}).reduce((total, value) => total + Number(value || 0), 0);
+  const refetchChatUnread = chatUnreadQuery.refetch;
+
+  useEffect(() => {
+    const refreshUnread = (event) => {
+      const table = event.detail?.table;
+      if (["program_chat_messages", "program_chat_members", "message_read_receipts"].includes(table)) refetchChatUnread();
+    };
+    window.addEventListener("zentel:portal-realtime", refreshUnread);
+    return () => window.removeEventListener("zentel:portal-realtime", refreshUnread);
+  }, [refetchChatUnread]);
 
   useEffect(() => {
     claimMyEnrolments()
@@ -278,8 +315,10 @@ export function PortalLayout() {
         "certificates",
         "enrolments",
         "live_class_sessions",
+        "message_read_receipts",
         "portal_articles",
         "portal_notifications",
+        "program_chat_members",
         "program_chat_messages",
         "program_chat_reactions",
         "program_levels",
@@ -289,7 +328,6 @@ export function PortalLayout() {
         "timetable_entries",
         "tutor_program_assignments"
       ]}
-      onRealtimeChange={dispatchPortalDataRefresh}
     >
         <Outlet />
     </PortalShell>
@@ -297,7 +335,7 @@ export function PortalLayout() {
 }
 
 export function StudentLearningPage() {
-  return <PortalNavigationPage eyebrow="Student Portal" title="Learning" description="Open one learning area at a time." items={[
+  return <PortalNavigationPage eyebrow="Student Portal" title="Learning" items={[
     { to: "/portal/learning/programme", label: "My Programme", description: "Programme and assigned track", Icon: GraduationCap },
     { to: "/portal/learning/classroom", label: "My Classroom", description: "Classroom and Tutor information", Icon: School },
     { to: "/portal/learning/modules", label: "Modules & Lessons", description: "Published learning modules", Icon: BookOpen },
@@ -399,11 +437,11 @@ export function PortalOverview() {
         <section className="student-feed" aria-label="Student and technology feed">
           {(feed.data || []).map((item) => (
             <article className="feed-entry" key={item.id}>
-              <header><span className="portal-avatar sm">{item.kind === "student" ? item.author.slice(0, 1).toUpperCase() : <BrainCircuit size={17} aria-hidden="true" />}</span><div><strong>{item.author}</strong><small>{item.category ? `${item.category} · ` : ""}{formatDateTime(item.createdAt)}</small></div></header>
+              <header><FeedSourceIcon item={item} /><div><strong>{item.author}</strong><small>{item.category ? `${item.category} · ` : ""}{formatRelativeTime(item.createdAt)}</small></div></header>
               {item.title ? <h2>{item.title}</h2> : null}
               <p>{item.body}</p>
-              {item.imageUrl ? <img src={item.imageUrl} alt={`${item.author} post`} loading="lazy" width="1200" height="675" /> : null}
-              {item.externalUrl ? <a className="text-link" href={item.externalUrl} target="_blank" rel="noreferrer">Open source</a> : null}
+              <FeedMedia item={item} />
+              {item.externalUrl ? <a className="text-link" href={item.externalUrl} target="_blank" rel="noreferrer">{item.sourceType === "youtube" ? "Watch on YouTube" : "Read full story"}</a> : null}
             </article>
           ))}
           {!(feed.data || []).length ? <PortalEmpty content={{ empty_title: "The feed is ready", empty_message: "Student posts and published technology content will appear here." }} /> : null}
@@ -956,6 +994,7 @@ export function StudentSettingsPage() {
   return <PortalNavigationPage eyebrow="Student Portal" title="Settings" items={[
     { to: "/portal/settings/appearance", label: "Appearance", description: "Light or dark theme", Icon: Sun },
     { to: "/portal/settings/preferences", label: "Preferences", description: "Notices and reminders", Icon: Settings },
+    { to: "/portal/settings/notifications", label: "Device Notifications", description: "Browser and system notifications", Icon: Bell },
     { to: "/portal/settings/security", label: "Security", description: "Account and credential information", Icon: ShieldCheck },
     { to: "/portal/settings/sessions", label: "Sessions", description: "Current session controls", Icon: Clock3 }
   ]} />;
@@ -1012,9 +1051,9 @@ export function StudentPreferencesSettingsPage() {
             {preferencesQuery.error ? <PortalError message={preferencesQuery.error} onRetry={preferencesQuery.refetch} /> : null}
             {!preferencesQuery.loading && !preferencesQuery.error ? (
               <div className="portal-toggle-list">
-                <button className="switch-row" type="button" role="switch" aria-checked={preferences.email_notifications} onClick={() => setPreferences({ ...preferences, email_notifications: !preferences.email_notifications })}><span>Email notifications</span><span className="switch-control" aria-hidden="true"><span /></span></button>
-                <button className="switch-row" type="button" role="switch" aria-checked={preferences.portal_reminders} onClick={() => setPreferences({ ...preferences, portal_reminders: !preferences.portal_reminders })}><span>Portal reminders</span><span className="switch-control" aria-hidden="true"><span /></span></button>
-                <button className="switch-row" type="button" role="switch" aria-checked={preferences.session_security_warnings} onClick={() => setPreferences({ ...preferences, session_security_warnings: !preferences.session_security_warnings })}><span>Session security warnings</span><span className="switch-control" aria-hidden="true"><span /></span></button>
+                <PortalSwitch label="Email notifications" checked={preferences.email_notifications} onChange={(email_notifications) => setPreferences({ ...preferences, email_notifications })} />
+                <PortalSwitch label="Portal reminders" checked={preferences.portal_reminders} onChange={(portal_reminders) => setPreferences({ ...preferences, portal_reminders })} />
+                <PortalSwitch label="Session security warnings" checked={preferences.session_security_warnings} onChange={(session_security_warnings) => setPreferences({ ...preferences, session_security_warnings })} />
                 <button className="button button-secondary" type="button" onClick={savePreferences} disabled={loading}>
                   {loading ? "Saving" : "Save Preferences"}
                 </button>
@@ -1026,6 +1065,47 @@ export function StudentPreferencesSettingsPage() {
       )}
     </PortalPage>
   );
+}
+
+export function StudentNotificationSettingsPage() {
+  const [state, setState] = useState({ supported: true, enabled: false, permission: "default" });
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState({ type: "", message: "" });
+
+  useEffect(() => {
+    let active = true;
+    getDeviceNotificationState()
+      .then((result) => { if (active) setState(result); })
+      .catch(() => { if (active) setState({ supported: false, enabled: false, permission: "unsupported" }); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  async function toggle(enabled) {
+    setLoading(true);
+    setStatus({ type: "", message: "" });
+    try {
+      const result = enabled ? await enableDeviceNotifications() : await disableDeviceNotifications();
+      setState(result);
+      setStatus({ type: "success", message: enabled ? "Device notifications enabled." : "Device notifications disabled." });
+    } catch (error) {
+      setState((current) => ({ ...current, enabled: false, permission: typeof Notification === "undefined" ? "unsupported" : Notification.permission }));
+      setStatus({ type: "warning", message: error.message || "Device notifications could not be updated." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return <PortalPage slug="settings" title="Notification Settings" backTo="/portal/settings">{() => (
+    <div className="portal-list">
+      <article className="portal-record-card">
+        <PortalSwitch label="Device Notifications" description="Receive important Zentel updates when the portal is in the background." checked={state.enabled} disabled={loading || !state.supported} onChange={toggle} />
+        {!state.supported ? <p className="form-status warning">This browser does not support device notifications.</p> : null}
+        {state.permission === "denied" ? <p className="form-status warning">Notifications are blocked in your browser or device settings.</p> : null}
+      </article>
+      {status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}
+    </div>
+  )}</PortalPage>;
 }
 
 export function StudentSecuritySettingsPage() {

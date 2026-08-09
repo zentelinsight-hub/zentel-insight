@@ -49,7 +49,7 @@ export default function PortalShell({
   realtimeTables = [],
   onRealtimeChange
 }) {
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const shellId = useId().replace(/:/g, "");
@@ -68,7 +68,7 @@ export default function PortalShell({
   }, [location.pathname]);
 
   useEffect(() => {
-    if (!realtimeKey || typeof onRealtimeChange !== "function") return undefined;
+    if (!realtimeKey) return undefined;
     let cancelled = false;
     let channel = null;
     let client = null;
@@ -83,9 +83,14 @@ export default function PortalShell({
           channel = channel.on(
             "postgres_changes",
             { event: "*", schema: "public", table },
-            () => {
+            (payload) => {
+              if (table === "program_chat_messages" && payload?.new?.sender_id === user?.id) return;
               window.clearTimeout(refreshTimer);
-              refreshTimer = window.setTimeout(() => onRealtimeChange(), 250);
+              refreshTimer = window.setTimeout(() => {
+                window.dispatchEvent(new CustomEvent("zentel:portal-realtime", { detail: { table, eventType: payload?.eventType || "*" } }));
+                window.dispatchEvent(new Event("zentel:portal-data-refresh"));
+                onRealtimeChange?.(payload);
+              }, 250);
             }
           );
         });
@@ -101,7 +106,7 @@ export default function PortalShell({
       window.clearTimeout(refreshTimer);
       if (channel && client) void client.removeChannel(channel);
     };
-  }, [onRealtimeChange, realtimeKey, shellId]);
+  }, [onRealtimeChange, realtimeKey, shellId, user?.id]);
 
   async function handleSignOut() {
     closeDetails(accountMenuRef);

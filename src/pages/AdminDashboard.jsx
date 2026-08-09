@@ -30,6 +30,7 @@ import PortalDialog from "../components/portal/PortalDialog";
 import PortalBackButton from "../components/portal/PortalBackButton";
 import PortalNavigationPage from "../components/portal/PortalNavigationPage";
 import PortalShell from "../components/portal/PortalShell";
+import PortalSwitch from "../components/portal/PortalSwitch";
 import { AccountLookupSection, AccountManagementSection } from "./admin/AdminAccountSections";
 import AdminAiSection from "./admin/AdminAiSection";
 import AdminLoanManagement from "./admin/AdminLoanManagement";
@@ -1176,8 +1177,8 @@ function ProgrammesSection({ data, onSaved }) {
           <label><span>Short description</span><textarea value={programForm.short_description} onChange={(event) => setProgramForm({ ...programForm, short_description: event.target.value })} required /></label>
           <label><span>Long description</span><textarea value={programForm.long_description} onChange={(event) => setProgramForm({ ...programForm, long_description: event.target.value })} /></label>
           <div className="portal-toggle-list">
-            <label><input type="checkbox" checked={programForm.active} onChange={(event) => setProgramForm({ ...programForm, active: event.target.checked })} /><span>Published</span></label>
-            <label><input type="checkbox" checked={programForm.featured} onChange={(event) => setProgramForm({ ...programForm, featured: event.target.checked })} /><span>Featured</span></label>
+            <PortalSwitch label="Published" checked={programForm.active} onChange={(active) => setProgramForm({ ...programForm, active })} />
+            <PortalSwitch label="Featured" checked={programForm.featured} onChange={(featured) => setProgramForm({ ...programForm, featured })} />
           </div>
           <button className="button button-primary" type="submit">Save Programme</button>
         </form>
@@ -1196,7 +1197,7 @@ function ProgrammesSection({ data, onSaved }) {
           </div>
           <label><span>Duration</span><input value={trackForm.duration_text} onChange={(event) => setTrackForm({ ...trackForm, duration_text: event.target.value })} /></label>
           <label><span>Description</span><textarea value={trackForm.level_description} onChange={(event) => setTrackForm({ ...trackForm, level_description: event.target.value })} /></label>
-          <label className="checkbox-row"><input type="checkbox" checked={trackForm.active} onChange={(event) => setTrackForm({ ...trackForm, active: event.target.checked })} /><span>Published</span></label>
+          <PortalSwitch label="Published" checked={trackForm.active} onChange={(active) => setTrackForm({ ...trackForm, active })} />
           <button className="button button-primary" type="submit">Save Track</button>
         </form>
       </div>

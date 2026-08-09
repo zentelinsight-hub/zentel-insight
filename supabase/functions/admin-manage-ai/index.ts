@@ -66,6 +66,7 @@ async function dashboard(supabase: any) {
     subscriptions: subscriptionRows,
     wallets: wallets.data || [],
     recentRequests: requestRows.slice(0, 100),
+    billingEvents: paymentRows.slice(0, 100),
     metrics: {
       activeSubscriptions: active.length,
       starterSubscriptions: active.filter((item: any) => item.ai_plans?.slug === "starter").length,

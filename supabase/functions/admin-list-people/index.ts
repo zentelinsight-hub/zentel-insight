@@ -233,7 +233,12 @@ Deno.serve(async (request) => {
     const total = filtered.length;
     const pageCount = Math.max(1, Math.ceil(total / pageSize));
     const offset = (page - 1) * pageSize;
-    const records = filtered.slice(offset, offset + pageSize);
+    const pageRecords = filtered.slice(offset, offset + pageSize);
+    const records = await Promise.all(pageRecords.map(async (person: any) => {
+      if (!person.avatar_path) return { ...person, avatar_url: "" };
+      const { data } = await admin.supabase.storage.from("profile-avatars").createSignedUrl(person.avatar_path, 60 * 30);
+      return { ...person, avatar_url: data?.signedUrl || "" };
+    }));
 
     return jsonResponse({
       ok: true,

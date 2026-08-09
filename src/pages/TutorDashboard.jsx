@@ -27,6 +27,7 @@ import PortalIdCard from "../components/portal/PortalIdCard";
 import PortalBackButton from "../components/portal/PortalBackButton";
 import PortalNavigationPage from "../components/portal/PortalNavigationPage";
 import PortalShell from "../components/portal/PortalShell";
+import PortalSwitch from "../components/portal/PortalSwitch";
 import { useAuth } from "../context/authHooks";
 import { useTheme } from "../context/themeHooks";
 import { useAsyncData } from "../hooks/useAsyncData";
@@ -246,7 +247,7 @@ function DashboardSection({ data, onSaved }) {
 function TutorClassroomsPage({ data }) {
   return (
     <div className="portal-page">
-      <header className="portal-compact-heading"><p className="eyebrow">Tutor Portal</p><h1>Classrooms</h1><p>Open an assigned classroom.</p></header>
+      <header className="portal-compact-heading"><p className="eyebrow">Tutor Portal</p><h1>Classrooms</h1></header>
       <div className="portal-destination-list">
         {data.classrooms.map((room) => <Link to={`/tutor/classrooms/${room.classroom_id}`} key={room.classroom_id}><span className="portal-destination-icon"><School size={18} /></span><span className="portal-destination-copy"><strong>{room.classroom_name}</strong><small>{room.program_title} | {room.track_title} | {room.cohort_name}</small></span><span aria-hidden="true">›</span></Link>)}
       </div>
@@ -675,7 +676,7 @@ function TutorAssignmentsSection({ data, onSaved }) {
             <label><span>Due date</span><input type="datetime-local" value={form.due_at} onChange={(event) => setForm({ ...form, due_at: event.target.value })} /></label>
             <label><span>Maximum score</span><input type="number" min="1" value={form.maximum_score} onChange={(event) => setForm({ ...form, maximum_score: event.target.value })} /></label>
           </div>
-          <label className="checkbox-row"><input type="checkbox" checked={form.published} onChange={(event) => setForm({ ...form, published: event.target.checked })} /><span>Publish to connected Students</span></label>
+          <PortalSwitch label="Publish to connected Students" checked={form.published} onChange={(published) => setForm({ ...form, published })} />
           {status.message ? <div className={`form-status ${status.type}`} role={status.type === "warning" ? "alert" : "status"}>{status.message}</div> : null}
           <div className="button-row">
             {form.id ? <button className="button button-secondary" type="button" onClick={() => setForm(emptyTutorAssignment)}>Cancel Edit</button> : null}
@@ -751,7 +752,7 @@ function TutorResourcesSection({ data, onSaved }) {
           <label><span>Resource type</span><select value={form.resource_type} onChange={(event) => setForm({ ...form, resource_type: event.target.value })}>{["document", "video", "link", "template", "download", "guide"].map((type) => <option value={type} key={type}>{type[0].toUpperCase() + type.slice(1)}</option>)}</select></label>
           <label><span>HTTPS resource link</span><input type="url" value={form.external_url} onChange={(event) => setForm({ ...form, external_url: event.target.value })} required /></label>
           <label><span>Description</span><textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
-          <label className="checkbox-row"><input type="checkbox" checked={form.published} onChange={(event) => setForm({ ...form, published: event.target.checked })} /><span>Publish to connected Students</span></label>
+          <PortalSwitch label="Publish to connected Students" checked={form.published} onChange={(published) => setForm({ ...form, published })} />
           {status.message ? <div className={`form-status ${status.type}`} role={status.type === "warning" ? "alert" : "status"}>{status.message}</div> : null}
           <div className="button-row">
             {form.id ? <button className="button button-secondary" type="button" onClick={() => setForm(emptyTutorResource)}>Cancel Edit</button> : null}

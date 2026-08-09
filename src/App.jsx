@@ -21,6 +21,7 @@ import {
   StudentProgressPage,
   StudentAppearanceSettingsPage,
   StudentPreferencesSettingsPage,
+  StudentNotificationSettingsPage,
   StudentSecuritySettingsPage,
   StudentSessionsSettingsPage,
   StudentLiveClassesPage
@@ -257,6 +258,7 @@ export default function App() {
               <Route path="settings" element={<PortalSection page="settings" />} />
               <Route path="settings/appearance" element={<StudentAppearanceSettingsPage />} />
               <Route path="settings/preferences" element={<StudentPreferencesSettingsPage />} />
+              <Route path="settings/notifications" element={<StudentNotificationSettingsPage />} />
               <Route path="settings/security" element={<StudentSecuritySettingsPage />} />
               <Route path="settings/sessions" element={<StudentSessionsSettingsPage />} />
               <Route path="profile" element={<PortalProfile />} />
