@@ -1,11 +1,6 @@
 import { CheckCircle2, CircleAlert, Info, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
-export function showToast(message, type = "success") {
-  if (!message || typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent("zentel:toast", { detail: { message, type } }));
-}
-
 export default function GlobalToastHost() {
   const [toast, setToast] = useState(null);
 

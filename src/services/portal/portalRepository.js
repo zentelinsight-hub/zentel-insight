@@ -448,7 +448,7 @@ export async function getPortalArticles(userId) {
   });
 }
 
-export async function getStudentFeed(userId) {
+export async function getStudentFeed() {
   const supabase = await getClient();
   await withPortalFallback("technology feed import", () => invokeEdgeFunction("student-tech-feed", {
     body: {},

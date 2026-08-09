@@ -1,6 +1,6 @@
 import { Check, Eye, LoaderCircle, ShieldX, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { showToast } from "../../components/GlobalToastHost";
+import { showToast } from "../../utils/toast";
 import PortalBackButton from "../../components/portal/PortalBackButton";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import { getAdminLoanSnapshot, manageLoanApplication, reviewLoanApplication } from "../../services/loanService";

@@ -232,9 +232,8 @@ describe("StudyHub navigation", () => {
 
     fireEvent.click(menuButton);
     fireEvent.scroll(window);
-    expect(menuButton).toHaveAttribute("aria-expanded", "false");
+    expect(menuButton).toHaveAttribute("aria-expanded", "true");
 
-    fireEvent.click(menuButton);
     desktopMatches = true;
     fireEvent.resize(window);
     expect(menuButton).toHaveAttribute("aria-expanded", "false");

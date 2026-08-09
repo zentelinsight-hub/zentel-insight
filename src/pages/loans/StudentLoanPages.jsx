@@ -2,7 +2,7 @@ import { ArrowRight, Building2, CircleDollarSign, ClipboardCheck, FilePlus2, Loa
 import { useState } from "react";
 import PortalBackButton from "../../components/portal/PortalBackButton";
 import PortalNavigationPage from "../../components/portal/PortalNavigationPage";
-import { showToast } from "../../components/GlobalToastHost";
+import { showToast } from "../../utils/toast";
 import { useAuth } from "../../context/authHooks";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import { getMyLoanSnapshot, saveLoanBankDetails, submitLoanApplication, submitLoanRepayment } from "../../services/loanService";
