@@ -18,6 +18,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import AiMessage from "../components/ai/AiMessage";
 import PortalBackButton from "../components/portal/PortalBackButton";
 import { useAsyncData } from "../hooks/useAsyncData";
+import { usePortalDedicatedWorkspace } from "../hooks/usePortalDedicatedWorkspace";
 import {
   archiveAiConversation,
   buyAiCredits,
@@ -90,15 +91,13 @@ export default function ZentelAI() {
   const canAccess = Boolean(snapshot.access?.account_active && snapshot.access?.ai_access_status !== "suspended" && snapshot.access?.system_available);
   const hasCredits = Number(snapshot.wallet?.total_available || 0) > 0;
 
+  usePortalDedicatedWorkspace();
+
   usePageMeta({ path: "/portal/zentel-ai", title: "Zentel AI", description: "Your personal Zentel Insight learning assistant.", robots: "noindex,nofollow" });
   useEffect(() => {
     setSelectedId(conversationId);
     setStreamMessage(null);
   }, [conversationId]);
-  useEffect(() => {
-    document.body.classList.add("portal-dedicated-workspace");
-    return () => document.body.classList.remove("portal-dedicated-workspace");
-  }, []);
   useEffect(() => { bottomRef.current?.scrollIntoView({ block: "end" }); }, [messages]);
 
   const newConversation = async () => {

@@ -19,6 +19,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/authHooks";
 import { useAsyncData } from "../hooks/useAsyncData";
+import { usePortalDedicatedWorkspace } from "../hooks/usePortalDedicatedWorkspace";
 import {
   CHAT_MESSAGE_MAX_LENGTH,
   ensureProgramClassroom,
@@ -171,17 +172,13 @@ export default function ProgramChatPanel({
   const typingNames = Object.values(typingUsers).map((item) => item.name).filter(Boolean);
   const canHostCall = audience === "tutor" || audience === "admin";
 
+  usePortalDedicatedWorkspace(standalone);
+
   useEffect(() => { onRoomStateRef.current = onRoomState; }, [onRoomState]);
   useEffect(() => { onRoomStateRef.current?.({ roomId: selectedRoom?.id || "", unreadCount: selectedUnreadCount, joined }); }, [joined, selectedRoom?.id, selectedUnreadCount]);
   useEffect(() => () => { if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl); }, [imagePreviewUrl]);
   useEffect(() => () => window.clearTimeout(longPressTimerRef.current), []);
   useEffect(() => { setMessages(messagesQuery.data || []); }, [messagesQuery.data]);
-
-  useEffect(() => {
-    if (!standalone) return undefined;
-    document.body.classList.add("portal-dedicated-workspace");
-    return () => document.body.classList.remove("portal-dedicated-workspace");
-  }, [standalone]);
 
   useEffect(() => {
     if (!textareaRef.current) return;

@@ -639,6 +639,7 @@ h3 {
   }
 }
 
+
 .auth-progress-open {
   overflow: hidden;
 }
@@ -7232,6 +7233,7 @@ body.portal-dedicated-workspace .ai-chat-page {
   }
 }
 
+
 .payment-search-controls {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(150px, 220px);
@@ -9268,5 +9270,128 @@ body.portal-dedicated-workspace .ai-chat-page {
   body.portal-dedicated-workspace .chat-route-page,
   body.portal-dedicated-workspace .ai-chat-page {
     height: calc(var(--portal-visual-viewport-height, 100dvh) - var(--portal-header-height) - 0.8rem);
+  }
+}
+
+/* Phase 6 dedicated workspaces. The visible viewport owns one shell with a
+   non-scrolling header and one minmax(0, 1fr) application row. */
+html:has(body.portal-dedicated-workspace),
+body.portal-dedicated-workspace,
+body.portal-dedicated-workspace #root {
+  width: var(--portal-visual-viewport-width, 100vw);
+  height: var(--portal-visual-viewport-height, 100dvh);
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body.portal-dedicated-workspace {
+  position: fixed;
+  top: var(--portal-visual-viewport-top, 0px);
+  left: var(--portal-visual-viewport-left, 0px);
+}
+
+body.portal-dedicated-workspace .portal-shell {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+body.portal-dedicated-workspace .portal-header.portal-topbar {
+  position: relative;
+  inset: auto;
+  grid-row: 1;
+}
+
+body.portal-dedicated-workspace .portal-main {
+  grid-row: 2;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0.55rem clamp(0.5rem, 1.5vw, 1rem) max(0.45rem, env(safe-area-inset-bottom));
+  overflow: hidden;
+}
+
+body.portal-dedicated-workspace .chat-route-page,
+body.portal-dedicated-workspace .ai-chat-page {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+}
+
+body.portal-dedicated-workspace .chat-panel.chat-standalone,
+body.portal-dedicated-workspace .ai-chat-page .ai-workspace,
+body.portal-dedicated-workspace .chat-thread,
+body.portal-dedicated-workspace .ai-chat-page .ai-chat {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
+}
+
+body.portal-dedicated-workspace .chat-panel.chat-standalone,
+body.portal-dedicated-workspace .ai-chat-page .ai-workspace {
+  flex: 1 1 auto;
+}
+
+body.portal-dedicated-workspace .ai-chat-page .ai-workspace {
+  max-width: none;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.portal-dedicated-workspace .chat-thread,
+body.portal-dedicated-workspace .ai-chat-page .ai-chat {
+  display: grid;
+}
+
+body.portal-dedicated-workspace .ai-chat-page .ai-chat {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+body.portal-dedicated-workspace .chat-message-list,
+body.portal-dedicated-workspace .ai-message-list {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+body.portal-dedicated-workspace .chat-composer,
+body.portal-dedicated-workspace .ai-composer-wrap {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  flex: 0 0 auto;
+  padding-bottom: max(0.45rem, env(safe-area-inset-bottom));
+  background: var(--color-surface);
+}
+
+body.portal-dedicated-workspace .ai-message-list > * {
+  width: min(100%, 880px);
+  margin-inline: auto;
+}
+
+body.portal-dedicated-workspace .ai-composer-wrap > * {
+  width: min(100%, 920px);
+  margin-inline: auto;
+}
+
+@media (max-width: 920px), (max-height: 520px) and (orientation: landscape) {
+  body.portal-dedicated-workspace .portal-main {
+    padding: 0.35rem 0.4rem max(0.35rem, env(safe-area-inset-bottom));
+  }
+
+  body.portal-dedicated-workspace .chat-panel.chat-standalone,
+  body.portal-dedicated-workspace .ai-chat-page .ai-workspace {
+    border-radius: 0;
   }
 }
