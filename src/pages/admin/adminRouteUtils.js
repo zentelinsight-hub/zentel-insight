@@ -46,6 +46,9 @@ export function resolveAdminRoute(pathname, forcedSection = "") {
   if (section === "classrooms" && parts.at(-1) === "chat") {
     return { section: "classroom-chat", portalId: "", roomId: parts[1] || "all" };
   }
+  if (section === "payments") {
+    return { section: "payments", portalId: "", roomId: "", paymentId: parts[1] || "" };
+  }
 
   return { section: resolveAdminSection(section, ""), portalId: "", roomId: "" };
 }

@@ -22,4 +22,13 @@ describe("resolveAdminRoute", () => {
     expect(resolveAdminRoute("/admin/academics").section).toBe("academics");
     expect(resolveAdminRoute("/admin/more").section).toBe("more");
   });
+
+  it("keeps a Payment Details route inside the Payments workspace", () => {
+    expect(resolveAdminRoute("/admin/payments/9af3bc0d-400a-4a8d-88e4-fb4e289a5a29")).toEqual({
+      section: "payments",
+      portalId: "",
+      roomId: "",
+      paymentId: "9af3bc0d-400a-4a8d-88e4-fb4e289a5a29"
+    });
+  });
 });

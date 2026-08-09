@@ -34,6 +34,7 @@ import PortalSwitch from "../components/portal/PortalSwitch";
 import { AccountLookupSection, AccountManagementSection } from "./admin/AdminAccountSections";
 import AdminAiSection from "./admin/AdminAiSection";
 import AdminLoanManagement from "./admin/AdminLoanManagement";
+import { AdminPaymentDetails, AdminPaymentSearch } from "./admin/AdminPaymentSearch";
 import AdminStaffSection from "./admin/AdminStaffSection";
 import { resolveAdminRoute } from "./admin/adminRouteUtils";
 import { useAuth } from "../context/authHooks";
@@ -1419,58 +1420,6 @@ function LiveClassesSection({ data, onSaved }) {
   );
 }
 
-function PaymentsSection({ data }) {
-  const [filters, setFilters] = useState({ status: "", email: "", programme: "", reference: "", from: "", to: "" });
-  const payments = useMemo(() => data.payments.filter((payment) => {
-    const haystack = `${payment.reference || ""} ${payment.customer_name || ""} ${payment.customer_email || ""} ${payment.customer_phone || ""} ${payment.product_name || ""} ${payment.product_key || ""} ${payment.selected_level || ""}`.toLowerCase();
-    const reportedStatus = String(payment.reported_status || payment.status || "initiated").toLowerCase();
-    const createdDate = String(payment.created_at || "").slice(0, 10);
-    if (filters.status && reportedStatus !== filters.status) return false;
-    if (filters.email && !String(payment.customer_email || "").toLowerCase().includes(filters.email.toLowerCase())) return false;
-    if (filters.programme && !haystack.includes(filters.programme.toLowerCase())) return false;
-    if (filters.reference && !String(payment.reference || "").toLowerCase().includes(filters.reference.toLowerCase())) return false;
-    if (filters.from && createdDate < filters.from) return false;
-    if (filters.to && createdDate > filters.to) return false;
-    return true;
-  }), [data.payments, filters]);
-
-  return (
-    <div className="portal-page">
-      <PageHeading title="Paystack payment attempts." description="Review initiated, pending, successful, failed, declined, cancelled and abandoned payment records." />
-      <div className="filter-bar">
-        <input placeholder="Reference" value={filters.reference} onChange={(event) => setFilters({ ...filters, reference: event.target.value })} />
-        <input placeholder="Email" value={filters.email} onChange={(event) => setFilters({ ...filters, email: event.target.value })} />
-        <input placeholder="Programme" value={filters.programme} onChange={(event) => setFilters({ ...filters, programme: event.target.value })} />
-        <label><span>From</span><input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} /></label>
-        <label><span>To</span><input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} /></label>
-        <select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
-          <option value="">All statuses</option>
-          {["initiated", "opened", "client_success", "pending", "success", "failed", "declined", "cancelled", "closed", "abandoned"].map((status) => <option key={status} value={status}>{status.replace(/_/g, " ")}</option>)}
-        </select>
-      </div>
-      <div className="responsive-table-wrap">
-        <table className="management-table">
-          <thead><tr><th>Reference</th><th>Customer</th><th>Contact</th><th>Programme / Track</th><th>Amount</th><th>Reported</th><th>Verification</th><th>Updated</th></tr></thead>
-          <tbody>
-            {payments.map((payment) => (
-              <tr key={payment.id}>
-                <td data-label="Reference">{payment.reference}</td>
-                <td data-label="Customer">{payment.customer_name || payment.student_name || "Not recorded"}</td>
-                <td data-label="Contact">{payment.customer_email}<br />{payment.customer_phone || ""}</td>
-                <td data-label="Programme / Track">{payment.product_name || payment.product_key}<br />{payment.selected_level || payment.track_slug || ""}</td>
-                <td data-label="Amount">{formatAmountKobo(payment.amount_kobo || payment.expected_amount_kobo)}</td>
-                <td data-label="Reported">{payment.reported_status || payment.status || "initiated"}</td>
-                <td data-label="Verification">{payment.verified_at ? "verified" : payment.verification_status || "unverified"}</td>
-                <td data-label="Updated">{formatDateTime(payment.updated_at || payment.created_at)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 function SupportSection({ data, onSaved }) {
   const [responses, setResponses] = useState({});
   const [savingTicketId, setSavingTicketId] = useState("");
@@ -1746,7 +1695,7 @@ function AdminFinanceSection({ pathname }) {
 
 export default function AdminDashboard({ forcedSection = "" }) {
   const location = useLocation();
-  const { section: activeSection, portalId, roomId } = resolveAdminRoute(location.pathname, forcedSection);
+  const { section: activeSection, portalId, roomId, paymentId } = resolveAdminRoute(location.pathname, forcedSection);
   const activeSectionLabel = sections.find(([slug]) => slug === activeSection)?.[1] || "Overview";
   const dataQuery = useAsyncData(
     () => getAdminDashboardData(activeSection === "classroom-chat" ? "classrooms" : activeSection === "more" ? "overview" : activeSection),
@@ -1825,7 +1774,8 @@ export default function AdminDashboard({ forcedSection = "" }) {
       {["timetable", "announcements", "assignments", "resources", "articles"].includes(activeSection)
         ? <ContentSection data={data} onSaved={dataQuery.refetch} activeSection={activeSection} />
         : null}
-      {activeSection === "payments" ? <PaymentsSection data={data} /> : null}
+      {activeSection === "payments" && paymentId ? <AdminPaymentDetails paymentId={paymentId} /> : null}
+      {activeSection === "payments" && !paymentId ? <AdminPaymentSearch /> : null}
       {activeSection === "certificates" ? (
         <AdminRecordsSection
           title="Certificates."

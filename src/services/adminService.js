@@ -66,7 +66,7 @@ const adminSectionData = {
   assignments: ["programs", "assignments"],
   resources: ["programs", "resources"],
   articles: ["programs", "articles"],
-  payments: ["payments"],
+  payments: [],
   certificates: ["profiles", "certificates"],
   notifications: ["notifications"],
   support: ["profiles", "supportTickets"],
@@ -245,6 +245,29 @@ export async function createTutorAccount(values) {
     failureMessage: "Tutor account could not be created. Please review the details and try again."
   });
   if (!data?.ok) throw new Error(data?.error || "Tutor account could not be created.");
+  return data;
+}
+
+export async function searchAdminPayments({ query = "", status = "all", page = 1, pageSize = 25 } = {}) {
+  const supabase = await getClient();
+  const safePage = Math.max(1, Number(page) || 1);
+  const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 25));
+  const { data, error } = await supabase.rpc("admin_search_payments", {
+    search_text: String(query || "").trim(),
+    status_filter: String(status || "all").trim().toLowerCase(),
+    page_number: safePage,
+    page_size: safePageSize
+  });
+  if (error) throw error;
+  const records = normalizeList(data);
+  const total = Number(records[0]?.total_count || 0);
+  return { records, total, page: safePage, pageSize: safePageSize, pageCount: Math.max(1, Math.ceil(total / safePageSize)) };
+}
+
+export async function getAdminPaymentDetails(paymentId) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("admin_get_payment_details", { payment_id: paymentId });
+  if (error) throw error;
   return data;
 }
 

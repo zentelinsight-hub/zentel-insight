@@ -7232,6 +7232,71 @@ body.portal-dedicated-workspace .ai-chat-page {
   }
 }
 
+.payment-search-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 220px);
+  gap: 0.65rem;
+}
+
+.payment-search-input {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding-inline: 0.7rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-small);
+  background: var(--color-surface);
+}
+
+.payment-search-input input {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 0;
+  border: 0;
+  background: transparent;
+}
+
+.payment-search-results {
+  min-height: 180px;
+}
+
+.payment-search-table td small,
+.payment-search-table td strong {
+  display: block;
+}
+
+.payment-search-table td small {
+  margin-top: 0.2rem;
+  color: var(--color-muted);
+}
+
+.payment-search-pagination,
+.payment-search-pagination > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.payment-detail-section {
+  display: grid;
+  gap: 0.65rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+@media (max-width: 680px) {
+  .payment-search-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .payment-search-pagination {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 /* Phase 5 application workspaces: the visual viewport owns the shell and only
    the conversation history scrolls. Chat and Zentel AI intentionally share
    this layout so mobile keyboard and browser-toolbar resizing behave alike. */
