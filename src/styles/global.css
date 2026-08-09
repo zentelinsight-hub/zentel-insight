@@ -7069,6 +7069,171 @@ body.portal-dedicated-workspace .chat-standalone {
   min-width: 0;
 }
 
+/* Phase 3 shared navigation: document-level public drawer and mobile portal bar. */
+.portal-mobile-profile-link {
+  display: none;
+}
+
+@media (max-width: 1279.98px) {
+  .site-drawer-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    pointer-events: none;
+  }
+
+  .site-drawer-layer .site-menu-backdrop {
+    z-index: 0;
+    pointer-events: auto;
+    overscroll-behavior: contain;
+  }
+
+  .site-drawer-layer .mobile-menu {
+    inset: 0 auto 0 0;
+    z-index: 1;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+    overscroll-behavior: contain;
+    pointer-events: auto;
+  }
+
+  .site-drawer-layer .mobile-menu-header,
+  .site-drawer-layer .mobile-menu-actions {
+    flex: 0 0 auto;
+    background: var(--color-surface);
+  }
+
+  .site-drawer-layer .mobile-menu-inner {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .site-drawer-layer .mobile-menu-actions {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.65rem max(0.65rem, env(safe-area-inset-right)) max(0.65rem, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--color-border);
+  }
+}
+
+@media (max-width: 920px) {
+  .portal-shell {
+    --portal-header-height: 86px;
+  }
+
+  .portal-header.portal-topbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: 36px 46px;
+    grid-template-areas:
+      "brand avatar"
+      "navigation navigation";
+    gap: 0;
+    height: var(--portal-header-height);
+    padding: 2px 0.55rem;
+  }
+
+  .portal-top-brand {
+    grid-area: brand;
+    align-self: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+  }
+
+  .portal-top-brand > span:last-child {
+    display: inline;
+  }
+
+  .portal-top-brand .brand-logo-frame {
+    --logo-size: 28px !important;
+    flex: 0 0 28px;
+  }
+
+  .portal-mobile-profile-link {
+    grid-area: avatar;
+    align-self: center;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 50%;
+    transition: transform 140ms ease;
+  }
+
+  .portal-mobile-profile-link:active {
+    transform: scale(0.94);
+  }
+
+  .portal-mobile-profile-link .portal-avatar.sm {
+    width: 30px;
+    height: 30px;
+  }
+
+  .portal-top-navigation {
+    grid-area: navigation;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: stretch;
+    justify-content: stretch;
+    gap: 0.15rem;
+  }
+
+  .portal-top-navigation > .portal-top-link {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+    padding: 0.2rem 0.1rem;
+    border-radius: 5px;
+  }
+
+  .portal-top-navigation > .portal-top-link > span:not(.portal-nav-badge) {
+    position: static;
+    width: 100%;
+    height: auto;
+    margin: 0;
+    overflow: hidden;
+    clip: auto;
+    color: inherit;
+    font-size: clamp(0.56rem, 2.3vw, 0.66rem);
+    line-height: 1.05;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .portal-top-navigation > .portal-top-link .portal-nav-badge {
+    top: 0;
+    right: max(4px, 15%);
+  }
+
+  .portal-account-menu {
+    display: none;
+  }
+
+  .portal-main,
+  body.portal-dedicated-workspace .portal-main {
+    padding-top: calc(var(--portal-header-height) + 0.55rem);
+  }
+}
+
+@media (max-width: 360px) {
+  .portal-header.portal-topbar {
+    padding-inline: 0.35rem;
+  }
+
+  .portal-top-navigation {
+    gap: 0.05rem;
+  }
+
+  .portal-top-navigation > .portal-top-link > span:not(.portal-nav-badge) {
+    font-size: 0.56rem;
+  }
+}
+
 .chat-panel.chat-standalone {
   min-height: 0;
   height: 100%;

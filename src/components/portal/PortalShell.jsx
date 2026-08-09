@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ChevronDown, LogOut, UserRound } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import BrandLogo from "../BrandLogo";
@@ -7,9 +7,14 @@ import { useAuth } from "../../context/authHooks";
 import { getSupabaseClient } from "../../services/supabaseClient";
 
 function ProfileAvatar({ name, avatarUrl, initial }) {
+  const [failed, setFailed] = useState(false);
+  const fallback = initial || String(name || "P").slice(0, 1).toUpperCase();
+
   return (
     <span className="portal-avatar sm">
-      {avatarUrl ? <img src={avatarUrl} alt="" /> : <span>{initial || String(name || "P").slice(0, 1).toUpperCase()}</span>}
+      {avatarUrl && !failed
+        ? <img src={avatarUrl} alt={`${name || "Account"} profile`} onError={() => setFailed(true)} />
+        : <span aria-hidden="true">{fallback}</span>}
     </span>
   );
 }
@@ -116,6 +121,12 @@ export default function PortalShell({
           <BrandLogo brand="main" size={36} />
           <span>Zentel Insight</span>
         </NavLink>
+
+        {sidebar.profileTo ? (
+          <NavLink className="portal-mobile-profile-link" to={sidebar.profileTo} onClick={closeMenus} aria-label={`Open ${sidebar.profileName || "account"} profile`}>
+            <ProfileAvatar name={sidebar.profileName} avatarUrl={sidebar.avatarUrl} initial={sidebar.profileInitial} />
+          </NavLink>
+        ) : null}
 
         <nav className="portal-top-navigation" aria-label={sidebar.navLabel}>
           {primaryItems.map((item) => <PortalNavLink key={item.to} item={item} onNavigate={closeMenus} />)}

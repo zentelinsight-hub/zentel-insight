@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { Menu, Moon, Sun, X } from "lucide-react";
 import BrandLogo from "./BrandLogo";
@@ -62,6 +63,7 @@ export default function SiteNavbar({
   const menuButtonRef = useRef(null);
   const openRef = useRef(open);
   const lockedScrollRef = useRef(null);
+  const previousBodyStylesRef = useRef(null);
 
   const closeMenu = () => setOpen(false);
 
@@ -70,17 +72,34 @@ export default function SiteNavbar({
     document.body.classList.toggle("menu-open", open);
     if (open && lockedScrollRef.current === null) {
       lockedScrollRef.current = window.scrollY;
+      previousBodyStylesRef.current = {
+        position: document.body.style.position,
+        top: document.body.style.top,
+        right: document.body.style.right,
+        left: document.body.style.left,
+        width: document.body.style.width,
+        overflow: document.body.style.overflow,
+        htmlOverflow: document.documentElement.style.overflow
+      };
       document.body.style.position = "fixed";
       document.body.style.top = `-${lockedScrollRef.current}px`;
       document.body.style.right = "0";
       document.body.style.left = "0";
+      document.body.style.width = "100%";
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
     } else if (!open && lockedScrollRef.current !== null) {
       const scrollY = lockedScrollRef.current;
+      const previous = previousBodyStylesRef.current || {};
       lockedScrollRef.current = null;
-      document.body.style.position = "";
-      document.body.style.top = "";
-      document.body.style.right = "";
-      document.body.style.left = "";
+      previousBodyStylesRef.current = null;
+      document.body.style.position = previous.position || "";
+      document.body.style.top = previous.top || "";
+      document.body.style.right = previous.right || "";
+      document.body.style.left = previous.left || "";
+      document.body.style.width = previous.width || "";
+      document.body.style.overflow = previous.overflow || "";
+      document.documentElement.style.overflow = previous.htmlOverflow || "";
       window.scrollTo(0, scrollY);
     }
 
@@ -88,11 +107,16 @@ export default function SiteNavbar({
       document.body.classList.remove("menu-open");
       if (lockedScrollRef.current !== null) {
         const scrollY = lockedScrollRef.current;
+        const previous = previousBodyStylesRef.current || {};
         lockedScrollRef.current = null;
-        document.body.style.position = "";
-        document.body.style.top = "";
-        document.body.style.right = "";
-        document.body.style.left = "";
+        previousBodyStylesRef.current = null;
+        document.body.style.position = previous.position || "";
+        document.body.style.top = previous.top || "";
+        document.body.style.right = previous.right || "";
+        document.body.style.left = previous.left || "";
+        document.body.style.width = previous.width || "";
+        document.body.style.overflow = previous.overflow || "";
+        document.documentElement.style.overflow = previous.htmlOverflow || "";
         window.scrollTo(0, scrollY);
       }
     };
@@ -122,7 +146,7 @@ export default function SiteNavbar({
 
     function handlePointerDown(event) {
       if (!openRef.current) return;
-      if (event.target instanceof Node && headerRef.current?.contains(event.target)) return;
+      if (event.target instanceof Node && (headerRef.current?.contains(event.target) || menuRef.current?.contains(event.target))) return;
       closeMenu();
     }
 
@@ -180,19 +204,22 @@ export default function SiteNavbar({
         </div>
       </nav>
 
-      <button
-        className={open ? "site-menu-backdrop open" : "site-menu-backdrop"}
-        type="button"
-        aria-label="Close navigation"
-        onClick={closeMenu}
-      />
-      <div id={drawerId} className={open ? "mobile-menu open" : "mobile-menu"} ref={menuRef}>
-        <div className="mobile-menu-header"><Link className="mobile-drawer-brand" to={brandHref} onClick={closeMenu}><BrandLogo brand={brand} size={34} /><strong>{brandName}</strong></Link><button className="icon-button" type="button" aria-label="Close navigation menu" onClick={closeMenu}><X size={20} /></button></div>
-        <nav className="mobile-menu-inner" aria-label={`${ariaLabel} mobile`}>
-          {links.map((item) => renderNavItem(item, "mobile-nav-link", closeMenu))}
-        </nav>
-        {actions.length ? <div className="mobile-menu-actions">{actions.map((item) => renderNavItem(item, "mobile-nav-link", closeMenu))}</div> : null}
-      </div>
+      {open ? createPortal(
+        <div className="site-drawer-layer">
+          <button className="site-menu-backdrop open" type="button" aria-label="Close navigation" onClick={closeMenu} />
+          <aside id={drawerId} className="mobile-menu open" ref={menuRef} aria-label={`${ariaLabel} menu`}>
+            <div className="mobile-menu-header">
+              <Link className="mobile-drawer-brand" to={brandHref} onClick={closeMenu}><BrandLogo brand={brand} size={34} /><strong>{brandName}</strong></Link>
+              <button className="icon-button" type="button" aria-label="Close navigation menu" onClick={closeMenu}><X size={20} /></button>
+            </div>
+            <nav className="mobile-menu-inner" aria-label={`${ariaLabel} mobile`}>
+              {links.map((item) => renderNavItem(item, "mobile-nav-link", closeMenu))}
+            </nav>
+            {actions.length ? <div className="mobile-menu-actions">{actions.map((item) => renderNavItem(item, "mobile-nav-link", closeMenu))}</div> : null}
+          </aside>
+        </div>,
+        document.body
+      ) : null}
     </header>
   );
 }
