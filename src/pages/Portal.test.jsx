@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthContext } from "../context/authContextCore";
 import { ThemeProvider } from "../context/ThemeContext";
-import { PortalLayout, PortalOverview, PortalProfile, PortalSection } from "./Portal";
+import { PortalLayout, PortalOverview, PortalProfile, PortalSection, StudentAppearanceSettingsPage, StudentPreferencesSettingsPage, StudentSecuritySettingsPage, StudentSessionsSettingsPage } from "./Portal";
 
 const hookMocks = vi.hoisted(() => ({
   usePortalPageContent: vi.fn(),
@@ -100,6 +100,10 @@ function renderPortal(path) {
               <Route path="articles" element={<PortalSection page="articles" />} />
               <Route path="support" element={<PortalSection page="support" />} />
               <Route path="settings" element={<PortalSection page="settings" />} />
+              <Route path="settings/appearance" element={<StudentAppearanceSettingsPage />} />
+              <Route path="settings/preferences" element={<StudentPreferencesSettingsPage />} />
+              <Route path="settings/security" element={<StudentSecuritySettingsPage />} />
+              <Route path="settings/sessions" element={<StudentSessionsSettingsPage />} />
             </Route>
           </Routes>
         </MemoryRouter>
@@ -208,7 +212,7 @@ describe("Portal routes", () => {
     ["/portal/notifications", "Notifications", "useStudentNotifications"],
     ["/portal/articles", "Learning Articles", "usePortalArticles"],
     ["/portal/support", "Support Tickets", "useStudentSupportTickets"],
-    ["/portal/settings", "Account Settings", null]
+    ["/portal/settings", "Settings", null]
   ])("renders %s from the portal data layer", (path, heading, hookName) => {
     renderPortal(path);
     expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
@@ -223,10 +227,10 @@ describe("Portal routes", () => {
     expect(screen.queryByRole("button", { name: /save programme/i })).not.toBeInTheDocument();
   });
 
-  it("shows programme and credentials as Admin-managed in settings", () => {
-    renderPortal("/portal/settings");
-    expect(screen.getByRole("heading", { name: "Assigned programme" })).toBeInTheDocument();
-    expect(screen.getByText(/assigned only by Zentel Insight Admin/i)).toBeInTheDocument();
+  it("separates Admin-managed credentials from programme information", () => {
+    renderPortal("/portal/settings/security");
+    expect(screen.getByRole("heading", { name: "Security" })).toBeInTheDocument();
+    expect(screen.getByText(/credentials are managed by Zentel Insight Admin/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Save Programme/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /password reset/i })).not.toBeInTheDocument();
   });

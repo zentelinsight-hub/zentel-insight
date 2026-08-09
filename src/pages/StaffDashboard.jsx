@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Activity, BriefcaseBusiness, FileText, FileUp, Home, MessageSquare, MoreHorizontal, Search, Send, ShieldCheck, UserRound } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
+import PortalBackButton from "../components/portal/PortalBackButton";
 import PortalNavigationPage from "../components/portal/PortalNavigationPage";
 import PortalShell from "../components/portal/PortalShell";
 import { useAuth } from "../context/authHooks";
@@ -17,8 +18,10 @@ import {
 import { formatDateTime } from "../utils/format";
 import { usePageMeta } from "../utils/usePageMeta";
 
-function Heading({ title, description }) {
-  return <div className="portal-page-heading"><div><p className="eyebrow">Staff Portal</p><h2>{title}</h2><p>{description}</p></div></div>;
+function Heading({ title }) {
+  const location = useLocation();
+  const showBack = !["/staff", "/staff/more"].includes(location.pathname.replace(/\/$/, ""));
+  return <div className="portal-page-heading"><div><p className="eyebrow">Staff Portal</p><div className="portal-title-row">{showBack ? <PortalBackButton fallback="/staff" label={`Back from ${title}`} /> : null}<h2>{title}</h2></div></div></div>;
 }
 
 function resolveStaffRoute(pathname) {

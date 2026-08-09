@@ -68,6 +68,8 @@ describe("Programme Classroom chat", () => {
     expect(container.querySelector('input[type="file"]')).toHaveClass("sr-only");
     expect(container.querySelector(".chat-composer-row")).toContainElement(screen.getByPlaceholderText("Message your classroom"));
     expect(container.querySelector(".chat-composer-row")).toContainElement(screen.getByRole("button", { name: "Send message" }));
+    expect(container.querySelector(".chat-message-list")?.parentElement).toBe(container.querySelector(".chat-composer")?.parentElement);
+    expect(container.querySelector(".chat-thread")?.lastElementChild).toBe(container.querySelector(".chat-composer"));
     expect(screen.queryByText(/Choose File/i)).not.toBeInTheDocument();
   });
 

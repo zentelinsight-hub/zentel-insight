@@ -2,6 +2,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, KeyRound, Search, ShieldCheck, Us
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PortalDialog from "../../components/portal/PortalDialog";
+import PortalBackButton from "../../components/portal/PortalBackButton";
 import PortalIdCard from "../../components/portal/PortalIdCard";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import { findAdminAccount, searchAdminAccounts, setAccountStatus, updateAccountCredentials, updateStudentProfile, updateTutorProfile } from "../../services/adminService";
@@ -313,7 +314,7 @@ export function AccountManagementSection({ portalId, programs = [] }) {
         <h2>We could not load this account</h2>
         <p>Check the Portal ID and try again.</p>
         <div className="button-row">
-          <button className="button button-secondary" type="button" onClick={() => navigate("/admin/accounts")}><ArrowLeft size={18} aria-hidden="true" />Account Lookup</button>
+          <PortalBackButton fallback="/admin/accounts" label="Back to Account Lookup" />
           <button className="button button-primary" type="button" onClick={accountQuery.refetch}>Try Again</button>
         </div>
       </section>
@@ -328,10 +329,8 @@ export function AccountManagementSection({ portalId, programs = [] }) {
     <div className="account-management-page">
       <div className="portal-page-heading">
         <div>
-          <button className="text-link" type="button" onClick={cancel}><ArrowLeft size={16} aria-hidden="true" />Account Lookup</button>
           <p className="eyebrow">{role} account</p>
-          <h2>{profile.full_name || role}</h2>
-          <p>Manage the exact account identified by its permanent Portal ID.</p>
+          <div className="portal-title-row"><button className="portal-icon-button portal-back-button" type="button" onClick={cancel} aria-label="Back to Account Lookup" title="Back to Account Lookup"><ArrowLeft size={17} aria-hidden="true" /><span className="sr-only">Back to Account Lookup</span></button><h2>{profile.full_name || role}</h2></div>
         </div>
         <span className={`portal-tag ${profile.account_status === "active" ? "success" : "warning"}`}>{profile.account_status}</span>
       </div>

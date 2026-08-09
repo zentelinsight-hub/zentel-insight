@@ -187,13 +187,14 @@ function PortalEmpty({ content, action }) {
   );
 }
 
-function PortalPage({ slug, children, actions }) {
+function PortalPage({ slug, children, actions, title, backTo }) {
   const contentQuery = usePortalPageContent(slug);
   const content = contentQuery.data;
+  const pageTitle = title || content?.title || "Student Portal";
 
   usePageMeta({
     path: pageMeta[slug] || "/portal",
-    title: content?.title || "Student Portal",
+    title: pageTitle,
     description: content?.description || "Zentel Insight Student Portal.",
     robots: "noindex,nofollow"
   });
@@ -202,8 +203,7 @@ function PortalPage({ slug, children, actions }) {
     <div className="portal-page">
       <div className="portal-page-heading">
         <div>
-          <div className="portal-title-row"><PortalBackButton fallback={slug === "payments" ? "/portal/finance" : ["my-courses", "classroom", "timetable", "assignments", "resources", "certificates"].includes(slug) ? "/portal/learning" : "/portal/more"} label={`Back from ${content?.title || "page"}`} /><h2>{content?.title || "Student Portal"}</h2></div>
-          <p>{content?.description || "Your private Zentel Insight account information is loaded securely."}</p>
+          <div className="portal-title-row"><PortalBackButton fallback={backTo || (slug === "payments" ? "/portal/finance" : ["my-courses", "classroom", "timetable", "assignments", "resources", "certificates"].includes(slug) ? "/portal/learning" : "/portal/more")} label={`Back from ${pageTitle}`} /><h2>{pageTitle}</h2></div>
         </div>
         {actions}
       </div>
@@ -815,7 +815,7 @@ function NotificationsPage() {
   return (
     <div className="portal-page notification-page">
       <header className="portal-compact-heading notification-heading">
-        <div><p className="eyebrow">Student Portal</p><h1>Notifications</h1></div>
+        <div><p className="eyebrow">Student Portal</p><div className="portal-title-row"><PortalBackButton fallback="/portal/more" label="Back from Notifications" /><h1>Notifications</h1></div></div>
         <button className="compact-text-action" type="button" onClick={markAll} disabled={busy}>Mark all read</button>
       </header>
       {query.loading ? <PortalLoading label="Loading notifications" /> : null}
@@ -952,11 +952,25 @@ function SupportPage() {
   );
 }
 
-function SettingsPage() {
-  const { user, signOut } = useAuth();
+export function StudentSettingsPage() {
+  return <PortalNavigationPage eyebrow="Student Portal" title="Settings" items={[
+    { to: "/portal/settings/appearance", label: "Appearance", description: "Light or dark theme", Icon: Sun },
+    { to: "/portal/settings/preferences", label: "Preferences", description: "Notices and reminders", Icon: Settings },
+    { to: "/portal/settings/security", label: "Security", description: "Account and credential information", Icon: ShieldCheck },
+    { to: "/portal/settings/sessions", label: "Sessions", description: "Current session controls", Icon: Clock3 }
+  ]} />;
+}
+
+export function StudentAppearanceSettingsPage() {
   const { theme, setTheme } = useTheme();
+  return <PortalPage slug="settings" title="Appearance" backTo="/portal/settings">{() => (
+    <div className="portal-list"><article className="portal-record-card"><h3>Theme</h3><div className="segmented-control" role="group" aria-label="Theme preference"><button type="button" className={theme === "light" ? "active" : ""} onClick={() => setTheme("light")}><Sun size={16} aria-hidden="true" /> Light</button><button type="button" className={theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")}><Moon size={16} aria-hidden="true" /> Dark</button></div></article></div>
+  )}</PortalPage>;
+}
+
+export function StudentPreferencesSettingsPage() {
+  const { user } = useAuth();
   const preferencesQuery = useStudentPreferences(user?.id);
-  const enrolmentsQuery = useStudentEnrolments(user?.id);
   const [preferences, setPreferences] = useState({
     email_notifications: true,
     portal_reminders: true,
@@ -964,7 +978,6 @@ function SettingsPage() {
   });
   const [status, setStatus] = useState({ type: "", message: "" });
   const [loading, setLoading] = useState(false);
-  const activeOfficialProgramme = (enrolmentsQuery.data || []).find((item) => item.status === "active");
 
   useEffect(() => {
     if (!preferencesQuery.data) return;
@@ -990,69 +1003,18 @@ function SettingsPage() {
   }
 
   return (
-    <PortalPage slug="settings">
+    <PortalPage slug="settings" title="Preferences" backTo="/portal/settings">
       {() => (
         <div className="portal-list">
           <article className="portal-record-card">
-            <h3>Account email</h3>
-            <p>{user?.email}</p>
-            <span className="portal-tag success"><CheckCircle2 size={14} aria-hidden="true" /> Verified</span>
-          </article>
-          <article className="portal-record-card">
-            <h3>Account management</h3>
-            <p>Your password and account credentials are managed by Zentel Insight Admin. Contact support when a credential change is required.</p>
-            <Link className="button button-secondary" to="/portal/support">Contact Support</Link>
-          </article>
-          <article className="portal-record-card">
-            <h3>Theme preference</h3>
-            <p>Choose how the portal appears on this device.</p>
-            <div className="segmented-control" role="group" aria-label="Theme preference">
-              <button type="button" className={theme === "light" ? "active" : ""} onClick={() => setTheme("light")}><Sun size={16} aria-hidden="true" /> Light</button>
-              <button type="button" className={theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")}><Moon size={16} aria-hidden="true" /> Dark</button>
-            </div>
-          </article>
-          <article className="portal-record-card">
-            <h3>Assigned programme</h3>
-            <p>Your programme and track are assigned only by Zentel Insight Admin and cannot be changed from the Student Portal.</p>
-            {activeOfficialProgramme ? (
-              <dl className="portal-mini-details">
-                <div><dt>Programme</dt><dd>{activeOfficialProgramme.programs?.title || "Assigned programme"}</dd></div>
-                <div><dt>Track</dt><dd>{activeOfficialProgramme.program_levels?.level_name || "Assigned track"}</dd></div>
-                <div><dt>Status</dt><dd><span className="portal-tag success"><CheckCircle2 size={14} aria-hidden="true" /> Active</span></dd></div>
-              </dl>
-            ) : <span className="portal-tag">Admin assignment pending</span>}
-          </article>
-          <article className="portal-record-card">
             <h3>Portal preferences</h3>
-            <p>Choose the account notices and session security reminders you want enabled for this browser experience.</p>
             {preferencesQuery.loading ? <PortalLoading label="Loading preferences" /> : null}
             {preferencesQuery.error ? <PortalError message={preferencesQuery.error} onRetry={preferencesQuery.refetch} /> : null}
             {!preferencesQuery.loading && !preferencesQuery.error ? (
               <div className="portal-toggle-list">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={preferences.email_notifications}
-                    onChange={(event) => setPreferences({ ...preferences, email_notifications: event.target.checked })}
-                  />
-                  <span>Email notifications</span>
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={preferences.portal_reminders}
-                    onChange={(event) => setPreferences({ ...preferences, portal_reminders: event.target.checked })}
-                  />
-                  <span>Portal reminders</span>
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={preferences.session_security_warnings}
-                    onChange={(event) => setPreferences({ ...preferences, session_security_warnings: event.target.checked })}
-                  />
-                  <span>Session security warnings</span>
-                </label>
+                <button className="switch-row" type="button" role="switch" aria-checked={preferences.email_notifications} onClick={() => setPreferences({ ...preferences, email_notifications: !preferences.email_notifications })}><span>Email notifications</span><span className="switch-control" aria-hidden="true"><span /></span></button>
+                <button className="switch-row" type="button" role="switch" aria-checked={preferences.portal_reminders} onClick={() => setPreferences({ ...preferences, portal_reminders: !preferences.portal_reminders })}><span>Portal reminders</span><span className="switch-control" aria-hidden="true"><span /></span></button>
+                <button className="switch-row" type="button" role="switch" aria-checked={preferences.session_security_warnings} onClick={() => setPreferences({ ...preferences, session_security_warnings: !preferences.session_security_warnings })}><span>Session security warnings</span><span className="switch-control" aria-hidden="true"><span /></span></button>
                 <button className="button button-secondary" type="button" onClick={savePreferences} disabled={loading}>
                   {loading ? "Saving" : "Save Preferences"}
                 </button>
@@ -1060,11 +1022,20 @@ function SettingsPage() {
             ) : null}
           </article>
           {status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}
-          <button className="button button-primary" type="button" onClick={signOut}>Sign Out</button>
         </div>
       )}
     </PortalPage>
   );
+}
+
+export function StudentSecuritySettingsPage() {
+  const { user } = useAuth();
+  return <PortalPage slug="settings" title="Security" backTo="/portal/settings">{() => <div className="portal-list"><article className="portal-record-card"><h3>Account email</h3><p>{user?.email}</p><span className="portal-tag success"><CheckCircle2 size={14} aria-hidden="true" /> Verified</span></article><article className="portal-record-card"><h3>Credential management</h3><p>Your credentials are managed by Zentel Insight Admin.</p><Link className="button button-secondary" to="/portal/support">Contact Support</Link></article></div>}</PortalPage>;
+}
+
+export function StudentSessionsSettingsPage() {
+  const { signOut } = useAuth();
+  return <PortalPage slug="settings" title="Sessions" backTo="/portal/settings">{() => <div className="portal-list"><article className="portal-record-card"><h3>Current session</h3><span className="portal-tag success">Active</span><div className="button-row"><button className="button button-primary" type="button" onClick={signOut}>Sign Out</button></div></article></div>}</PortalPage>;
 }
 
 export function PortalSection({ page }) {
@@ -1079,7 +1050,7 @@ export function PortalSection({ page }) {
   if (page === "notifications") return <NotificationsPage />;
   if (page === "articles") return <ArticlesPage />;
   if (page === "support") return <SupportPage />;
-  if (page === "settings") return <SettingsPage />;
+  if (page === "settings") return <StudentSettingsPage />;
   return <MyCoursesPage />;
 }
 

@@ -27,6 +27,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import LiveClassCards from "../components/LiveClassCards";
 import ProgramChatPanel from "../components/ProgramChatPanel";
 import PortalDialog from "../components/portal/PortalDialog";
+import PortalBackButton from "../components/portal/PortalBackButton";
 import PortalNavigationPage from "../components/portal/PortalNavigationPage";
 import PortalShell from "../components/portal/PortalShell";
 import { AccountLookupSection, AccountManagementSection } from "./admin/AdminAccountSections";
@@ -189,13 +190,18 @@ function AdminMoreSection() {
   })} />;
 }
 
-function PageHeading({ eyebrow = "Admin", title, description, actions }) {
+function PageHeading({ eyebrow = "Admin", title, actions }) {
+  const location = useLocation();
+  const landingPaths = new Set(["/admin", "/admin/more", "/admin/academics", "/admin/people", "/admin/accounts", "/admin/finance"]);
+  const showBack = !landingPaths.has(location.pathname.replace(/\/$/, ""));
   return (
     <div className="portal-page-heading">
       <div>
         <p className="eyebrow">{eyebrow}</p>
-        <h2>{title}</h2>
-        <p>{description}</p>
+        <div className="portal-title-row">
+          {showBack ? <PortalBackButton fallback="/admin" label={`Back from ${title}`} /> : null}
+          <h2>{title}</h2>
+        </div>
       </div>
       {actions}
     </div>

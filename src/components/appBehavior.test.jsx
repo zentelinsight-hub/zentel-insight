@@ -189,6 +189,7 @@ describe("StudyHub navigation", () => {
 
   beforeEach(() => {
     desktopMatches = false;
+    window.scrollTo = vi.fn();
     window.matchMedia = vi.fn((query) => ({
       matches: query.includes("1280px") ? desktopMatches : false,
       media: query,
@@ -218,6 +219,9 @@ describe("StudyHub navigation", () => {
     fireEvent.click(menuButton);
     expect(menuButton).toHaveAttribute("aria-expanded", "true");
     expect(document.querySelector(".mobile-menu")).toHaveClass("open");
+    expect(document.body).toHaveClass("menu-open");
+    expect(document.body.style.position).toBe("fixed");
+    expect(screen.getAllByRole("button", { name: "Close navigation menu" })).toHaveLength(1);
 
     fireEvent.keyDown(document, { key: "Escape" });
     expect(menuButton).toHaveAttribute("aria-expanded", "false");
@@ -237,6 +241,7 @@ describe("StudyHub navigation", () => {
     desktopMatches = true;
     fireEvent.resize(window);
     expect(menuButton).toHaveAttribute("aria-expanded", "false");
+    expect(document.body.style.position).toBe("");
   });
 
   it.each([

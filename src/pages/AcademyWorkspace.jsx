@@ -58,14 +58,20 @@ function AcademyEmpty({ title, message }) {
   return <div className="notice-card portal-state-card"><h2>{title}</h2><p>{message}</p></div>;
 }
 
-function PageHeading({ eyebrow, title, description, backTo, actions }) {
+function PageHeading({ eyebrow, title, backTo, actions }) {
+  const location = useLocation();
+  const pathname = location.pathname.replace(/\/$/, "");
+  const landingPaths = new Set(["/portal/learning", "/portal/progress", "/tutor/teaching", "/tutor/classrooms", "/tutor/assessment", "/tutor/performance", "/admin/academics", "/admin/finance"]);
+  const showBack = Boolean(backTo) || !landingPaths.has(pathname);
+  const automaticFallback = pathname.startsWith("/portal/learning/") ? "/portal/learning" : pathname.startsWith("/portal/progress/") ? "/portal/progress" : pathname.startsWith("/tutor") ? "/tutor" : pathname.startsWith("/admin") ? "/admin" : "/portal";
   return (
     <div className="portal-page-heading academy-heading">
       <div>
-        {backTo ? <PortalBackButton fallback={backTo} /> : null}
         <p className="eyebrow">{eyebrow}</p>
-        <h2>{title}</h2>
-        <p>{description}</p>
+        <div className="portal-title-row">
+          {showBack ? <PortalBackButton fallback={backTo || automaticFallback} label={`Back from ${title}`} /> : null}
+          <h2>{title}</h2>
+        </div>
       </div>
       {actions}
     </div>
@@ -217,7 +223,7 @@ function StudentAcademyDashboard({ view }) {
     <div className="portal-page academy-workspace">
       <PageHeading eyebrow="Learning" title={titles[view] || "Learning"} description={`${data.classroom.program_title} | ${data.classroom.track_title} | ${data.classroom.cohort_name}`} />
       {view === "learning" ? <section><h3>Modules</h3>{list(data.modules).length ? <div className="portal-list">{data.modules.map((item) => <article className="portal-record-card" key={item.id}><strong>{item.title}</strong><span>{item.description || "Published classroom module"}</span></article>)}</div> : <AcademyEmpty title="No modules published" message="Published modules and lessons will appear here." />}</section> : null}
-      {view === "timetable" ? <div className="portal-table-wrap"><table className="portal-table"><thead><tr><th>Day</th><th>Class</th><th>Time</th><th>Delivery</th></tr></thead><tbody>{list(data.timetable).map((item) => <tr key={item.id}><td>{days[item.day_of_week]}</td><td>{item.title}<small>{item.module_title ? ` | ${item.module_title}` : ""}</small></td><td>{String(item.start_time).slice(0, 5)} - {String(item.end_time).slice(0, 5)} WAT</td><td>{item.delivery_method || "Online"}</td></tr>)}</tbody></table></div> : null}
+      {view === "timetable" ? <div className="portal-list timetable-card-list">{list(data.timetable).map((item) => <article className="portal-record-card timetable-card" key={item.id}><div><p className="eyebrow">{days[item.day_of_week]}</p><h3>{item.title || "Class"}</h3>{item.module_title ? <p>{item.module_title}</p> : null}</div><dl className="portal-mini-details"><div><dt>Time</dt><dd>{String(item.start_time).slice(0, 5)} - {String(item.end_time).slice(0, 5)} WAT</dd></div><div><dt>Delivery</dt><dd>{item.delivery_method || "Online"}</dd></div></dl></article>)}</div> : null}
       {["assignments", "quizzes", "tests", "projects"].includes(view) ? <AssessmentList assessments={data.assessments} filter={filter} /> : null}
       {view === "grades" ? <section><h3>Published grades</h3>{list(data.grades).length ? <div className="portal-list">{data.grades.map((grade) => <article className="portal-record-card" key={grade.id}><strong>{grade.title}</strong><span>{grade.score}/{grade.maximum_score} | {percent(grade.percentage)}</span><p>{grade.feedback || "No feedback added."}</p></article>)}</div> : <AcademyEmpty title="No grades published" message="Published results will appear here." />}</section> : null}
       {view === "performance" ? <dl className="portal-detail-rows"><div><dt>Overall</dt><dd>{percent(data.performance?.overall_percentage)}</dd></div><div><dt>Attendance</dt><dd>{percent(data.performance?.attendance_percentage)}</dd></div><div><dt>Completed assessments</dt><dd>{data.performance?.completed_assessments || 0}</dd></div><div><dt>Missing assessments</dt><dd>{data.performance?.missing_assessments || 0}</dd></div></dl> : null}

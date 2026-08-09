@@ -24,6 +24,7 @@ import LiveClassCards from "../components/LiveClassCards";
 import ProgramBanner from "../components/ProgramBanner";
 import ProgramChatPanel from "../components/ProgramChatPanel";
 import PortalIdCard from "../components/portal/PortalIdCard";
+import PortalBackButton from "../components/portal/PortalBackButton";
 import PortalNavigationPage from "../components/portal/PortalNavigationPage";
 import PortalShell from "../components/portal/PortalShell";
 import { useAuth } from "../context/authHooks";
@@ -100,13 +101,18 @@ function resolveTutorRoute(pathname, forcedSection = "") {
   return { section: getActiveSection(parts[0]), classroomId: "" };
 }
 
-function PageHeading({ title, description, actions }) {
+function PageHeading({ title, actions }) {
+  const location = useLocation();
+  const landingPaths = new Set(["/tutor", "/tutor/teaching", "/tutor/classrooms", "/tutor/assessment", "/tutor/performance"]);
+  const showBack = !landingPaths.has(location.pathname.replace(/\/$/, ""));
   return (
     <div className="portal-page-heading">
       <div>
         <p className="eyebrow">Tutor Dashboard</p>
-        <h2>{title}</h2>
-        <p>{description}</p>
+        <div className="portal-title-row">
+          {showBack ? <PortalBackButton fallback="/tutor" label={`Back from ${title}`} /> : null}
+          <h2>{title}</h2>
+        </div>
       </div>
       {actions}
     </div>

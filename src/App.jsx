@@ -19,6 +19,10 @@ import {
   StudentMessagesPage,
   StudentMorePage,
   StudentProgressPage,
+  StudentAppearanceSettingsPage,
+  StudentPreferencesSettingsPage,
+  StudentSecuritySettingsPage,
+  StudentSessionsSettingsPage,
   StudentLiveClassesPage
 } from "./pages/Portal";
 import {
@@ -251,6 +255,10 @@ export default function App() {
               <Route path="articles" element={<PortalSection page="articles" />} />
               <Route path="support" element={<PortalSection page="support" />} />
               <Route path="settings" element={<PortalSection page="settings" />} />
+              <Route path="settings/appearance" element={<StudentAppearanceSettingsPage />} />
+              <Route path="settings/preferences" element={<StudentPreferencesSettingsPage />} />
+              <Route path="settings/security" element={<StudentSecuritySettingsPage />} />
+              <Route path="settings/sessions" element={<StudentSessionsSettingsPage />} />
               <Route path="profile" element={<PortalProfile />} />
             </Route>
             <Route
