@@ -4,7 +4,6 @@ import {
   Award,
   Bell,
   BookOpen,
-  BrainCircuit,
   CalendarDays,
   CheckCircle2,
   Clock3,
@@ -12,6 +11,7 @@ import {
   FileQuestion,
   FileText,
   GraduationCap,
+  Globe2,
   ImagePlus,
   LayoutDashboard,
   LifeBuoy,
@@ -23,6 +23,7 @@ import {
   ReceiptText,
   School,
   Send,
+  Sparkles,
   ShieldCheck,
   Sun,
   Settings,
@@ -162,7 +163,7 @@ function FeedSourceIcon({ item }) {
   if (item.kind === "student") {
     return <span className="portal-avatar sm">{item.avatarUrl && !failed ? <img src={item.avatarUrl} alt="" onError={() => setFailed(true)} /> : <span>{item.author.slice(0, 1).toUpperCase()}</span>}</span>;
   }
-  return <span className="feed-source-icon">{item.sourceIconUrl && !failed ? <img src={item.sourceIconUrl} alt="" width="32" height="32" loading="lazy" onError={() => setFailed(true)} /> : <BrainCircuit size={17} aria-hidden="true" />}</span>;
+  return <span className="feed-source-icon">{item.sourceIconUrl && !failed ? <img src={item.sourceIconUrl} alt={`${item.author} icon`} width="32" height="32" loading="lazy" onError={() => setFailed(true)} /> : <Globe2 size={17} aria-hidden="true" />}</span>;
 }
 
 function FeedMedia({ item }) {
@@ -295,7 +296,7 @@ export function PortalLayout() {
           { to: "/portal", label: "Home", Icon: LayoutDashboard, end: true },
           { to: "/portal/learning", label: "Learning", Icon: GraduationCap },
           { to: "/portal/messages", label: "Messages", Icon: MessageSquare, badge: unreadChatCount },
-          { to: "/portal/zentel-ai", label: "Zentel AI", Icon: BrainCircuit },
+          { to: "/portal/zentel-ai", label: "Zentel AI", Icon: Sparkles },
           { to: "/portal/more", label: "More", Icon: MoreHorizontal, badge: unreadNotificationCount }
         ]
       }}
@@ -355,7 +356,7 @@ export function StudentMessagesPage() {
 
 export function StudentAiPage() {
   return <PortalNavigationPage eyebrow="Student Portal" title="Zentel AI" description="Choose an AI workspace." items={[
-    { to: "/portal/zentel-ai/new", label: "New Chat", description: "Start a conversation", Icon: BrainCircuit },
+    { to: "/portal/zentel-ai/new", label: "New Chat", description: "Start a conversation", Icon: Sparkles },
     { to: "/portal/zentel-ai/history", label: "History", description: "Find previous conversations", Icon: Clock3 },
     { to: "/portal/zentel-ai/usage", label: "Credits & Usage", description: "Review available credits and usage", Icon: ListChecks },
     { to: "/portal/zentel-ai/plans", label: "Plans", description: "Compare available AI plans", Icon: WalletCards },
@@ -365,14 +366,14 @@ export function StudentAiPage() {
 }
 
 export function StudentFinancePage() {
-  return <PortalNavigationPage eyebrow="Student Portal" title="Finance" description="Open the finance information available to your account." items={[
+  return <PortalNavigationPage eyebrow="Student Portal" title="Finance" items={[
     { to: "/portal/finance/payments", label: "Active Payment", description: "Current programme payment status", Icon: CreditCard },
     { to: "/portal/finance/loans", label: "Loans", description: "Loan status when available", Icon: WalletCards }
   ]} />;
 }
 
 export function StudentProgressPage() {
-  return <PortalNavigationPage eyebrow="Student Portal" title="Progress" description="Open one progress record at a time." items={[
+  return <PortalNavigationPage eyebrow="Student Portal" title="Progress" items={[
     { to: "/portal/progress/grades", label: "Grades", description: "Published assessment results", Icon: Award },
     { to: "/portal/progress/performance", label: "Performance", description: "Overall learning performance", Icon: ListChecks },
     { to: "/portal/attendance", label: "Attendance", description: "Class participation history", Icon: CheckCircle2 }

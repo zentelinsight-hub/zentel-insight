@@ -126,7 +126,7 @@ export default function ZentelAI() {
     const prompt = String(override ?? message).trim();
     if ((!prompt && !attachments.length) || streaming) return;
     if (!hasCredits) {
-      setStatus({ type: "warning", message: "You have no Zentel AI credits. Choose a paid plan or buy credits to continue. Free trials are not available." });
+      setStatus({ type: "warning", message: "No AI credits available. View plans to continue." });
       return;
     }
     let conversationId = selectedId;

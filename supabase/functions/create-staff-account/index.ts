@@ -1,5 +1,5 @@
 import { handleOptions, isAllowedOrigin, jsonResponse } from "../_shared/cors.ts";
-import { assertVerifiedAdmin, writeAuditLog } from "../_shared/security.ts";
+import { assertVerifiedAdmin } from "../_shared/security.ts";
 
 function clean(value: unknown) {
   return String(value || "").trim();
@@ -73,21 +73,16 @@ Deno.serve(async (request) => {
         throw new Error("Staff account verification did not pass.");
       }
 
-      await writeAuditLog(admin.supabase, {
-        actorUserId: admin.user.id,
-        action: "staff_account_created",
-        targetTable: "profiles",
-        targetId: staffUserId,
-        metadata: { jobTitle, department, accountStatus: "inactive" }
-      });
-
       return jsonResponse({ ok: true, staffUserId, portalId: profile.portal_id, message: "Staff account created as inactive." }, 200, request);
     } catch (error) {
-      await admin.supabase.auth.admin.deleteUser(staffUserId).catch(() => undefined);
+      const cleanup = await admin.supabase.auth.admin.deleteUser(staffUserId);
+      if (cleanup.error) console.error("create-staff-account cleanup", cleanup.error.message);
       throw error;
     }
   } catch (error) {
-    console.error("create-staff-account", (error as Error).message);
+    console.error("create-staff-account", {
+      message: error instanceof Error ? error.message : "Unknown Staff creation failure"
+    });
     return jsonResponse({ ok: false, error: "Staff account could not be created. No active access was granted." }, 400, request);
   }
 });

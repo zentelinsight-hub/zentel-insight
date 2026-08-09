@@ -32,7 +32,7 @@ function LoanRows({ applications }) {
 }
 
 export function StudentLoansPage() {
-  return <PortalNavigationPage eyebrow="Finance" title="Loans" description="Apply and manage one loan stage at a time." items={[
+  return <PortalNavigationPage eyebrow="Finance" title="Loans" items={[
     { to: "/portal/finance/loans/apply", label: "Apply for Loan", description: "Submit personal details and protected KYC", Icon: FilePlus2 },
     { to: "/portal/finance/loans/status", label: "Application Status", description: "Track review and decision status", Icon: ClipboardCheck },
     { to: "/portal/finance/loans/approved", label: "Approved Loan", description: "Submit protected disbursement details", Icon: Building2 },

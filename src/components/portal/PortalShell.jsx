@@ -64,6 +64,24 @@ export default function PortalShell({
   }, []);
 
   useEffect(() => {
+    const viewport = window.visualViewport;
+    const syncViewport = () => {
+      const height = Math.round(viewport?.height || window.innerHeight);
+      document.documentElement.style.setProperty("--portal-visual-viewport-height", `${height}px`);
+    };
+    syncViewport();
+    window.addEventListener("resize", syncViewport);
+    viewport?.addEventListener("resize", syncViewport);
+    viewport?.addEventListener("scroll", syncViewport);
+    return () => {
+      window.removeEventListener("resize", syncViewport);
+      viewport?.removeEventListener("resize", syncViewport);
+      viewport?.removeEventListener("scroll", syncViewport);
+      document.documentElement.style.removeProperty("--portal-visual-viewport-height");
+    };
+  }, []);
+
+  useEffect(() => {
     closeDetails(accountMenuRef);
   }, [location.pathname]);
 

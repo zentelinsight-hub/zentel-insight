@@ -478,8 +478,10 @@ export async function getStudentFeed() {
   const authorIds = [...new Set(posts.map((item) => item.user_id).filter(Boolean))];
   let profiles = [];
   if (authorIds.length) {
-    const profileResult = await supabase.from("profiles").select("id, full_name, avatar_url").in("id", authorIds);
-    if (!profileResult.error) profiles = normalizeList(profileResult.data);
+    const profileResult = await supabase.from("profiles").select("id, full_name, avatar_path").in("id", authorIds);
+    if (!profileResult.error) {
+      profiles = await Promise.all(normalizeList(profileResult.data).map((profile) => withProfileAvatarUrl(profile, supabase)));
+    }
   }
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
 
@@ -490,10 +492,11 @@ export async function getStudentFeed() {
       imageUrl = data?.signedUrl || "";
     }
     const author = profileById.get(post.user_id);
+    const publicName = String(author?.full_name || "").trim().split(/\s+/).filter(Boolean).slice(0, 2).join(" ");
     return {
       id: `student-${post.id}`,
       kind: "student",
-      author: author?.full_name || "Zentel Insight Student",
+      author: publicName || "Student",
       avatarUrl: author?.avatar_url || "",
       body: post.body,
       imageUrl,

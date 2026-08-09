@@ -8,6 +8,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   LifeBuoy,
+  LogOut,
   Megaphone,
   MessageSquare,
   MoreHorizontal,
@@ -67,6 +68,7 @@ const sections = [
   ["announcements", "Announcements", Megaphone],
   ["assignments", "Assignments", FileCheck2],
   ["resources", "Learning Resources", BookOpen],
+  ["availability", "Availability", CalendarDays],
   ["notifications", "Notifications", Bell],
   ["support", "Support", LifeBuoy],
   ["settings", "Settings", Settings]
@@ -288,19 +290,35 @@ function TutorMessagesPage() {
 }
 
 function TutorMorePage() {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+
+  async function handleSignOut() {
+    await signOut({ scope: "local" });
+    navigate("/login", { replace: true });
+  }
+
   return <PortalNavigationPage eyebrow="Tutor Portal" title="More" items={[
-    { to: "/tutor/profile", label: "Profile", description: "Professional account information", Icon: UserRound },
-    { to: "/tutor/programme", label: "Programme", description: "Assigned programme and track", Icon: GraduationCap },
-    { to: "/tutor/students", label: "Students", description: "Assigned Student directory", Icon: Users },
-    { to: "/tutor/live-classes", label: "Live Classes", description: "Scheduled online sessions", Icon: Video },
-    { to: "/tutor/timetable", label: "Timetable", description: "Teaching schedule", Icon: CalendarDays },
-    { to: "/tutor/attendance", label: "Attendance", description: "Participation records", Icon: CheckCircle2 },
-    { to: "/tutor/announcements", label: "Announcements", description: "Programme notices", Icon: Megaphone },
-    { to: "/tutor/resources", label: "Resources", description: "Published learning materials", Icon: BookOpen },
+    { to: "/tutor/availability", label: "Availability", description: "Approved teaching availability", Icon: CalendarDays },
     { to: "/tutor/notifications", label: "Notifications", description: "Account and class updates", Icon: Bell },
+    { to: "/tutor/profile", label: "Profile", description: "Professional account information", Icon: UserRound },
     { to: "/tutor/support", label: "Support", description: "Support tickets", Icon: LifeBuoy },
-    { to: "/tutor/settings", label: "Security & Settings", description: "Theme and session controls", Icon: Settings }
+    { to: "/tutor/settings", label: "Security & Settings", description: "Theme and session controls", Icon: Settings },
+    { label: "Sign Out", description: "End this Tutor session", Icon: LogOut, onSelect: handleSignOut }
   ]} />;
+}
+
+function TutorAvailabilitySection({ data }) {
+  return (
+    <div className="portal-page">
+      <PageHeading title="Availability" />
+      <dl className="portal-detail-rows">
+        <div><dt>Teaching availability</dt><dd>{data.tutorProfile?.availability || "Not recorded"}</dd></div>
+        <div><dt>Management</dt><dd>Contact Support when this schedule needs to change.</dd></div>
+      </dl>
+      <Link className="button button-secondary" to="/tutor/support">Contact Support</Link>
+    </div>
+  );
 }
 
 function ProfileSection({ data }) {
@@ -1032,6 +1050,7 @@ export default function TutorDashboard({ forcedSection = "" }) {
       {activeSection === "resources" ? (
         <TutorResourcesSection data={data} onSaved={dataQuery.refetch} />
       ) : null}
+      {activeSection === "availability" ? <TutorAvailabilitySection data={data} /> : null}
       {activeSection === "notifications" ? (
         <TutorNotificationsSection records={data.notifications} onSaved={dataQuery.refetch} />
       ) : null}

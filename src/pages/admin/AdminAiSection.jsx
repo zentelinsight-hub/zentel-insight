@@ -1,7 +1,6 @@
 import {
   Activity,
   Ban,
-  BrainCircuit,
   CheckCircle2,
   Coins,
   CreditCard,
@@ -32,7 +31,7 @@ const aiPages = [
   ["credit-management", "Credit Management", "Adjust balances with an audited reason.", Coins],
   ["usage", "Usage & Costs", "Review usage, revenue and provider expense.", Gauge],
   ["requests", "Requests & Errors", "Inspect recent AI request outcomes.", ListChecks],
-  ["model-configuration", "Model Configuration", "Configure internal model routing and limits.", BrainCircuit],
+  ["model-configuration", "Model Configuration", "Configure internal model routing and limits.", Sparkles],
   ["access-restrictions", "Access Restrictions", "Suspend or restore individual Student access.", Ban],
   ["budgets", "Budgets", "Set daily and monthly expense controls.", DollarSign],
   ["billing-events", "Billing Events", "Review recent subscription and top-up payments.", ReceiptText],
@@ -226,7 +225,7 @@ export default function AdminAiSection() {
       {view === "budgets" ? <SettingsEditor data={data} mode="budgets" onChanged={query.refetch} /> : null}
       {view === "settings" ? <SettingsEditor data={data} mode="settings" onChanged={query.refetch} /> : null}
       {view === "billing-events" ? <BillingTable events={data.billingEvents || []} /> : null}
-      {view === "service-health" ? <><div className="admin-ai-metrics"><Metric Icon={Activity} label="Failed requests" value={metrics.failedRequests || 0} detail={`${metrics.releasedRequests || 0} released requests`} /><Metric Icon={BrainCircuit} label="Web research" value={metrics.webResearchRequests || 0} detail="Recent request window" /></div><SettingsEditor data={data} mode="health" onChanged={query.refetch} /></> : null}
+      {view === "service-health" ? <><div className="admin-ai-metrics"><Metric Icon={Activity} label="Failed requests" value={metrics.failedRequests || 0} detail={`${metrics.releasedRequests || 0} released requests`} /><Metric Icon={Sparkles} label="Web research" value={metrics.webResearchRequests || 0} detail="Recent request window" /></div><SettingsEditor data={data} mode="health" onChanged={query.refetch} /></> : null}
     </div>
   );
 }

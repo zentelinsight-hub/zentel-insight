@@ -7069,6 +7069,169 @@ body.portal-dedicated-workspace .chat-standalone {
   min-width: 0;
 }
 
+/* Phase 4: one heading and viewport contract across every portal role. */
+:root {
+  --portal-visual-viewport-height: 100dvh;
+}
+
+.portal-page-heading,
+.portal-compact-heading {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  justify-content: stretch;
+  justify-items: start;
+  align-items: start;
+  gap: 0.28rem;
+  text-align: left;
+}
+
+.portal-page-heading > div,
+.portal-compact-heading > div:not(.portal-title-row) {
+  min-width: 0;
+  display: grid;
+  justify-items: start;
+  gap: 0.28rem;
+}
+
+.portal-title-row {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.45rem;
+}
+
+.portal-title-row h1,
+.portal-title-row h2,
+.portal-page-heading h1,
+.portal-page-heading h2,
+.portal-compact-heading h1,
+.portal-compact-heading h2 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+  letter-spacing: 0;
+  text-align: left;
+}
+
+.portal-page-heading .eyebrow,
+.portal-compact-heading .eyebrow {
+  margin: 0;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.portal-page-heading > .button,
+.portal-page-heading > .button-row {
+  justify-self: start;
+}
+
+.portal-destination-list > a,
+.portal-destination-list > button {
+  width: 100%;
+  min-width: 0;
+  min-height: 50px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.5rem 0.35rem;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.portal-destination-list > a:hover,
+.portal-destination-list > a:focus-visible,
+.portal-destination-list > button:hover,
+.portal-destination-list > button:focus-visible {
+  background: var(--brand-primary-soft);
+}
+
+body.portal-dedicated-workspace {
+  height: var(--portal-visual-viewport-height, 100dvh);
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body.portal-dedicated-workspace .portal-shell,
+body.portal-dedicated-workspace .portal-main {
+  height: var(--portal-visual-viewport-height, 100dvh);
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.portal-dedicated-workspace .portal-main {
+  padding-bottom: max(0.45rem, env(safe-area-inset-bottom));
+}
+
+body.portal-dedicated-workspace .chat-route-page,
+body.portal-dedicated-workspace .ai-chat-page {
+  width: 100%;
+  min-height: 0;
+  height: calc(var(--portal-visual-viewport-height, 100dvh) - var(--portal-header-height) - 2rem);
+  overflow: hidden;
+}
+
+.chat-panel.chat-standalone,
+.chat-thread,
+.ai-chat-page .ai-workspace,
+.ai-chat-page .ai-chat {
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.chat-message-list,
+.ai-message-list {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.chat-composer,
+.ai-composer-wrap {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  background: var(--color-surface);
+}
+
+.chat-composer-row,
+.ai-composer {
+  width: 100%;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+@media (max-width: 920px), (max-height: 520px) and (orientation: landscape) {
+  body.portal-dedicated-workspace .portal-main {
+    padding-top: calc(var(--portal-header-height) + 0.45rem);
+    padding-inline: 0.5rem;
+  }
+
+  body.portal-dedicated-workspace .chat-route-page,
+  body.portal-dedicated-workspace .ai-chat-page {
+    height: calc(var(--portal-visual-viewport-height, 100dvh) - var(--portal-header-height) - 0.9rem);
+  }
+
+  .chat-composer,
+  .ai-composer-wrap {
+    padding-bottom: max(0.35rem, env(safe-area-inset-bottom));
+  }
+}
+
 /* Phase 3 shared navigation: document-level public drawer and mobile portal bar. */
 .portal-mobile-profile-link {
   display: none;
@@ -8851,5 +9014,75 @@ textarea {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Final portal viewport precedence. */
+.portal-page-heading,
+.portal-compact-heading {
+  display: grid;
+  justify-content: stretch;
+  justify-items: start;
+  align-items: start;
+  text-align: left;
+}
+
+.portal-title-row {
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.portal-title-row h1,
+.portal-title-row h2 {
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+  letter-spacing: 0;
+}
+
+.portal-destination-list > button {
+  width: 100%;
+  min-height: 50px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.5rem 0.35rem;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+body.portal-dedicated-workspace,
+body.portal-dedicated-workspace .portal-shell,
+body.portal-dedicated-workspace .portal-main {
+  height: var(--portal-visual-viewport-height, 100dvh);
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.portal-dedicated-workspace .chat-route-page,
+body.portal-dedicated-workspace .ai-chat-page {
+  min-height: 0;
+  height: calc(var(--portal-visual-viewport-height, 100dvh) - var(--portal-header-height) - 1.35rem);
+  overflow: hidden;
+}
+
+@media (max-width: 920px), (max-height: 520px) and (orientation: landscape) {
+  body.portal-dedicated-workspace .portal-main {
+    padding-top: calc(var(--portal-header-height) + 0.45rem);
+    padding-bottom: max(0.35rem, env(safe-area-inset-bottom));
+  }
+
+  body.portal-dedicated-workspace .chat-route-page,
+  body.portal-dedicated-workspace .ai-chat-page {
+    height: calc(var(--portal-visual-viewport-height, 100dvh) - var(--portal-header-height) - 0.8rem);
   }
 }
