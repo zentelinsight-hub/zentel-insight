@@ -16,16 +16,134 @@ function decodeEntities(value: unknown) {
     .trim();
 }
 
+function isSafePublicUrl(value: unknown) {
+  try {
+    const url = new URL(clean(value));
+    const host = url.hostname.toLowerCase();
+    if (!['http:', 'https:'].includes(url.protocol)) return false;
+    if (!host || host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal')) return false;
+    if (/^(127|10)\./.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host)) return false;
+    const private172 = host.match(/^172\.(\d+)\./);
+    if (private172 && Number(private172[1]) >= 16 && Number(private172[1]) <= 31) return false;
+    if (host === '::1' || host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:')) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function sourceIdentity(externalUrl: unknown, suppliedIcon: unknown = "") {
   try {
     const url = new URL(clean(externalUrl));
     return {
-      domain: url.hostname.replace(/^www\./, ""),
-      icon: clean(suppliedIcon) || `https://www.google.com/s2/favicons?domain_url=${encodeURIComponent(url.origin)}&sz=64`
+      domain: url.hostname.toLowerCase().replace(/^www\./, ""),
+      origin: url.origin,
+      icon: isSafePublicUrl(suppliedIcon) ? clean(suppliedIcon) : null
     };
   } catch {
-    return { domain: "", icon: clean(suppliedIcon) || null };
+    return { domain: "", origin: "", icon: null };
   }
+}
+
+function getHtmlAttribute(tag: string, name: string) {
+  const pattern = new RegExp(`\\b${name}\\s*=\\s*(?:["']([^"']+)["']|([^\\s>]+))`, 'i');
+  const match = tag.match(pattern);
+  return clean(match?.[1] || match?.[2]);
+}
+
+function declaredIconUrls(html: string, origin: string) {
+  const candidates: string[] = [];
+  for (const tag of html.match(/<link\b[^>]*>/gi) || []) {
+    const rel = getHtmlAttribute(tag, 'rel').toLowerCase().split(/\s+/);
+    if (!rel.some((value) => ['icon', 'shortcut', 'apple-touch-icon', 'mask-icon'].includes(value))) continue;
+    const href = getHtmlAttribute(tag, 'href');
+    if (!href) continue;
+    try {
+      const candidate = new URL(href, origin).toString();
+      if (isSafePublicUrl(candidate)) candidates.push(candidate);
+    } catch {
+      // Ignore malformed declarations and continue to the conventional icon.
+    }
+  }
+  return [...new Set(candidates)];
+}
+
+async function validateImageUrl(value: unknown) {
+  if (!isSafePublicUrl(value)) return null;
+  const url = clean(value);
+  const inspect = async (method: 'HEAD' | 'GET') => {
+    const response = await fetch(url, {
+      method,
+      redirect: 'follow',
+      headers: method === 'GET' ? { Range: 'bytes=0-2047', Accept: 'image/*' } : { Accept: 'image/*' },
+      signal: AbortSignal.timeout(6_000)
+    });
+    const contentType = clean(response.headers.get('content-type')).toLowerCase().split(';')[0];
+    if (!response.ok || !isSafePublicUrl(response.url) || !contentType.startsWith('image/')) return null;
+    await response.body?.cancel();
+    return { url: response.url, contentType };
+  };
+  try {
+    return await inspect('HEAD') || await inspect('GET');
+  } catch {
+    try { return await inspect('GET'); } catch { return null; }
+  }
+}
+
+async function inspectOriginForIcons(origin: string) {
+  if (!isSafePublicUrl(origin)) return [];
+  try {
+    const response = await fetch(origin, {
+      redirect: 'follow',
+      headers: { Accept: 'text/html,application/xhtml+xml', 'User-Agent': 'ZentelInsightFeed/1.0' },
+      signal: AbortSignal.timeout(7_000)
+    });
+    const contentType = clean(response.headers.get('content-type')).toLowerCase();
+    const contentLength = Number(response.headers.get('content-length') || 0);
+    if (!response.ok || !isSafePublicUrl(response.url) || !contentType.includes('text/html') || contentLength > 1_500_000) return [];
+    const html = (await response.text()).slice(0, 400_000);
+    return declaredIconUrls(html, response.url);
+  } catch {
+    return [];
+  }
+}
+
+async function resolveSourceIcon(supabase: any, item: Record<string, any>) {
+  const identity = sourceIdentity(item.external_url, item.source_icon_url);
+  const domain = item.source_type === 'youtube' ? 'youtube.com' : identity.domain;
+  const origin = item.source_type === 'youtube' ? 'https://www.youtube.com' : identity.origin;
+  if (!domain || !origin) return { ...item, source_icon_url: null, source_domain: domain };
+
+  const { data: cached } = await supabase
+    .from('technology_source_icons')
+    .select('icon_url, resolution_status, expires_at')
+    .eq('domain', domain)
+    .gt('expires_at', new Date().toISOString())
+    .maybeSingle();
+  if (cached) return { ...item, source_icon_url: cached.resolution_status === 'resolved' ? cached.icon_url : null, source_domain: domain };
+
+  const declared = item.source_type === 'youtube' ? [] : await inspectOriginForIcons(origin);
+  const candidates = [
+    item.source_type === 'youtube' ? 'https://www.youtube.com/favicon.ico' : identity.icon,
+    ...declared,
+    new URL('/favicon.ico', origin).toString()
+  ].filter(Boolean);
+  let resolved: { url: string; contentType: string } | null = null;
+  for (const candidate of [...new Set(candidates)]) {
+    resolved = await validateImageUrl(candidate);
+    if (resolved) break;
+  }
+
+  await supabase.from('technology_source_icons').upsert({
+    domain,
+    source_origin: origin,
+    icon_url: resolved?.url || null,
+    content_type: resolved?.contentType || null,
+    resolution_status: resolved ? 'resolved' : 'missing',
+    resolved_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + (resolved ? 30 : 7) * 86_400_000).toISOString()
+  }, { onConflict: 'domain' });
+  return { ...item, source_icon_url: resolved?.url || null, source_domain: domain };
 }
 
 async function fetchJson(url: URL) {
@@ -75,7 +193,7 @@ async function getVideoItems(apiKey: string) {
     external_id: `youtube-${clean(item?.id?.videoId)}`,
     source_type: "youtube",
     source_name: decodeEntities(item?.snippet?.channelTitle) || "YouTube",
-    source_icon_url: "https://www.google.com/s2/favicons?domain_url=https%3A%2F%2Fwww.youtube.com&sz=64",
+    source_icon_url: "https://www.youtube.com/favicon.ico",
     source_domain: "youtube.com",
     title: decodeEntities(item?.snippet?.title),
     summary: decodeEntities(item?.snippet?.description).slice(0, 700),
@@ -109,7 +227,7 @@ Deno.serve(async (request) => {
       { name: "youtube", request: getVideoItems(Deno.env.get("YOUTUBE_API_KEY") || "") }
     ];
     const results = await Promise.allSettled(sources.map((source) => source.request));
-    const items = results.flatMap((result, index) => {
+    const importedItems = results.flatMap((result, index) => {
       if (result.status === "fulfilled") return result.value;
       console.error("student-tech-feed source failed", {
         source: sources[index].name,
@@ -118,7 +236,8 @@ Deno.serve(async (request) => {
       return [];
     });
 
-    if (!items.length) throw new Error("No external feed source returned usable records");
+    if (!importedItems.length) throw new Error("No external feed source returned usable records");
+    const items = await Promise.all(importedItems.map((item) => resolveSourceIcon(supabase, item)));
     const { error: upsertError } = await supabase
       .from("technology_feed_items")
       .upsert(items, { onConflict: "external_id" });

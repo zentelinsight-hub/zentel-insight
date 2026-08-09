@@ -458,16 +458,17 @@ export async function getStudentFeed() {
 
   const [postsResult, technologyResult] = await Promise.all([
     supabase
-      .from("student_feed_posts")
-      .select("id, user_id, body, image_path, created_at, updated_at")
-      .eq("status", "published")
-      .order("created_at", { ascending: false })
-      .limit(100),
+      .rpc("get_student_feed_posts", {
+        page_size: 100,
+        before_published_at: null,
+        before_post_id: null
+      }),
     supabase
       .from("technology_feed_items")
       .select("id, source_type, source_name, source_icon_url, source_domain, title, summary, category, image_url, external_url, published_at")
       .eq("active", true)
       .order("published_at", { ascending: false })
+      .order("id", { ascending: false })
       .limit(100)
   ]);
 
@@ -475,32 +476,27 @@ export async function getStudentFeed() {
   if (technologyResult.error) logPortalDataIssue("technology feed records", technologyResult.error);
   const posts = postsResult.error ? [] : normalizeList(postsResult.data);
   const technologyItems = technologyResult.error ? [] : normalizeList(technologyResult.data);
-  const authorIds = [...new Set(posts.map((item) => item.user_id).filter(Boolean))];
-  let profiles = [];
-  if (authorIds.length) {
-    const profileResult = await supabase.from("profiles").select("id, full_name, avatar_path").in("id", authorIds);
-    if (!profileResult.error) {
-      profiles = await Promise.all(normalizeList(profileResult.data).map((profile) => withProfileAvatarUrl(profile, supabase)));
-    }
-  }
-  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
 
   const studentItems = await Promise.all(posts.map(async (post) => {
     let imageUrl = "";
+    let avatarUrl = "";
     if (post.image_path) {
       const { data } = await supabase.storage.from(STUDENT_FEED_MEDIA_BUCKET).createSignedUrl(post.image_path, 60 * 60);
       imageUrl = data?.signedUrl || "";
     }
-    const author = profileById.get(post.user_id);
-    const publicName = String(author?.full_name || "").trim().split(/\s+/).filter(Boolean).slice(0, 2).join(" ");
+    if (post.author_avatar_path) {
+      const { data } = await supabase.storage.from(PROFILE_AVATAR_BUCKET).createSignedUrl(post.author_avatar_path, 60 * 60);
+      avatarUrl = data?.signedUrl || "";
+    }
     return {
       id: `student-${post.id}`,
       kind: "student",
-      author: publicName || "Student",
-      avatarUrl: author?.avatar_url || "",
+      author: post.author_name || "Learner",
+      avatarUrl,
       body: post.body,
       imageUrl,
-      createdAt: post.created_at
+      publishedAt: post.published_at,
+      createdAt: post.published_at
     };
   }));
 
@@ -516,11 +512,16 @@ export async function getStudentFeed() {
     category: item.category || (item.source_type === "youtube" ? "Technology Video" : "Technology News"),
     imageUrl: item.image_url || "",
     externalUrl: item.external_url,
+    publishedAt: item.published_at,
     createdAt: item.published_at
   }));
 
   return [...studentItems, ...externalItems]
-    .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0));
+    .sort((left, right) => {
+      const timestampDifference = new Date(right.publishedAt || 0) - new Date(left.publishedAt || 0);
+      if (timestampDifference) return timestampDifference;
+      return String(right.id).localeCompare(String(left.id));
+    });
 }
 
 export async function createStudentFeedPost({ userId, body, image }) {

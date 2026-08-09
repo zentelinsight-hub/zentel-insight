@@ -57,6 +57,7 @@ const sections = [
   ["classrooms", "Classrooms", School],
   ["assessment", "Assessment", FileCheck2],
   ["performance", "Performance", CheckCircle2],
+  ["more", "More", MoreHorizontal],
   ["profile", "My Profile", UserRound],
   ["programme", "My Programme", GraduationCap],
   ["students", "My Students", Users],
