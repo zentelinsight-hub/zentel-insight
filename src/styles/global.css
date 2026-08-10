@@ -7233,6 +7233,189 @@ body.portal-dedicated-workspace .ai-chat-page {
   }
 }
 
+/* Shared Classroom Chat and Zentel AI conversation viewport. */
+html.portal-conversation-active,
+body.portal-conversation-active {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body.portal-conversation-active #root {
+  position: fixed;
+  inset: var(--portal-visible-top, 0px) 0 auto;
+  width: 100%;
+  height: var(--portal-visible-height, 100dvh);
+  max-height: var(--portal-visible-height, 100dvh);
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.portal-conversation-active .portal-shell {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+body.portal-conversation-active .portal-header.portal-topbar {
+  position: relative;
+  inset: auto;
+  flex-shrink: 0;
+}
+
+body.portal-conversation-active .portal-top-brand,
+body.portal-conversation-active .portal-top-navigation {
+  min-height: 0;
+  flex-shrink: 0;
+}
+
+body.portal-conversation-active .portal-main {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0.55rem clamp(0.5rem, 1.5vw, 1rem);
+  overflow: hidden;
+}
+
+body.portal-conversation-active .chat-route-page,
+body.portal-conversation-active .ai-chat-page,
+body.portal-conversation-active .chat-panel.chat-standalone,
+body.portal-conversation-active .ai-chat-page .ai-workspace {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
+}
+
+body.portal-conversation-active .chat-route-page,
+body.portal-conversation-active .ai-chat-page {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+body.portal-conversation-active .chat-panel.chat-standalone,
+body.portal-conversation-active .ai-chat-page .ai-workspace {
+  flex: 1 1 auto;
+}
+
+body.portal-conversation-active .ai-chat-page .ai-workspace {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.conversation-workspace {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+.conversation-header {
+  grid-row: 1;
+  position: relative;
+  z-index: 3;
+  min-width: 0;
+  flex-shrink: 0;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.chat-thread-header.conversation-header {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.chat-thread-header.conversation-header .chat-room-notice {
+  flex: 1 0 100%;
+  grid-row: auto;
+  margin: 0 calc(-1 * var(--space-3)) calc(-1 * var(--space-2));
+}
+
+.conversation-scroll-region {
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  padding: 10px 12px 12px;
+}
+
+.conversation-composer {
+  grid-row: 3;
+  position: relative;
+  z-index: 4;
+  min-width: 0;
+  flex-shrink: 0;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  padding: 8px 10px max(8px, env(safe-area-inset-bottom));
+}
+
+.conversation-composer-inner {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 6px;
+}
+
+.conversation-composer-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  max-height: 104px;
+  resize: none;
+  overflow-y: auto;
+}
+
+.conversation-composer-action {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+}
+
+body.portal-conversation-active .ai-message-list > * {
+  width: min(100%, 880px);
+  margin-inline: auto;
+}
+
+body.portal-conversation-active .ai-composer-wrap > * {
+  width: min(100%, 920px);
+  margin-inline: auto;
+}
+
+@media (max-width: 920px), (max-height: 520px) and (orientation: landscape) {
+  body.portal-conversation-active .portal-main {
+    padding: 0;
+  }
+
+  body.portal-conversation-active .chat-panel.chat-standalone,
+  body.portal-conversation-active .ai-chat-page .ai-workspace {
+    border: 0;
+    border-radius: 0;
+  }
+
+  body.portal-conversation-active .chat-room-list {
+    max-height: 44px;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+}
+
 
 .payment-search-controls {
   display: grid;

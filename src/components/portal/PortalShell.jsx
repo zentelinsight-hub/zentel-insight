@@ -64,33 +64,6 @@ export default function PortalShell({
   }, []);
 
   useEffect(() => {
-    const viewport = window.visualViewport;
-    const syncViewport = () => {
-      const height = Math.round(viewport?.height || window.innerHeight);
-      const width = Math.round(viewport?.width || window.innerWidth);
-      const offsetTop = Math.round(viewport?.offsetTop || 0);
-      const offsetLeft = Math.round(viewport?.offsetLeft || 0);
-      document.documentElement.style.setProperty("--portal-visual-viewport-height", `${height}px`);
-      document.documentElement.style.setProperty("--portal-visual-viewport-width", `${width}px`);
-      document.documentElement.style.setProperty("--portal-visual-viewport-top", `${offsetTop}px`);
-      document.documentElement.style.setProperty("--portal-visual-viewport-left", `${offsetLeft}px`);
-    };
-    syncViewport();
-    window.addEventListener("resize", syncViewport);
-    viewport?.addEventListener("resize", syncViewport);
-    viewport?.addEventListener("scroll", syncViewport);
-    return () => {
-      window.removeEventListener("resize", syncViewport);
-      viewport?.removeEventListener("resize", syncViewport);
-      viewport?.removeEventListener("scroll", syncViewport);
-      document.documentElement.style.removeProperty("--portal-visual-viewport-height");
-      document.documentElement.style.removeProperty("--portal-visual-viewport-width");
-      document.documentElement.style.removeProperty("--portal-visual-viewport-top");
-      document.documentElement.style.removeProperty("--portal-visual-viewport-left");
-    };
-  }, []);
-
-  useEffect(() => {
     closeDetails(accountMenuRef);
   }, [location.pathname]);
 

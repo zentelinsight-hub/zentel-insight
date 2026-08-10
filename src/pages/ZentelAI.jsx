@@ -18,7 +18,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import AiMessage from "../components/ai/AiMessage";
 import PortalBackButton from "../components/portal/PortalBackButton";
 import { useAsyncData } from "../hooks/useAsyncData";
-import { usePortalDedicatedWorkspace } from "../hooks/usePortalDedicatedWorkspace";
+import { useVisualViewportSize } from "../hooks/usePortalDedicatedWorkspace";
 import {
   archiveAiConversation,
   buyAiCredits,
@@ -91,7 +91,7 @@ export default function ZentelAI() {
   const canAccess = Boolean(snapshot.access?.account_active && snapshot.access?.ai_access_status !== "suspended" && snapshot.access?.system_available);
   const hasCredits = Number(snapshot.wallet?.total_available || 0) > 0;
 
-  usePortalDedicatedWorkspace();
+  useVisualViewportSize();
 
   usePageMeta({ path: "/portal/zentel-ai", title: "Zentel AI", description: "Your personal Zentel Insight learning assistant.", robots: "noindex,nofollow" });
   useEffect(() => {
@@ -163,29 +163,29 @@ export default function ZentelAI() {
     <div className="portal-page ai-page ai-chat-page">
       {canAccess ? (
         <section className="ai-workspace">
-          <div className="ai-chat">
-            <div className="ai-chat-topbar">
+          <div className="ai-chat conversation-workspace">
+            <header className="ai-chat-topbar conversation-header">
               <PortalBackButton fallback="/portal/zentel-ai" label="Back to Zentel AI" />
               <strong>{conversations.find((item) => item.id === selectedId)?.title || "New learning conversation"}</strong>
               <div className="ai-chat-actions"><Link to="/portal/zentel-ai/usage">{Number(snapshot.wallet?.total_available || 0).toLocaleString()} credits</Link><button className="icon-button" type="button" title="Start a new conversation" onClick={newConversation}><MessageSquarePlus size={17} /></button></div>
-            </div>
-            <div className="ai-message-list" aria-live="polite">
+            </header>
+            <main className="ai-message-list conversation-scroll-region" aria-live="polite">
               {messagesQuery.loading ? <div className="portal-local-loading"><Clock3 className="spin-icon" size={18} /><span>Loading conversation...</span></div> : null}
               {messages.map((item, index) => <AiMessage key={item.id || index} message={item} onRegenerate={item.role === "assistant" && lastStudentMessage ? () => send(lastStudentMessage) : null} />)}
               <div ref={bottomRef} />
-            </div>
-            <div className="ai-composer-wrap">
+            </main>
+            <footer className="ai-composer-wrap conversation-composer">
               {!canAccess ? <div className="ai-inline-status">Zentel AI is not available for this account.</div> : null}
               {canAccess && !hasCredits ? <div className="ai-inline-status">No AI credits available <span aria-hidden="true">&middot;</span> <Link to="/portal/zentel-ai/plans">View plans</Link></div> : null}
               {status.message ? <div className={`ai-inline-status ${status.type}`} role={status.type === "warning" ? "alert" : "status"}>{status.message}</div> : null}
               {attachments.length || uploading ? <div className="ai-attachments">{uploading ? <span><Clock3 size={15} />Uploading file</span> : null}{attachments.map((item) => <span key={item.id}>{item.mime_type.startsWith("image/") ? <ImageIcon size={15} /> : <FileText size={15} />}{item.file_name}<button type="button" title="Remove attachment" onClick={() => removeAttachment(item)}><X size={14} /></button></span>)}</div> : null}
-              <div className="ai-composer">
+              <div className="ai-composer conversation-composer-inner">
                 <input ref={fileRef} hidden type="file" accept=".pdf,.docx,.txt,.jpg,.jpeg,.png,.webp" onChange={(event) => event.target.files?.[0] && attach(event.target.files[0])} />
-                <button type="button" title="Attach a document or image" disabled={!hasCredits || streaming || uploading} onClick={() => fileRef.current?.click()}><Paperclip size={19} /><span className="sr-only">Attach a document or image</span></button>
-                <textarea value={message} disabled={!hasCredits} maxLength={30000} rows={1} placeholder="Ask Zentel AI..." onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} />
-                {streaming ? <button className="ai-send" type="button" title="Stop generation" onClick={() => abortRef.current?.abort()}><Square size={18} /><span className="sr-only">Stop generation</span></button> : <button className="ai-send" type="button" title="Send message" disabled={!hasCredits || (!message.trim() && !attachments.length)} onClick={() => send()}><Send size={18} /><span className="sr-only">Send message</span></button>}
+                <button className="conversation-composer-action" type="button" title="Attach a document or image" disabled={!hasCredits || streaming || uploading} onClick={() => fileRef.current?.click()}><Paperclip size={19} /><span className="sr-only">Attach a document or image</span></button>
+                <textarea className="conversation-composer-input" value={message} disabled={!hasCredits} maxLength={30000} rows={1} placeholder="Ask Zentel AI..." onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} />
+                {streaming ? <button className="ai-send conversation-composer-action" type="button" title="Stop generation" onClick={() => abortRef.current?.abort()}><Square size={18} /><span className="sr-only">Stop generation</span></button> : <button className="ai-send conversation-composer-action" type="button" title="Send message" disabled={!hasCredits || (!message.trim() && !attachments.length)} onClick={() => send()}><Send size={18} /><span className="sr-only">Send message</span></button>}
               </div>
-            </div>
+            </footer>
           </div>
         </section>
       ) : <div className="ai-inline-status warning">Zentel AI is not available for this account.</div>}

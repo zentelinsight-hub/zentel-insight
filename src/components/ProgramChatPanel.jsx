@@ -19,7 +19,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/authHooks";
 import { useAsyncData } from "../hooks/useAsyncData";
-import { usePortalDedicatedWorkspace } from "../hooks/usePortalDedicatedWorkspace";
+import { useVisualViewportSize } from "../hooks/usePortalDedicatedWorkspace";
 import {
   CHAT_MESSAGE_MAX_LENGTH,
   ensureProgramClassroom,
@@ -172,7 +172,7 @@ export default function ProgramChatPanel({
   const typingNames = Object.values(typingUsers).map((item) => item.name).filter(Boolean);
   const canHostCall = audience === "tutor" || audience === "admin";
 
-  usePortalDedicatedWorkspace(standalone);
+  useVisualViewportSize(standalone);
 
   useEffect(() => { onRoomStateRef.current = onRoomState; }, [onRoomState]);
   useEffect(() => { onRoomStateRef.current?.({ roomId: selectedRoom?.id || "", unreadCount: selectedUnreadCount, joined }); }, [joined, selectedRoom?.id, selectedUnreadCount]);
@@ -447,8 +447,8 @@ export default function ProgramChatPanel({
   return (
     <div className={`chat-panel ${standalone ? "chat-standalone" : ""} ${rooms.length <= 1 ? "single-room" : ""}`.trim()}>
       {rooms.length > 1 ? <aside className="chat-room-list" aria-label="Programme rooms">{rooms.map((room) => <button key={room.id} type="button" className={selectedRoom?.id === room.id ? "active" : ""} onClick={() => setSelectedRoomId(room.id)}><MessageSquare size={16} aria-hidden="true" /><span>{room.program_title || room.title}</span>{Number(unreadQuery.data?.[room.id] || 0) > 0 ? <span className="portal-nav-badge">{Math.min(99, unreadQuery.data[room.id])}{unreadQuery.data[room.id] > 99 ? "+" : ""}</span> : null}</button>)}</aside> : null}
-      <section className="chat-thread" aria-label="Programme chat messages">
-        <header className="chat-thread-header">
+      <section className="chat-thread conversation-workspace" aria-label="Programme chat messages">
+        <header className="chat-thread-header conversation-header">
           <div className="chat-thread-identity">
             {standalone && backTo ? <Link className="chat-header-action" to={backTo} aria-label="Back to classroom" title="Back to classroom"><ArrowLeft size={19} /><span className="sr-only">Back to classroom</span></Link> : null}
             <div><strong>{selectedRoom?.program_title || selectedRoom?.title}</strong><ParticipantState onlineCount={onlineCount} typingNames={typingNames} connection={connection} /></div>
@@ -458,9 +458,9 @@ export default function ProgramChatPanel({
             {activeCall && canHostCall ? <button className="chat-header-action danger" type="button" disabled={callBusy} onClick={endCall} title="End voice call"><PhoneOff size={18} /><span>End</span></button> : null}
             <button className="chat-header-action" type="button" aria-pressed={detailsOpen} onClick={() => setDetailsOpen((current) => !current)} title="Classroom information"><Info size={18} /><span className="sr-only">Classroom information</span></button>
           </div>
+          {detailsOpen ? <div className="chat-room-notice"><Info size={15} aria-hidden="true" /><span>Messages in this classroom are retained for seven days.</span></div> : null}
         </header>
-        {detailsOpen ? <div className="chat-room-notice"><Info size={15} aria-hidden="true" /><span>Messages in this classroom are retained for seven days.</span></div> : null}
-        <div className="chat-message-list" ref={messageListRef} aria-live="polite" onPointerDown={(event) => { if (!event.target.closest?.(".chat-message")) setMessageMenuId(""); }}>
+        <div className="chat-message-list conversation-scroll-region" ref={messageListRef} aria-live="polite" onPointerDown={(event) => { if (!event.target.closest?.(".chat-message")) setMessageMenuId(""); }}>
           {!messagesQuery.error && messages.some((message) => !message.client_status) ? <button className="chat-load-older" type="button" onClick={loadOlder} disabled={loadingOlder}>{loadingOlder ? "Loading" : "Load older messages"}</button> : null}
           {messagesQuery.loading ? <div className="route-loader">Loading messages</div> : null}
           {messagesQuery.error ? <div className="form-status warning" role="alert">We could not load your classroom messages. <button className="text-link" type="button" onClick={messagesQuery.refetch}>Try Again</button></div> : null}
@@ -498,15 +498,15 @@ export default function ProgramChatPanel({
             );
           }) : null}
         </div>
-        {imageFile ? <div className="chat-image-preview"><img src={imagePreviewUrl} alt="Selected chat attachment preview" /><small>{sending ? "Uploading image" : imageFile.name}</small><button type="button" onClick={removeImage} disabled={sending} aria-label="Remove selected image" title="Remove selected image"><X size={16} /></button></div> : null}
-        {status.message ? <div className={`form-status chat-inline-status ${status.type}`} role={status.type === "warning" ? "alert" : "status"}>{status.message}</div> : null}
-        {!messagesQuery.error ? <form className="chat-composer" ref={composerRef} onSubmit={send}>
+        {!messagesQuery.error ? <form className="chat-composer conversation-composer" ref={composerRef} onSubmit={send}>
+          {imageFile ? <div className="chat-image-preview"><img src={imagePreviewUrl} alt="Selected chat attachment preview" /><small>{sending ? "Uploading image" : imageFile.name}</small><button type="button" onClick={removeImage} disabled={sending} aria-label="Remove selected image" title="Remove selected image"><X size={16} /></button></div> : null}
+          {status.message ? <div className={`form-status chat-inline-status ${status.type}`} role={status.type === "warning" ? "alert" : "status"}>{status.message}</div> : null}
           {replyTo ? <div className="chat-composer-reply"><span>Replying to {displayName(replyTo)}</span><button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply" title="Cancel reply"><X size={16} /></button></div> : null}
-          <div className="chat-composer-row">
+          <div className="chat-composer-row conversation-composer-inner">
             <input ref={fileInputRef} className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={selectImage} tabIndex="-1" />
-            <button className="chat-composer-icon" type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} aria-label="Attach image" title="Attach image"><Paperclip size={19} /></button>
-            <label className="chat-composer-input"><span className="sr-only">Message</span><textarea ref={textareaRef} value={body} maxLength={CHAT_MESSAGE_MAX_LENGTH} onChange={(event) => updateBody(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Message your classroom" rows="1" />{body.length >= CHAT_MESSAGE_MAX_LENGTH - 200 ? <small>{body.length}/{CHAT_MESSAGE_MAX_LENGTH}</small> : null}</label>
-            <button className="chat-composer-icon send" type="submit" disabled={!canSend} aria-label={sending ? "Sending message" : "Send message"} title="Send message"><Send size={19} /></button>
+            <button className="chat-composer-icon conversation-composer-action" type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} aria-label="Attach image" title="Attach image"><Paperclip size={19} /></button>
+            <label className="chat-composer-input"><span className="sr-only">Message</span><textarea className="conversation-composer-input" ref={textareaRef} value={body} maxLength={CHAT_MESSAGE_MAX_LENGTH} onChange={(event) => updateBody(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Message your classroom" rows="1" />{body.length >= CHAT_MESSAGE_MAX_LENGTH - 200 ? <small>{body.length}/{CHAT_MESSAGE_MAX_LENGTH}</small> : null}</label>
+            <button className="chat-composer-icon send conversation-composer-action" type="submit" disabled={!canSend} aria-label={sending ? "Sending message" : "Send message"} title="Send message"><Send size={19} /></button>
           </div>
         </form> : null}
       </section>
