@@ -7,11 +7,22 @@ export default function PortalAvatarUpload({ profile, name, onChanged, size = "x
   const { user, refreshProfile } = useAuth();
   const [displayProfile, setDisplayProfile] = useState(profile);
   const [file, setFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState({ type: "", message: "" });
   const inputRef = useRef(null);
 
   useEffect(() => setDisplayProfile(profile), [profile]);
+
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl("");
+      return undefined;
+    }
+    const nextUrl = URL.createObjectURL(file);
+    setPreviewUrl(nextUrl);
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [file]);
 
   async function upload(event) {
     event.preventDefault();
@@ -41,9 +52,11 @@ export default function PortalAvatarUpload({ profile, name, onChanged, size = "x
   return (
     <form className="portal-own-avatar" onSubmit={upload}>
       <span className={`portal-avatar ${size}`}>
-        {displayProfile?.avatar_url
-          ? <img src={displayProfile.avatar_url} alt={`${name || "Account"} profile`} />
-          : initial ? <span>{initial}</span> : <UserRound size={30} aria-hidden="true" />}
+        {previewUrl
+          ? <img src={previewUrl} alt={`Selected profile picture preview for ${name || "Account"}`} />
+          : displayProfile?.avatar_url
+            ? <img src={displayProfile.avatar_url} alt={`${name || "Account"} profile`} />
+            : initial ? <span>{initial}</span> : <UserRound size={30} aria-hidden="true" />}
       </span>
       <div>
         <label className="button button-secondary" aria-disabled={busy}>

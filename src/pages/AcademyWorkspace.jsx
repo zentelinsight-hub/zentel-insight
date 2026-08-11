@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import {
   CreditCard,
+  FileImage,
   GraduationCap,
   RefreshCw,
   School,
   Send,
-  Users
+  Users,
+  X
 } from "lucide-react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import PortalBackButton from "../components/portal/PortalBackButton";
@@ -109,6 +111,32 @@ function AssessmentList({ assessments, filter = "all" }) {
   );
 }
 
+function SelectedSubmissionFiles({ files, onRemove }) {
+  const [previews, setPreviews] = useState([]);
+
+  useEffect(() => {
+    const nextPreviews = list(files).map((file) => ({
+      file,
+      url: file.type.startsWith("image/") ? URL.createObjectURL(file) : ""
+    }));
+    setPreviews(nextPreviews);
+    return () => nextPreviews.forEach((item) => item.url && URL.revokeObjectURL(item.url));
+  }, [files]);
+
+  if (!previews.length) return null;
+  return (
+    <div className="academy-file-previews" aria-label="Selected assignment files">
+      {previews.map(({ file, url }, index) => (
+        <article key={`${file.name}-${file.lastModified}-${index}`}>
+          {url ? <img src={url} alt={`Selected assignment image preview: ${file.name}`} /> : <FileImage size={24} aria-hidden="true" />}
+          <span><strong>{file.name}</strong><small>{Math.max(1, Math.round(file.size / 1024))} KB</small></span>
+          <button type="button" onClick={() => onRemove(index)} title={`Remove ${file.name}`}><X size={16} aria-hidden="true" /><span className="sr-only">Remove {file.name}</span></button>
+        </article>
+      ))}
+    </div>
+  );
+}
+
 function StudentAssessmentDetail() {
   const { assessmentId } = useParams();
   const query = useAsyncData(() => getAssessmentDetail(assessmentId), [assessmentId], { errorMessage: "This assessment could not be loaded." });
@@ -143,6 +171,7 @@ function StudentAssessmentDetail() {
       } else {
         const submission = await submitStudentAssessment({ assessmentId, body, requestId });
         await uploadSubmissionFiles({ submission, files, allowedTypes: assessment.allowed_file_types, maximumSize: assessment.maximum_file_size });
+        setFiles([]);
         setStatus({ type: "success", message: `Submitted successfully. Receipt: ${submission.receipt_number}` });
       }
       query.refetch();
@@ -184,7 +213,7 @@ function StudentAssessmentDetail() {
           <>
             <label><span>Your work</span><textarea value={body} onChange={(event) => setBody(event.target.value)} rows="10" placeholder="Write your response here" /></label>
             <label><span>Attachments</span><input type="file" multiple accept={list(assessment.allowed_file_types).join(",")} onChange={(event) => setFiles(Array.from(event.target.files || []))} /></label>
-            {files.length ? <p>{files.length} file{files.length === 1 ? "" : "s"} selected</p> : null}
+            <SelectedSubmissionFiles files={files} onRemove={(index) => setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))} />
           </>
         )}
         {status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}
@@ -251,7 +280,7 @@ function GradeForm({ submission, onSaved }) {
     catch (error) { setMessage(error.message); }
     finally { setBusy(false); }
   }
-  return <form className="academy-grade-form" onSubmit={save}><strong>{submission.assignments?.title || "Submission"}</strong><small>{submission.receipt_number || submission.id}</small><label><span>Score</span><input type="number" min="0" max={submission.assignments?.maximum_score || 100} value={score} onChange={(event) => setScore(event.target.value)} /></label><label><span>Feedback</span><textarea rows="3" value={feedback} onChange={(event) => setFeedback(event.target.value)} /></label><label><span>Decision</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="draft">Save draft</option><option value="published">Publish grade</option><option value="returned_for_correction">Return for correction</option><option value="withheld">Withhold</option></select></label><label><span>Change reason</span><input value={reason} onChange={(event) => setReason(event.target.value)} required /></label>{message ? <div className="form-status" role="status">{message}</div> : null}<button className="button button-primary" disabled={busy} type="submit">{busy ? "Saving..." : "Save grade"}</button></form>;
+  return <form className="academy-grade-form" onSubmit={save}><strong>{submission.assignments?.title || "Submission"}</strong><small>{submission.student_profile?.full_name || submission.student_profile?.portal_id || "Student"} | {submission.receipt_number || submission.id}</small>{submission.submission_text ? <p className="academy-submission-text">{submission.submission_text}</p> : null}{list(submission.submission_files).length ? <div className="academy-submitted-files">{submission.submission_files.map((file) => <a href={file.signedUrl} target="_blank" rel="noreferrer" key={file.id}>{file.mime_type?.startsWith("image/") && file.signedUrl ? <img src={file.signedUrl} alt={`${file.original_name} submission`} loading="lazy" /> : <FileImage size={20} aria-hidden="true" />}<span>{file.original_name}</span></a>)}</div> : <small>No files attached.</small>}<label><span>Score</span><input type="number" min="0" max={submission.assignments?.maximum_score || 100} value={score} onChange={(event) => setScore(event.target.value)} /></label><label><span>Feedback</span><textarea rows="3" value={feedback} onChange={(event) => setFeedback(event.target.value)} /></label><label><span>Decision</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="draft">Save draft</option><option value="published">Publish grade</option><option value="returned_for_correction">Return for correction</option><option value="withheld">Withhold</option></select></label><label><span>Change reason</span><input value={reason} onChange={(event) => setReason(event.target.value)} required /></label>{message ? <div className="form-status" role="status">{message}</div> : null}<button className="button button-primary" disabled={busy} type="submit">{busy ? "Saving..." : "Save grade"}</button></form>;
 }
 
 export function TutorAcademySection({ view = "classrooms", classroomIdOverride = "" }) {

@@ -14,6 +14,13 @@ function getTutorName(item) {
   return `${profile.title || ""} ${firstName}`.trim();
 }
 
+function getProviderName(provider) {
+  if (provider === "google_meet") return "Google Meet";
+  if (provider === "zoom") return "Zoom";
+  if (provider === "youtube") return "YouTube";
+  return provider || "Online";
+}
+
 export default function LiveClassCards({ sessions = [], emptyMessage = "No live classes have been scheduled yet.", audience = "student", onChanged, onEdit, onCancel }) {
   const [status, setStatus] = useState({ id: "", type: "", message: "" });
   const [loadingId, setLoadingId] = useState("");
@@ -99,7 +106,8 @@ export default function LiveClassCards({ sessions = [], emptyMessage = "No live 
               <div><dt>Starts</dt><dd>{formatDateTime(session.scheduled_start)}</dd></div>
               <div><dt>Ends</dt><dd>{formatDateTime(session.scheduled_end)}</dd></div>
               <div><dt>Status</dt><dd>{state}</dd></div>
-              <div><dt>Platform</dt><dd>{session.provider === "google_meet" ? "Google Meet" : session.provider === "zoom" ? "Zoom" : session.provider}</dd></div>
+              <div><dt>Platform</dt><dd>{getProviderName(session.provider)}</dd></div>
+              {hostView ? <div><dt>Students joined</dt><dd>{Number(session.joinedStudentCount ?? session.joined_student_count ?? session.live_class_attendance?.filter((item) => item.attendance_status !== "missed").length ?? 0)}</dd></div> : null}
               {getTutorName(session) ? <div><dt>Tutor</dt><dd>{getTutorName(session)}</dd></div> : null}
               {session.actual_started_at ? <div><dt>Actually started</dt><dd>{formatDateTime(session.actual_started_at)}</dd></div> : null}
               {session.actual_ended_at ? <div><dt>Actually ended</dt><dd>{formatDateTime(session.actual_ended_at)}</dd></div> : null}

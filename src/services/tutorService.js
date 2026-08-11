@@ -60,7 +60,7 @@ export async function getTutorDashboardData(tutorId) {
         requiredSelect("assignments", supabase.from("assignments").select("*, programs(id, title), program_levels(id, level_name)").eq("program_id", programId).order("created_at", { ascending: false })),
         requiredSelect("resources", supabase.from("resources").select("*, programs(id, title), program_levels(id, level_name)").eq("program_id", programId).order("created_at", { ascending: false })),
         requiredSelect("articles", supabase.from("portal_articles").select("*, programs(id, title), program_levels(id, level_name)").eq("program_id", programId).order("created_at", { ascending: false })),
-        requiredSelect("live classes", supabase.from("live_class_sessions").select("*, programs(id, title), program_levels(id, level_name)").eq("program_id", programId).order("scheduled_start", { ascending: true })),
+        requiredSelect("live classes", supabase.from("live_class_sessions").select("*, programs(id, title), program_levels(id, level_name), live_class_attendance(id, user_id, attendance_status)").eq("program_id", programId).order("scheduled_start", { ascending: true })),
         requiredSelect("attendance", supabase.from("live_class_attendance").select("*, live_class_sessions!inner(id, title, program_id, scheduled_start, scheduled_end, programs(id, title))").eq("live_class_sessions.program_id", programId).order("joined_at", { ascending: false }).limit(200)),
         getProgramChatUnreadCounts()
       ])

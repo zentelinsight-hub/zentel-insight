@@ -127,7 +127,7 @@ export async function getTutorClassroomWorkspace(classroomId) {
     supabase.from("academy_modules").select("*").eq("classroom_id", classroomId).order("display_order"),
     supabase.from("timetable_entries").select("*").eq("classroom_id", classroomId).order("day_of_week").order("start_time"),
     supabase.from("assignments").select("*").eq("classroom_id", classroomId).order("created_at", { ascending: false }),
-    supabase.from("assignment_submissions").select("*, assignments!inner(id, title, assessment_type, maximum_score)").eq("classroom_id", classroomId).order("submitted_at", { ascending: false }),
+    supabase.from("assignment_submissions").select("*, assignments!inner(id, title, assessment_type, maximum_score), submission_files(id, storage_path, original_name, mime_type, file_size, created_at)").eq("classroom_id", classroomId).order("submitted_at", { ascending: false }),
     supabase.from("attendance_sessions").select("*, attendance_records(*)").eq("classroom_id", classroomId).order("session_date", { ascending: false })
   ]);
   throwIfError(classroomResult.error, "The selected classroom could not be loaded.");
@@ -137,13 +137,22 @@ export async function getTutorClassroomWorkspace(classroomId) {
   throwIfError(assessmentsResult.error, "Classroom assessments could not be loaded.");
   throwIfError(submissionsResult.error, "Assessment submissions could not be loaded.");
   throwIfError(attendanceResult.error, "Classroom attendance could not be loaded.");
+  const studentById = new Map(list(studentsResult.data).map((student) => [student.user_id, student]));
+  const hydratedSubmissions = await Promise.all(list(submissionsResult.data).map(async (submission) => {
+    const files = await Promise.all(list(submission.submission_files).map(async (file) => {
+      const { data, error } = await supabase.storage.from("assignment-files").createSignedUrl(file.storage_path, 60 * 60);
+      throwIfError(error, `${file.original_name || "A submission file"} could not be opened.`);
+      return { ...file, signedUrl: data?.signedUrl || "" };
+    }));
+    return { ...submission, submission_files: files, student_profile: studentById.get(submission.user_id) || null };
+  }));
   return {
     classroom: classroomResult.data,
     students: list(studentsResult.data),
     modules: list(modulesResult.data),
     timetable: list(timetableResult.data),
     assessments: list(assessmentsResult.data),
-    submissions: list(submissionsResult.data),
+    submissions: hydratedSubmissions,
     attendanceSessions: list(attendanceResult.data)
   };
 }

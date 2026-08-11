@@ -162,28 +162,6 @@ async function cacheExternalImage(
   }
 }
 
-async function validateImageUrl(value: unknown) {
-  if (!isSafePublicUrl(value)) return null;
-  const url = clean(value);
-  const inspect = async (method: 'HEAD' | 'GET') => {
-    const response = await fetch(url, {
-      method,
-      redirect: 'follow',
-      headers: method === 'GET' ? { Range: 'bytes=0-2047', Accept: 'image/*' } : { Accept: 'image/*' },
-      signal: AbortSignal.timeout(6_000)
-    });
-    const contentType = clean(response.headers.get('content-type')).toLowerCase().split(';')[0];
-    if (!response.ok || !isSafePublicUrl(response.url) || !contentType.startsWith('image/')) return null;
-    await response.body?.cancel();
-    return { url: response.url, contentType };
-  };
-  try {
-    return await inspect('HEAD') || await inspect('GET');
-  } catch {
-    try { return await inspect('GET'); } catch { return null; }
-  }
-}
-
 async function inspectOriginForIcons(origin: string) {
   return (await inspectHtmlPage(origin)).icons;
 }
@@ -338,7 +316,7 @@ Deno.serve(async (request) => {
       .select('external_id, source_type, source_name, source_icon_url, source_domain, title, summary, category, image_url, external_url, published_at, imported_at, active')
       .eq('active', true)
       .order('published_at', { ascending: false })
-      .limit(100);
+      .limit(30);
     if (existingError) throw existingError;
     if (!importedItems.length && !existingItems?.length) throw new Error("No external feed source returned usable records");
     const candidates = new Map((existingItems || []).map((item: Record<string, any>) => [item.external_id, item]));

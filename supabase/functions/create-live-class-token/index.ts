@@ -198,7 +198,7 @@ Deno.serve(async (request) => {
     if (!authorized) return jsonResponse({ ok: false, error: "You are not authorized for this live class." }, 403, request);
 
     const isHost = role === "admin" || (role === "tutor" && (!session.tutor_id || session.tutor_id === auth.user.id));
-    if (session.provider === "google_meet" || session.provider === "zoom") {
+    if (["google_meet", "zoom", "youtube"].includes(session.provider)) {
       let readySession = session;
       if (!session.provider_room_url) {
         return jsonResponse({ ok: false, error: "This live class does not have an approved meeting URL." }, 409, request);
@@ -219,37 +219,6 @@ Deno.serve(async (request) => {
         if (startError) throw startError;
         readySession = started || session;
 
-        if (started) {
-          let studentIds: string[] = [];
-          if (session.classroom_id) {
-            const { data: members, error: memberError } = await supabase
-              .from("classroom_memberships")
-              .select("user_id")
-              .eq("classroom_id", session.classroom_id)
-              .eq("member_role", "student")
-              .eq("active", true)
-              .is("left_at", null);
-            if (memberError) throw memberError;
-            studentIds = (members || []).map((item: any) => item.user_id);
-          } else {
-            const { data: enrolments, error: enrolmentError } = await supabase
-              .from("enrolments")
-              .select("user_id")
-              .eq("program_id", session.program_id)
-              .eq("status", "active");
-            if (enrolmentError) throw enrolmentError;
-            studentIds = (enrolments || []).map((item: any) => item.user_id);
-          }
-          if (studentIds.length) {
-            await supabase.from("portal_notifications").insert(studentIds.map((userId) => ({
-              user_id: userId,
-              title: "Live class started",
-              message: `${session.title} is now live on ${session.provider === "google_meet" ? "Google Meet" : "Zoom"}.`,
-              notification_type: "live_class_started",
-              link_path: "/portal/classroom/live"
-            })));
-          }
-        }
       }
 
       if (!isHost && readySession.status !== "live") {
@@ -262,6 +231,17 @@ Deno.serve(async (request) => {
         targetTable: "live_class_sessions",
         targetId: session.id
       });
+
+      if (!isHost && role === "student") {
+        const { error: attendanceError } = await supabase.from("live_class_attendance").upsert({
+          class_session_id: session.id,
+          user_id: auth.user.id,
+          joined_at: now.toISOString(),
+          left_at: null,
+          attendance_status: "joined"
+        }, { onConflict: "class_session_id,user_id" });
+        if (attendanceError) throw attendanceError;
+      }
 
       return jsonResponse({
         ok: true,

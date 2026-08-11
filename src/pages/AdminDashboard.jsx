@@ -1402,14 +1402,14 @@ function LiveClassesSection({ data, onSaved }) {
 
   return (
     <div className="portal-page">
-      <PageHeading title="Live classes" description="Schedule approved Google Meet or Zoom sessions and review their actual Zentel start and end times." />
+      <PageHeading title="Live classes" description="Review approved Google Meet, Zoom or YouTube sessions, actual start and end times, and Student joins." />
       <form className="form-card management-form" onSubmit={submit}>
         <div className="form-grid">
           <label><span>Programme</span><select value={form.program_id} onChange={(event) => setForm({ ...form, program_id: event.target.value })} required><option value="">Choose programme</option>{data.programs.map((program) => <option key={program.id} value={program.id}>{program.title}</option>)}</select></label>
           <label><span>Classroom</span><select value={form.classroom_id} onChange={(event) => { const classroom = data.classrooms.find((item) => item.id === event.target.value); setForm({ ...form, classroom_id: event.target.value, cohort_id: classroom?.cohort_id || "", program_id: classroom?.program_id || form.program_id, track_id: classroom?.track_id || "" }); }}><option value="">Programme-wide class</option>{data.classrooms.map((item) => <option value={item.id} key={item.id}>{item.name} | {item.code}</option>)}</select></label>
           <label><span>Tutor</span><select value={form.tutor_id} onChange={(event) => setForm({ ...form, tutor_id: event.target.value })}><option value="">No tutor assigned</option>{tutors.map((tutor) => <option key={tutor.id} value={tutor.id}>{tutor.title ? `${tutor.title} ` : ""}{tutor.full_name}</option>)}</select></label>
           <label><span>Title</span><input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
-          <label><span>Platform</span><select value={form.provider} onChange={(event) => setForm({ ...form, provider: event.target.value })}><option value="google_meet">Google Meet</option><option value="zoom">Zoom</option></select></label>
+          <label><span>Platform</span><select value={form.provider} onChange={(event) => setForm({ ...form, provider: event.target.value })}><option value="google_meet">Google Meet</option><option value="zoom">Zoom</option><option value="youtube">YouTube</option></select></label>
           <label><span>Status</span><select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="scheduled">scheduled</option><option value="live">live</option><option value="completed">completed</option><option value="cancelled">cancelled</option></select></label>
           <label><span>Start</span><input type="datetime-local" value={form.scheduled_start} onChange={(event) => setForm({ ...form, scheduled_start: event.target.value })} required /></label>
           <label><span>End</span><input type="datetime-local" value={form.scheduled_end} onChange={(event) => setForm({ ...form, scheduled_end: event.target.value })} required /></label>

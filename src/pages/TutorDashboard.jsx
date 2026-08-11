@@ -29,6 +29,7 @@ import ProgramChatPanel from "../components/ProgramChatPanel";
 import PortalIdCard from "../components/portal/PortalIdCard";
 import PortalAvatarUpload from "../components/portal/PortalAvatarUpload";
 import PortalBackButton from "../components/portal/PortalBackButton";
+import PortalCommunityFeed from "../components/portal/PortalCommunityFeed";
 import PortalNavigationPage from "../components/portal/PortalNavigationPage";
 import PortalShell from "../components/portal/PortalShell";
 import PortalSwitch from "../components/portal/PortalSwitch";
@@ -55,7 +56,7 @@ import { usePageMeta } from "../utils/usePageMeta";
 import { TutorAcademySection } from "./AcademyWorkspace";
 
 const sections = [
-  ["dashboard", "Dashboard", LayoutDashboard],
+  ["dashboard", "Home", LayoutDashboard],
   ["teaching", "Teaching", BookOpen],
   ["classrooms", "Classrooms", School],
   ["assessment", "Assessment", FileCheck2],
@@ -117,7 +118,7 @@ function PageHeading({ title, actions }) {
   return (
     <div className="portal-page-heading">
       <div>
-        <p className="eyebrow">Tutor Dashboard</p>
+        <p className="eyebrow">Tutor Portal</p>
         <div className="portal-title-row">
           {showBack ? <PortalBackButton fallback="/tutor" label={`Back from ${title}`} /> : null}
           <h2>{title}</h2>
@@ -167,7 +168,8 @@ function TutorLiveClassesSection({ data, onSaved }) {
     finally { setBusy(false); }
   }
 
-  return <div className="portal-page"><PageHeading title="Live classes" description="Schedule and run secure external classes for your assigned classrooms." />{status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}{data.classrooms?.length ? <form className="form-card management-form" onSubmit={submit}><div className="form-grid"><label><span>Assigned classroom</span><select value={form.classroomId} onChange={(event) => setForm({ ...form, classroomId: event.target.value })} required>{data.classrooms.map((item) => <option key={item.classroom_id} value={item.classroom_id}>{item.classroom_name} | {item.cohort_name}</option>)}</select></label><label><span>Class name</span><input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} maxLength="180" required /></label><label><span>Platform</span><select value={form.provider} onChange={(event) => setForm({ ...form, provider: event.target.value })}><option value="google_meet">Google Meet</option><option value="zoom">Zoom</option></select></label><label><span>Meeting URL</span><input type="url" value={form.meetingUrl} onChange={(event) => setForm({ ...form, meetingUrl: event.target.value })} placeholder={form.provider === "zoom" ? "https://company.zoom.us/j/..." : "https://meet.google.com/..."} required /></label><label><span>Date and start time</span><input type="datetime-local" value={form.startsAt} onChange={(event) => setForm({ ...form, startsAt: event.target.value })} required /></label><label><span>End time</span><input type="datetime-local" value={form.endsAt} onChange={(event) => setForm({ ...form, endsAt: event.target.value })} required /></label></div><label><span>Instructions</span><textarea value={form.instructions} onChange={(event) => setForm({ ...form, instructions: event.target.value })} maxLength="2000" /></label><div className="button-row">{form.id ? <button className="button button-secondary" type="button" onClick={() => setForm(emptyForm)}>Cancel Edit</button> : null}<button className="button button-primary" disabled={busy}>{busy ? "Saving" : form.id ? "Update Class" : "Schedule Class"}</button></div></form> : <div className="notice-card"><p>Admin must assign your account to an active classroom before you can schedule a live class.</p></div>}<LiveClassCards audience="tutor" sessions={data.liveClasses} emptyMessage="No live classes have been scheduled yet." onChanged={onSaved} onEdit={edit} onCancel={cancel} /></div>;
+  const meetingPlaceholder = form.provider === "zoom" ? "https://company.zoom.us/j/..." : form.provider === "youtube" ? "https://youtube.com/live/..." : "https://meet.google.com/...";
+  return <div className="portal-page"><PageHeading title="Live classes" description="Schedule, start and end approved Google Meet, Zoom or YouTube classes for your assigned classrooms." />{status.message ? <div className={`form-status ${status.type}`} role="status">{status.message}</div> : null}{data.classrooms?.length ? <form className="form-card management-form" onSubmit={submit}><div className="form-grid"><label><span>Assigned classroom</span><select value={form.classroomId} onChange={(event) => setForm({ ...form, classroomId: event.target.value })} required>{data.classrooms.map((item) => <option key={item.classroom_id} value={item.classroom_id}>{item.classroom_name} | {item.cohort_name}</option>)}</select></label><label><span>Class name</span><input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} maxLength="180" required /></label><label><span>Platform</span><select value={form.provider} onChange={(event) => setForm({ ...form, provider: event.target.value })}><option value="google_meet">Google Meet</option><option value="zoom">Zoom</option><option value="youtube">YouTube</option></select></label><label><span>Meeting URL</span><input type="url" value={form.meetingUrl} onChange={(event) => setForm({ ...form, meetingUrl: event.target.value })} placeholder={meetingPlaceholder} required /></label><label><span>Date and start time</span><input type="datetime-local" value={form.startsAt} onChange={(event) => setForm({ ...form, startsAt: event.target.value })} required /></label><label><span>End time</span><input type="datetime-local" value={form.endsAt} onChange={(event) => setForm({ ...form, endsAt: event.target.value })} required /></label></div><label><span>Instructions</span><textarea value={form.instructions} onChange={(event) => setForm({ ...form, instructions: event.target.value })} maxLength="2000" /></label><div className="button-row">{form.id ? <button className="button button-secondary" type="button" onClick={() => setForm(emptyForm)}>Cancel Edit</button> : null}<button className="button button-primary" disabled={busy}>{busy ? "Saving" : form.id ? "Update Class" : "Schedule Class"}</button></div></form> : <div className="notice-card"><p>Admin must assign your account to an active classroom before you can schedule a live class.</p></div>}<LiveClassCards audience="tutor" sessions={data.liveClasses} emptyMessage="No live classes have been scheduled yet." onChanged={onSaved} onEdit={edit} onCancel={cancel} /></div>;
 }
 
 function EmptyState({ title = "Nothing to show yet", message }) {
@@ -196,14 +198,14 @@ function TutorFrame({ data, onRealtimeChange, children }) {
     <PortalShell
       sidebar={{
         homeTo: "/tutor",
-        brandLabel: "Tutor Dashboard",
+        brandLabel: "Tutor Portal",
         profileName: displayName,
         profileDetail: data.assignments.length
           ? `${data.assignments.length} assigned programme${data.assignments.length === 1 ? "" : "s"}`
           : "Programme pending",
         avatarUrl: data?.profile?.avatar_url || profile?.avatar_url,
         profileTo: "/tutor/profile",
-        navLabel: "Tutor dashboard",
+        navLabel: "Tutor portal",
         shellClass: "management-shell tutor-shell",
         primaryItems: [
           navigationItem("dashboard"),
@@ -222,10 +224,13 @@ function TutorFrame({ data, onRealtimeChange, children }) {
         "live_class_sessions",
         "portal_articles",
         "portal_notifications",
+        "profiles",
         "program_chat_messages",
         "program_chat_reactions",
         "program_levels",
         "resources",
+        "student_feed_posts",
+        "student_feed_refresh_events",
         "support_tickets",
         "timetable_entries",
         "tutor_profiles",
@@ -235,20 +240,6 @@ function TutorFrame({ data, onRealtimeChange, children }) {
     >
       {children}
     </PortalShell>
-  );
-}
-
-function DashboardSection({ data, onSaved }) {
-  const upcomingClasses = data.liveClasses.filter((item) => !item.scheduled_start || new Date(item.scheduled_start).getTime() >= Date.now());
-  const today = new Date().getDay();
-  const todayEntries = data.timetable.filter((item) => Number(item.day_of_week) === today);
-  return (
-    <div className="portal-page tutor-operational-dashboard">
-      <header className="portal-compact-heading"><p className="eyebrow">Tutor Portal</p><h1>Dashboard</h1></header>
-      <section className="portal-flat-section"><h2>Today&apos;s timetable</h2><div className="portal-structured-list">{todayEntries.slice(0, 6).map((item) => <div key={item.id}><span><strong>{item.title}</strong><small>{String(item.start_time || "").slice(0, 5)} - {String(item.end_time || "").slice(0, 5)} WAT</small></span></div>)}{!todayEntries.length ? <p>No classes are scheduled for today.</p> : null}</div></section>
-      <section className="portal-flat-section"><h2>Upcoming live classes</h2><LiveClassCards audience="tutor" sessions={upcomingClasses.slice(0, 4)} emptyMessage="No upcoming tutor classes have been assigned yet." onChanged={onSaved} /></section>
-      <section className="portal-flat-section"><h2>Recent announcements</h2><div className="portal-structured-list">{data.announcements.slice(0, 5).map((item) => <div key={item.id}><span><strong>{item.title}</strong><small>{formatDateTime(item.created_at)}</small></span></div>)}{!data.announcements.length ? <p>No announcements have been published.</p> : null}</div></section>
-    </div>
   );
 }
 
@@ -989,8 +980,8 @@ export default function TutorDashboard({ forcedSection = "" }) {
 
   usePageMeta({
     path: location.pathname,
-    title: "Tutor Dashboard",
-    description: "Protected Zentel Insight tutor dashboard.",
+    title: activeSection === "dashboard" ? "Tutor Home" : "Tutor Portal",
+    description: "Protected Zentel Insight tutor portal.",
     robots: "noindex,nofollow"
   });
 
@@ -1023,8 +1014,8 @@ export default function TutorDashboard({ forcedSection = "" }) {
       <TutorFrame data={data} onRealtimeChange={dataQuery.refetch}>
         <div className="portal-page">
           <div className="notice-card portal-state-card">
-            <h1>Tutor dashboard could not be loaded</h1>
-            <p>We could not load your Tutor dashboard. Please try again. If the issue continues, contact Zentel Insight Support.</p>
+            <h1>Tutor portal could not be loaded</h1>
+            <p>We could not load your Tutor portal. Please try again. If the issue continues, contact Zentel Insight Support.</p>
             <button className="button button-primary" type="button" onClick={dataQuery.refetch}>Try Again</button>
           </div>
         </div>
@@ -1033,7 +1024,7 @@ export default function TutorDashboard({ forcedSection = "" }) {
   }
   return (
     <TutorFrame data={data} onRealtimeChange={dataQuery.refetch}>
-      {activeSection === "dashboard" ? <DashboardSection data={data} onSaved={dataQuery.refetch} /> : null}
+      {activeSection === "dashboard" ? <PortalCommunityFeed eyebrow="Tutor Portal" /> : null}
       {activeSection === "teaching" ? <TutorAcademySection view="teaching" /> : null}
       {activeSection === "classrooms" ? <TutorClassroomsPage data={data} /> : null}
       {activeSection === "classroom-detail" ? <TutorClassroomPage data={data} classroomId={classroomId} /> : null}
