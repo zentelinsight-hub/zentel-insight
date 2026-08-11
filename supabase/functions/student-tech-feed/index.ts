@@ -3,6 +3,7 @@ import { getAuthenticatedUser, getUserAccountStatus, getUserRole } from "../_sha
 import { createServiceClient } from "../_shared/supabase.ts";
 
 const clean = (value: unknown) => String(value || "").trim();
+const FEED_ASSET_BUCKET = "technology-feed-assets";
 
 function decodeEntities(value: unknown) {
   const named: Record<string, string> = { amp: "&", apos: "'", quot: "\"", lt: "<", gt: ">", nbsp: " " };
@@ -68,6 +69,99 @@ function declaredIconUrls(html: string, origin: string) {
   return [...new Set(candidates)];
 }
 
+function declaredImageUrls(html: string, pageUrl: string) {
+  const candidates: string[] = [];
+  for (const tag of html.match(/<meta\b[^>]*>/gi) || []) {
+    const key = clean(getHtmlAttribute(tag, 'property') || getHtmlAttribute(tag, 'name')).toLowerCase();
+    if (!['og:image', 'og:image:url', 'twitter:image', 'twitter:image:src'].includes(key)) continue;
+    const content = getHtmlAttribute(tag, 'content');
+    if (!content) continue;
+    try {
+      const candidate = new URL(content, pageUrl).toString();
+      if (isSafePublicUrl(candidate)) candidates.push(candidate);
+    } catch {
+      // Continue through remaining metadata.
+    }
+  }
+  return [...new Set(candidates)];
+}
+
+async function inspectHtmlPage(url: string) {
+  if (!isSafePublicUrl(url)) return { icons: [], images: [] };
+  try {
+    const response = await fetch(url, {
+      redirect: 'follow',
+      headers: { Accept: 'text/html,application/xhtml+xml', 'User-Agent': 'ZentelInsightFeed/1.0' },
+      signal: AbortSignal.timeout(7_000)
+    });
+    const contentType = clean(response.headers.get('content-type')).toLowerCase();
+    const contentLength = Number(response.headers.get('content-length') || 0);
+    if (!response.ok || !isSafePublicUrl(response.url) || !contentType.includes('text/html') || contentLength > 1_500_000) {
+      return { icons: [], images: [] };
+    }
+    const html = (await response.text()).slice(0, 500_000);
+    return {
+      icons: declaredIconUrls(html, response.url),
+      images: declaredImageUrls(html, response.url)
+    };
+  } catch {
+    return { icons: [], images: [] };
+  }
+}
+
+function imageExtension(contentType: string) {
+  const extensions: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'image/avif': 'avif',
+    'image/x-icon': 'ico',
+    'image/vnd.microsoft.icon': 'ico'
+  };
+  return extensions[contentType] || '';
+}
+
+async function assetKey(value: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((part) => part.toString(16).padStart(2, '0')).join('');
+}
+
+async function cacheExternalImage(
+  supabase: any,
+  value: unknown,
+  folder: 'icons' | 'items',
+  identity: string,
+  maxBytes: number
+) {
+  if (!isSafePublicUrl(value)) return null;
+  const sourceUrl = clean(value);
+  if (sourceUrl.includes(`/storage/v1/object/public/${FEED_ASSET_BUCKET}/`)) return sourceUrl;
+  try {
+    const response = await fetch(sourceUrl, {
+      redirect: 'follow',
+      headers: { Accept: 'image/*', 'User-Agent': 'ZentelInsightFeed/1.0' },
+      signal: AbortSignal.timeout(9_000)
+    });
+    const contentType = clean(response.headers.get('content-type')).toLowerCase().split(';')[0];
+    const contentLength = Number(response.headers.get('content-length') || 0);
+    const extension = imageExtension(contentType);
+    if (!response.ok || !isSafePublicUrl(response.url) || !extension || contentLength > maxBytes) return null;
+    const bytes = await response.arrayBuffer();
+    if (!bytes.byteLength || bytes.byteLength > maxBytes) return null;
+    const path = `${folder}/${await assetKey(`${identity}:${response.url}`)}.${extension}`;
+    const { error } = await supabase.storage.from(FEED_ASSET_BUCKET).upload(path, bytes, {
+      cacheControl: '2592000',
+      contentType,
+      upsert: true
+    });
+    if (error) return null;
+    return supabase.storage.from(FEED_ASSET_BUCKET).getPublicUrl(path).data.publicUrl || null;
+  } catch {
+    return null;
+  }
+}
+
 async function validateImageUrl(value: unknown) {
   if (!isSafePublicUrl(value)) return null;
   const url = clean(value);
@@ -91,21 +185,7 @@ async function validateImageUrl(value: unknown) {
 }
 
 async function inspectOriginForIcons(origin: string) {
-  if (!isSafePublicUrl(origin)) return [];
-  try {
-    const response = await fetch(origin, {
-      redirect: 'follow',
-      headers: { Accept: 'text/html,application/xhtml+xml', 'User-Agent': 'ZentelInsightFeed/1.0' },
-      signal: AbortSignal.timeout(7_000)
-    });
-    const contentType = clean(response.headers.get('content-type')).toLowerCase();
-    const contentLength = Number(response.headers.get('content-length') || 0);
-    if (!response.ok || !isSafePublicUrl(response.url) || !contentType.includes('text/html') || contentLength > 1_500_000) return [];
-    const html = (await response.text()).slice(0, 400_000);
-    return declaredIconUrls(html, response.url);
-  } catch {
-    return [];
-  }
+  return (await inspectHtmlPage(origin)).icons;
 }
 
 async function resolveSourceIcon(supabase: any, item: Record<string, any>) {
@@ -128,22 +208,39 @@ async function resolveSourceIcon(supabase: any, item: Record<string, any>) {
     ...declared,
     new URL('/favicon.ico', origin).toString()
   ].filter(Boolean);
-  let resolved: { url: string; contentType: string } | null = null;
+  let resolved: string | null = null;
   for (const candidate of [...new Set(candidates)]) {
-    resolved = await validateImageUrl(candidate);
+    resolved = await cacheExternalImage(supabase, candidate, 'icons', domain, 512 * 1024);
     if (resolved) break;
   }
 
   await supabase.from('technology_source_icons').upsert({
     domain,
     source_origin: origin,
-    icon_url: resolved?.url || null,
-    content_type: resolved?.contentType || null,
+    icon_url: resolved,
+    content_type: resolved ? 'managed' : null,
     resolution_status: resolved ? 'resolved' : 'missing',
     resolved_at: new Date().toISOString(),
     expires_at: new Date(Date.now() + (resolved ? 30 : 7) * 86_400_000).toISOString()
   }, { onConflict: 'domain' });
-  return { ...item, source_icon_url: resolved?.url || null, source_domain: domain };
+  return { ...item, source_icon_url: resolved, source_domain: domain };
+}
+
+async function resolveItemImage(supabase: any, item: Record<string, any>) {
+  const identity = clean(item.external_id || item.external_url);
+  let resolved = await cacheExternalImage(supabase, item.image_url, 'items', identity, 5 * 1024 * 1024);
+  if (!resolved && item.source_type !== 'youtube') {
+    const metadata = await inspectHtmlPage(clean(item.external_url));
+    for (const candidate of metadata.images) {
+      resolved = await cacheExternalImage(supabase, candidate, 'items', identity, 5 * 1024 * 1024);
+      if (resolved) break;
+    }
+  }
+  return { ...item, image_url: resolved };
+}
+
+async function resolveFeedAssets(supabase: any, item: Record<string, any>) {
+  return resolveItemImage(supabase, await resolveSourceIcon(supabase, item));
 }
 
 async function fetchJson(url: URL) {
@@ -236,8 +333,17 @@ Deno.serve(async (request) => {
       return [];
     });
 
-    if (!importedItems.length) throw new Error("No external feed source returned usable records");
-    const items = await Promise.all(importedItems.map((item) => resolveSourceIcon(supabase, item)));
+    const { data: existingItems, error: existingError } = await supabase
+      .from('technology_feed_items')
+      .select('external_id, source_type, source_name, source_icon_url, source_domain, title, summary, category, image_url, external_url, published_at, imported_at, active')
+      .eq('active', true)
+      .order('published_at', { ascending: false })
+      .limit(100);
+    if (existingError) throw existingError;
+    if (!importedItems.length && !existingItems?.length) throw new Error("No external feed source returned usable records");
+    const candidates = new Map((existingItems || []).map((item: Record<string, any>) => [item.external_id, item]));
+    importedItems.forEach((item) => candidates.set(item.external_id, item));
+    const items = await Promise.all([...candidates.values()].map((item) => resolveFeedAssets(supabase, item)));
     const { error: upsertError } = await supabase
       .from("technology_feed_items")
       .upsert(items, { onConflict: "external_id" });

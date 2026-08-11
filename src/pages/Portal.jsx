@@ -161,10 +161,15 @@ function PortalAvatar({ profile, user, size = "md" }) {
 
 function FeedSourceIcon({ item }) {
   const [failed, setFailed] = useState(false);
+  const [source, setSource] = useState(item.sourceIconUrl || item.sourceFallbackIconUrl || "");
+  useEffect(() => {
+    setFailed(false);
+    setSource(item.sourceIconUrl || item.sourceFallbackIconUrl || "");
+  }, [item.sourceFallbackIconUrl, item.sourceIconUrl]);
   if (item.kind === "student") {
     return <span className="portal-avatar sm">{item.avatarUrl && !failed ? <img src={item.avatarUrl} alt="" onError={() => setFailed(true)} /> : <span>{item.author.slice(0, 1).toUpperCase()}</span>}</span>;
   }
-  return <span className="feed-source-icon">{item.sourceIconUrl && !failed ? <img src={item.sourceIconUrl} alt={`${item.author} icon`} width="32" height="32" loading="lazy" onError={() => setFailed(true)} /> : <Globe2 size={17} aria-hidden="true" />}</span>;
+  return <span className="feed-source-icon">{source && !failed ? <img src={source} alt={`${item.author} icon`} width="32" height="32" loading="lazy" onError={() => { if (item.sourceFallbackIconUrl && source !== item.sourceFallbackIconUrl) setSource(item.sourceFallbackIconUrl); else setFailed(true); }} /> : <Globe2 size={17} aria-hidden="true" />}</span>;
 }
 
 function FeedMedia({ item }) {

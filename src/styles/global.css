@@ -8925,7 +8925,7 @@ body.portal-dedicated-workspace .portal-main {
   position: relative;
   width: min(100%, 760px);
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 36px 36px;
+  grid-template-columns: 44px minmax(0, 1fr) 36px 36px;
   align-items: end;
   gap: 0.5rem;
   padding: 0.7rem 0;
@@ -9094,6 +9094,14 @@ body.portal-dedicated-workspace .portal-main {
 
 .portal-flat-section > h2 {
   font-size: 1rem;
+}
+
+.feed-composer > .portal-avatar {
+  align-self: start;
+}
+
+.feed-composer > label:not(.feed-file-button) {
+  min-width: 0;
 }
 
 .tutor-shell .portal-page,
@@ -9326,7 +9334,7 @@ body.portal-dedicated-workspace .portal-main {
   }
 
   .feed-composer {
-    grid-template-columns: 30px minmax(0, 1fr) 34px 34px;
+    grid-template-columns: 44px minmax(0, 1fr) 34px 34px;
     gap: 0.35rem;
   }
 
