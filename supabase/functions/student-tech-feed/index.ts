@@ -295,7 +295,7 @@ Deno.serve(async (request) => {
       getUserRole(supabase, auth.user.id),
       getUserAccountStatus(supabase, auth.user.id)
     ]);
-    if (role !== "student" || status !== "active") return jsonResponse({ ok: false, error: "Active Student access is required." }, 403, request);
+    if (!["student", "tutor"].includes(role) || status !== "active") return jsonResponse({ ok: false, error: "Active Student or Tutor access is required." }, 403, request);
 
     const sources = [
       { name: "newsdata", request: getNewsItems(Deno.env.get("NEWSDATA_API_KEY") || "") },
