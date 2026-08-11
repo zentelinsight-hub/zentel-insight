@@ -34,6 +34,10 @@ vi.mock("../services/tutorService", () => ({
   saveTutorResource: vi.fn()
 }));
 
+vi.mock("../hooks/portal/usePortalData", () => ({
+  useStudentFeed: vi.fn(() => ({ data: [], loading: false, error: "", refetch: vi.fn() }))
+}));
+
 beforeEach(() => {
   window.matchMedia = vi.fn(() => ({
     matches: false,
@@ -49,7 +53,7 @@ afterEach(() => {
 });
 
 describe("Tutor Dashboard", () => {
-  it("shows the compact operational overview and five direct navigation links", async () => {
+  it("shows the shared home feed and five direct navigation links", async () => {
     render(
       <AuthContext.Provider
         value={{
@@ -72,8 +76,9 @@ describe("Tutor Dashboard", () => {
       </AuthContext.Provider>
     );
 
-    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Today's timetable" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Create a post" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/tutor");
     expect(screen.getByRole("link", { name: "Classrooms" })).toHaveAttribute("href", "/tutor/classrooms");
     expect(screen.getByRole("link", { name: "Messages" })).toHaveAttribute("href", "/tutor/messages");
     expect(screen.getByRole("link", { name: "Assessment" })).toHaveAttribute("href", "/tutor/assessment");
