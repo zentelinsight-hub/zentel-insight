@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Activity, BriefcaseBusiness, FileText, FileUp, Home, MessageSquare, MoreHorizontal, Search, Send, ShieldCheck, UserRound } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { Activity, Bell, BookOpenCheck, BriefcaseBusiness, FileText, Home, LifeBuoy, LogOut, MessageSquare, MoreHorizontal, Search, Send, Settings, ShieldCheck, Sun, Moon, UserRound } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import PortalBackButton from "../components/portal/PortalBackButton";
+import PortalAvatarUpload from "../components/portal/PortalAvatarUpload";
 import PortalNavigationPage from "../components/portal/PortalNavigationPage";
 import PortalShell from "../components/portal/PortalShell";
 import { useAuth } from "../context/authHooks";
+import { useTheme } from "../context/themeHooks";
 import { useAsyncData } from "../hooks/useAsyncData";
 import {
   addStaffCaseNote,
@@ -12,11 +14,11 @@ import {
   closeStaffCase,
   createStaffEscalation,
   getStaffWorkspace,
-  searchStaffAccounts,
-  updateStaffAvatar
+  searchStaffAccounts
 } from "../services/staffService";
 import { formatDateTime } from "../utils/format";
 import { usePageMeta } from "../utils/usePageMeta";
+import { markAllNotificationsRead, markNotificationRead } from "../services/portal/portalRepository";
 
 function Heading({ title }) {
   const location = useLocation();
@@ -28,7 +30,7 @@ function resolveStaffRoute(pathname) {
   const parts = String(pathname || "").replace(/^\/staff\/?/, "").split("/").filter(Boolean).map((part) => decodeURIComponent(part));
   if (!parts.length) return { section: "home", caseId: "" };
   if (parts[0] === "cases" && parts[1]) return { section: parts[2] ? `case-${parts[2]}` : "case-detail", caseId: parts[1] };
-  const allowed = new Set(["search", "cases", "requests", "more", "profile", "security"]);
+  const allowed = new Set(["search", "cases", "requests", "more", "profile", "security", "notifications", "activity", "guidance", "settings", "support"]);
   return { section: allowed.has(parts[0]) ? parts[0] : "home", caseId: "" };
 }
 
@@ -81,7 +83,7 @@ function StaffSearch({ onChanged }) {
 
 function StaffCases({ data }) {
   const activeCase = data.activeCase;
-  return <div className="portal-page"><Heading title="Cases" description="Open your assigned support case." />{activeCase ? <div className="portal-destination-list"><Link to={`/staff/cases/${activeCase.case_id}`}><span className="portal-destination-icon"><BriefcaseBusiness size={18} /></span><span className="portal-destination-copy"><strong>{activeCase.case_reference}</strong><small>{activeCase.display_name} | {activeCase.case_status}</small></span><span aria-hidden="true">&gt;</span></Link></div> : <div className="notice-card portal-state-card"><BriefcaseBusiness size={24} /><h3>No active case</h3><p>Search for a permitted Student or Tutor account to begin a support case.</p></div>}</div>;
+  return <div className="portal-page"><Heading title="Cases" />{activeCase ? <div className="portal-destination-list"><Link to={`/staff/cases/${activeCase.case_id}`}><span className="portal-destination-icon"><BriefcaseBusiness size={18} /></span><span className="portal-destination-copy"><strong>{activeCase.case_reference}</strong><small>{activeCase.display_name} | {activeCase.case_status}</small></span><span aria-hidden="true">&gt;</span></Link></div> : <p className="portal-empty-line">No active case. Search a permitted account to begin.</p>}<section className="portal-flat-section"><h2>Case history</h2><div className="portal-structured-list">{data.caseHistory.map((item) => <div key={item.id}><span><strong>{item.case_reference}</strong><small>{item.issue} | {item.status} | {formatDateTime(item.updated_at)}</small></span></div>)}{!data.caseHistory.length ? <p>No case history is available.</p> : null}</div></section></div>;
 }
 
 function StaffCaseNavigation({ data, caseId }) {
@@ -136,21 +138,41 @@ function StaffRequests({ data, onChanged }) {
 }
 
 function StaffProfile({ data, onChanged }) {
+  return <div className="portal-page"><Heading title="Profile" /><PortalAvatarUpload profile={data.profile} name={data.profile.full_name} onChanged={onChanged} size="lg" /><section className="staff-profile-record"><span className="portal-avatar lg">{data.profile.avatar_url ? <img src={data.profile.avatar_url} alt={`${data.profile.full_name} profile`} /> : <UserRound size={30} />}</span><div><h3>{data.profile.full_name}</h3><p>{data.staffProfile.job_title} · {data.staffProfile.department}</p><p>{data.profile.email}</p><span className="portal-tag">{data.profile.portal_id}</span></div></section><p className="portal-help-text">Staff credentials remain Admin-managed.</p></div>;
+}
+
+function StaffNotifications({ data, onChanged }) {
   const { user } = useAuth();
-  const [file, setFile] = useState(null);
-  const [status, setStatus] = useState({ type: "", message: "" });
-  async function upload(event) {
-    event.preventDefault();
-    try { await updateStaffAvatar({ userId: user.id, file, previousPath: data.profile?.avatar_path || "" }); setStatus({ type: "success", message: "Profile picture updated." }); setFile(null); onChanged(); }
-    catch { setStatus({ type: "warning", message: "Profile picture could not be updated." }); }
-  }
-  return <div className="portal-page"><Heading title="Profile" description="Review your Staff identity and update only your profile picture." /><Status value={status} /><section className="staff-profile-record"><span className="portal-avatar lg">{data.profile.avatar_url ? <img src={data.profile.avatar_url} alt="" /> : <UserRound size={30} />}</span><div><h3>{data.profile.full_name}</h3><p>{data.staffProfile.job_title} · {data.staffProfile.department}</p><p>{data.profile.email}</p><span className="portal-tag">{data.profile.portal_id}</span></div></section><form className="staff-avatar-form" onSubmit={upload}><label><FileUp size={18} /><span>Profile picture</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setFile(event.target.files?.[0] || null)} /></label><button className="button button-primary" disabled={!file}>Upload Picture</button></form></div>;
+  const [busy, setBusy] = useState("");
+  async function markOne(id) { setBusy(id); try { await markNotificationRead(user.id, id); onChanged(); } finally { setBusy(""); } }
+  async function markAll() { setBusy("all"); try { await markAllNotificationsRead(user.id); onChanged(); } finally { setBusy(""); } }
+  return <div className="portal-page"><Heading title="Notifications" /><div className="button-row"><button className="button button-secondary" type="button" disabled={busy === "all" || !data.notifications.some((item) => !item.read_at)} onClick={markAll}>Mark all read</button></div><div className="portal-structured-list">{data.notifications.map((item) => <div key={item.id}><span><strong>{item.title}</strong><small>{item.message} | {formatDateTime(item.created_at)}</small></span>{!item.read_at ? <button className="button button-secondary" type="button" disabled={Boolean(busy)} onClick={() => markOne(item.id)}>Mark read</button> : <span className="portal-tag success">Read</span>}</div>)}{!data.notifications.length ? <p>No Staff notifications.</p> : null}</div></div>;
+}
+
+function StaffActivity({ data }) {
+  return <div className="portal-page"><Heading title="Activity" /><section className="portal-flat-section"><h2>Case activity</h2><div className="portal-structured-list">{data.events.map((item) => <div key={item.id}><span><strong>{item.event_type.replace(/_/g, " ")}</strong><small>{item.permitted_area || "Case workspace"} | {formatDateTime(item.created_at)}</small></span></div>)}{!data.events.length ? <p>No active-case activity.</p> : null}</div></section><section className="portal-flat-section"><h2>Account searches</h2><div className="portal-structured-list">{data.searchEvents.map((item) => <div key={item.id}><span><strong>{item.blocked ? "Blocked search" : "Permitted search"}</strong><small>{item.result_count} result(s) | {formatDateTime(item.created_at)}</small></span></div>)}{!data.searchEvents.length ? <p>No search activity.</p> : null}</div></section></div>;
+}
+
+function StaffSettings() {
+  const { theme, setTheme } = useTheme();
+  return <div className="portal-page"><Heading title="Settings" /><section className="portal-flat-section"><h2>Appearance</h2><div className="segmented-control compact" role="group" aria-label="Portal theme"><button type="button" className={theme === "light" ? "active" : ""} onClick={() => setTheme("light")}><Sun size={16} />Light</button><button type="button" className={theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")}><Moon size={16} />Dark</button></div></section></div>;
 }
 
 function StaffMore() {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+  async function handleSignOut() { await signOut({ scope: "local" }); navigate("/login", { replace: true }); }
   return <PortalNavigationPage eyebrow="Staff Portal" title="More" items={[
+    { to: "/staff/cases", label: "Case History", description: "Assigned case records", Icon: BriefcaseBusiness },
+    { to: "/staff/requests", label: "Requests & Admin Decisions", description: "Escalations and responses", Icon: Send },
+    { to: "/staff/notifications", label: "Notifications", description: "Staff account updates", Icon: Bell },
+    { to: "/staff/activity", label: "Activity", description: "Permitted case and search events", Icon: Activity },
     { to: "/staff/profile", label: "Profile", description: "View identity and profile picture", Icon: UserRound },
-    { to: "/staff/security", label: "Security", description: "Review granted capabilities", Icon: ShieldCheck }
+    { to: "/staff/guidance", label: "Guidance", description: "Case handling boundaries", Icon: BookOpenCheck },
+    { to: "/staff/security", label: "Security", description: "Review granted capabilities", Icon: ShieldCheck },
+    { to: "/staff/settings", label: "Settings", description: "Portal appearance", Icon: Settings },
+    { to: "/staff/support", label: "Support", description: "Escalate operational issues", Icon: LifeBuoy },
+    { label: "Sign Out", description: "End this Staff session", Icon: LogOut, onSelect: handleSignOut }
   ]} />;
 }
 
@@ -171,7 +193,7 @@ export default function StaffDashboard() {
   if (workspaceQuery.loading) return <div className="route-loader">Loading Staff workspace</div>;
   if (workspaceQuery.error || !data) return <section className="restricted-account-screen"><div className="restricted-account-card"><h1>Staff workspace could not be loaded</h1><p>Please retry. If the issue continues, contact Admin.</p><button className="button button-primary" onClick={workspaceQuery.refetch}>Try Again</button></div></section>;
   const displayName = data.profile?.full_name || profile?.full_name || user?.email || "Staff";
-  return <PortalShell sidebar={{ homeTo: "/staff", brandLabel: "Staff Portal", profileName: displayName, profileDetail: data.staffProfile?.job_title || "Support Staff", avatarUrl: data.profile?.avatar_url, profileInitial: displayName.slice(0, 1), profileTo: "/staff/profile", navLabel: "Staff portal", shellClass: "management-shell staff-shell", primaryItems: nav }} header={{ title: displayName }} realtimeTables={["staff_support_cases", "staff_case_notes", "staff_requests", "staff_capabilities", "security_events"]} onRealtimeChange={workspaceQuery.refetch}>
+  return <PortalShell sidebar={{ homeTo: "/staff", brandLabel: "Staff Portal", profileName: displayName, profileDetail: data.staffProfile?.job_title || "Support Staff", avatarUrl: data.profile?.avatar_url, profileInitial: displayName.slice(0, 1), profileTo: "/staff/profile", navLabel: "Staff portal", shellClass: "management-shell staff-shell", primaryItems: nav }} header={{ title: displayName }} realtimeTables={["staff_support_cases", "staff_case_notes", "staff_requests", "staff_capabilities", "staff_search_events", "portal_notifications"]} onRealtimeChange={workspaceQuery.refetch}>
     {activeSection === "home" ? <StaffHome data={data} /> : null}
     {activeSection === "search" ? <StaffSearch onChanged={workspaceQuery.refetch} /> : null}
     {activeSection === "cases" ? <StaffCases data={data} /> : null}
@@ -180,6 +202,11 @@ export default function StaffDashboard() {
     {activeSection === "requests" ? <StaffRequests data={data} onChanged={workspaceQuery.refetch} /> : null}
     {activeSection === "profile" ? <StaffProfile data={data} onChanged={workspaceQuery.refetch} /> : null}
     {activeSection === "more" ? <StaffMore /> : null}
+    {activeSection === "notifications" ? <StaffNotifications data={data} onChanged={workspaceQuery.refetch} /> : null}
+    {activeSection === "activity" ? <StaffActivity data={data} /> : null}
+    {activeSection === "guidance" ? <div className="portal-page"><Heading title="Guidance" /><dl className="portal-detail-rows"><div><dt>Account access</dt><dd>Only the active assigned case</dd></div><div><dt>Sensitive systems</dt><dd>Classroom chat, AI, KYC and unrestricted directories remain unavailable</dd></div><div><dt>Admin decisions</dt><dd>Use Requests for approval or escalation</dd></div></dl></div> : null}
     {activeSection === "security" ? <div className="portal-page"><Heading title="Security" description="Review the access capabilities currently granted to your Staff account." /><div className="staff-capability-list">{data.capabilities.map((item) => <div key={item.capability}><span>{item.capability.replace(/_/g, " ")}</span><span className={`portal-tag ${item.enabled ? "success" : "warning"}`}>{item.enabled ? "Enabled" : "Disabled"}</span></div>)}</div></div> : null}
+    {activeSection === "settings" ? <StaffSettings /> : null}
+    {activeSection === "support" ? <div className="portal-page"><Heading title="Support" /><p className="portal-help-text">Send case-specific requests to Admin from the Requests workspace.</p><Link className="button button-secondary" to="/staff/requests">Open Requests</Link></div> : null}
   </PortalShell>;
 }

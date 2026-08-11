@@ -7233,6 +7233,43 @@ body.portal-dedicated-workspace .ai-chat-page {
   }
 }
 
+.portal-own-avatar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.portal-own-avatar > div {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.portal-own-avatar input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.portal-own-avatar small,
+.portal-own-avatar .form-status {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.spin {
+  animation: portal-spin 0.8s linear infinite;
+}
+
+@keyframes portal-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Shared Classroom Chat and Zentel AI conversation viewport. */
 html.portal-conversation-active,
 body.portal-conversation-active {
@@ -7254,7 +7291,8 @@ body.portal-conversation-active #root {
 
 body.portal-conversation-active .portal-shell {
   width: 100%;
-  height: 100%;
+  height: var(--portal-visible-height, 100dvh);
+  max-height: var(--portal-visible-height, 100dvh);
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -7274,8 +7312,9 @@ body.portal-conversation-active .portal-top-navigation {
 }
 
 body.portal-conversation-active .portal-main {
+  grid-row: 2;
   width: 100%;
-  height: 100%;
+  height: auto;
   min-height: 0;
   margin: 0;
   padding: 0.55rem clamp(0.5rem, 1.5vw, 1rem);
@@ -9055,6 +9094,103 @@ body.portal-dedicated-workspace .portal-main {
 
 .portal-flat-section > h2 {
   font-size: 1rem;
+}
+
+.tutor-shell .portal-page,
+.staff-shell .portal-page {
+  gap: 0.85rem;
+}
+
+.tutor-shell .button,
+.staff-shell .button {
+  min-height: 38px;
+  padding: 0.48rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.tutor-shell .form-card,
+.staff-shell .form-card {
+  border-radius: var(--radius-small);
+  box-shadow: none;
+}
+
+.tutor-shell .portal-record-card,
+.staff-shell .portal-record-card,
+.staff-request-list > article {
+  padding: 0.7rem 0;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.tutor-shell .portal-page h3,
+.staff-shell .portal-page h3 {
+  font-size: 0.93rem;
+}
+
+.staff-shell .portal-structured-list > div {
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.admin-feed-list {
+  width: min(100%, 860px);
+  display: grid;
+  border-top: 1px solid var(--color-border);
+}
+
+.admin-feed-list > article {
+  min-width: 0;
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.admin-feed-list > article > header {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.admin-feed-list > article > header > span:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 0.12rem;
+}
+
+.admin-feed-list small {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+}
+
+.admin-feed-list .button-danger {
+  justify-self: start;
+}
+
+.admin-feed-image {
+  width: min(100%, 560px);
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  border-radius: var(--radius-small);
+  background: var(--color-surface-muted);
+}
+
+@media (max-width: 600px) {
+  .portal-own-avatar {
+    align-items: flex-start;
+  }
+
+  .portal-own-avatar > div {
+    flex: 1;
+  }
+
+  .staff-shell .portal-structured-list > div {
+    align-items: flex-start;
+  }
 }
 
 .portal-structured-list {

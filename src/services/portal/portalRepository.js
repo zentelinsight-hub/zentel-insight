@@ -171,6 +171,41 @@ export async function attachProfileAvatarUrl(profile) {
   return withProfileAvatarUrl(profile, supabase);
 }
 
+const PROFILE_AVATAR_TYPES = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp"
+};
+
+export async function updateOwnProfileAvatar({ userId, file, previousPath = "" }) {
+  if (!userId) throw new Error("A signed-in account is required.");
+  const extension = PROFILE_AVATAR_TYPES[file?.type];
+  if (!file || !extension) throw new Error("Choose a JPEG, PNG or WebP profile picture.");
+  if (file.size > PROFILE_AVATAR_MAX_BYTES) throw new Error("Profile picture must be 3 MB or smaller.");
+
+  const supabase = await getClient();
+  const objectId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const path = `${userId}/avatar-${objectId}.${extension}`;
+  const { error: uploadError } = await supabase.storage.from(PROFILE_AVATAR_BUCKET).upload(path, file, {
+    cacheControl: "3600",
+    contentType: file.type,
+    upsert: false
+  });
+  if (uploadError) throw uploadError;
+
+  const { data, error } = await supabase.rpc("update_own_profile_avatar", { next_avatar_path: path });
+  if (error) {
+    await supabase.storage.from(PROFILE_AVATAR_BUCKET).remove([path]);
+    throw error;
+  }
+
+  if (previousPath && previousPath !== path) {
+    await supabase.storage.from(PROFILE_AVATAR_BUCKET).remove([previousPath]);
+  }
+  const profile = Array.isArray(data) ? data[0] : data;
+  return withProfileAvatarUrl(profile, supabase);
+}
+
 export function calculateProfileCompletion(profile = {}) {
   const fields = ["full_name", "phone", "date_of_birth", "education_level", "address", "avatar_path"];
   const completed = fields.filter((field) => String(profile[field] || "").trim()).length;
@@ -491,7 +526,7 @@ export async function getStudentFeed() {
     return {
       id: `student-${post.id}`,
       kind: "student",
-      author: post.author_name || "Learner",
+      author: post.author_name,
       avatarUrl,
       body: post.body,
       imageUrl,

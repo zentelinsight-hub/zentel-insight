@@ -23,6 +23,10 @@ describe("resolveAdminRoute", () => {
     expect(resolveAdminRoute("/admin/more").section).toBe("more");
   });
 
+  it("keeps Student Feed moderation inside its standalone Admin route", () => {
+    expect(resolveAdminRoute("/admin/feed").section).toBe("feed");
+  });
+
   it("keeps a Payment Details route inside the Payments workspace", () => {
     expect(resolveAdminRoute("/admin/payments/9af3bc0d-400a-4a8d-88e4-fb4e289a5a29")).toEqual({
       section: "payments",

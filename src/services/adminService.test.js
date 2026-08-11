@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { findAdminAccount, getAdminDashboardData, getAdminPaymentDetails, searchAdminPayments, searchAdminStudents, searchAdminTutors, setAccountStatus } from "./adminService";
+import { findAdminAccount, getAdminDashboardData, getAdminPaymentDetails, getAdminStudentFeedPosts, moderateStudentFeedPost, searchAdminPayments, searchAdminStudents, searchAdminTutors, setAccountStatus } from "./adminService";
 
 const serviceMocks = vi.hoisted(() => ({
   getSupabaseClient: vi.fn(),
@@ -17,7 +17,8 @@ vi.mock("./edgeFunctionClient", () => ({
 vi.mock("./portal/portalRepository", () => ({
   attachProfileAvatarUrl: (profile) => profile,
   PROFILE_AVATAR_BUCKET: "profile-avatars",
-  PROFILE_AVATAR_MAX_BYTES: 3 * 1024 * 1024
+  PROFILE_AVATAR_MAX_BYTES: 3 * 1024 * 1024,
+  STUDENT_FEED_MEDIA_BUCKET: "student-feed-media"
 }));
 
 function createSupabaseMock(rowsByTable = {}, rpcResponse = { data: [], error: null }) {
@@ -253,5 +254,29 @@ describe("Admin dashboard data loading", () => {
 
     await expect(getAdminPaymentDetails("payment-1")).resolves.toEqual(details);
     expect(supabase.rpc).toHaveBeenCalledWith("admin_get_payment_details", { payment_id: "payment-1" });
+  });
+
+  it("loads authoritative Student posts through the verified Admin feed RPC", async () => {
+    const supabase = createSupabaseMock({}, {
+      data: [{ id: "post-1", author_name: "Victor Udofiah", body: "Update", image_path: null, author_avatar_path: null }],
+      error: null
+    });
+    serviceMocks.getSupabaseClient.mockResolvedValue(supabase.client);
+
+    await expect(getAdminStudentFeedPosts()).resolves.toEqual([
+      expect.objectContaining({ id: "post-1", author_name: "Victor Udofiah", image_url: "", author_avatar_url: "" })
+    ]);
+    expect(supabase.rpc).toHaveBeenCalledWith("admin_list_student_feed_posts", { page_size: 200 });
+  });
+
+  it("removes a Student post through the audited moderation RPC", async () => {
+    const supabase = createSupabaseMock({}, { data: { id: "post-1", status: "hidden" }, error: null });
+    serviceMocks.getSupabaseClient.mockResolvedValue(supabase.client);
+
+    await expect(moderateStudentFeedPost("post-1", "Community safety review")).resolves.toMatchObject({ status: "hidden" });
+    expect(supabase.rpc).toHaveBeenCalledWith("admin_moderate_student_feed_post", {
+      target_post_id: "post-1",
+      moderation_reason: "Community safety review"
+    });
   });
 });

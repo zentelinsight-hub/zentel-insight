@@ -1,6 +1,6 @@
 import { getSupabaseClient } from "./supabaseClient";
 import { invokeEdgeFunction } from "./edgeFunctionClient";
-import { attachProfileAvatarUrl, PROFILE_AVATAR_BUCKET, PROFILE_AVATAR_MAX_BYTES } from "./portal/portalRepository";
+import { attachProfileAvatarUrl, PROFILE_AVATAR_BUCKET, PROFILE_AVATAR_MAX_BYTES, STUDENT_FEED_MEDIA_BUCKET } from "./portal/portalRepository";
 
 function normalizeList(data) {
   return Array.isArray(data) ? data : [];
@@ -60,6 +60,7 @@ const adminSectionData = {
   classrooms: [],
   "classroom-chat": [],
   "zentel-ai": [],
+  feed: [],
   "live-classes": ["profiles", "tutors", "programs", "liveClasses"],
   timetable: ["programs", "timetable"],
   announcements: ["profiles", "roles", "tutors", "programs", "announcements"],
@@ -74,6 +75,37 @@ const adminSectionData = {
   profile: [],
   settings: []
 };
+
+export async function getAdminStudentFeedPosts() {
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("admin_list_student_feed_posts", { page_size: 200 });
+  if (error) throw error;
+  return Promise.all(normalizeList(data).map(async (post) => {
+    const [mediaResult, avatarResult] = await Promise.all([
+      post.image_path
+        ? supabase.storage.from(STUDENT_FEED_MEDIA_BUCKET).createSignedUrl(post.image_path, 60 * 60)
+        : Promise.resolve({ data: null }),
+      post.author_avatar_path
+        ? supabase.storage.from(PROFILE_AVATAR_BUCKET).createSignedUrl(post.author_avatar_path, 60 * 60)
+        : Promise.resolve({ data: null })
+    ]);
+    return {
+      ...post,
+      image_url: mediaResult.data?.signedUrl || "",
+      author_avatar_url: avatarResult.data?.signedUrl || ""
+    };
+  }));
+}
+
+export async function moderateStudentFeedPost(postId, reason) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("admin_moderate_student_feed_post", {
+    target_post_id: postId,
+    moderation_reason: String(reason || "").trim()
+  });
+  if (error) throw error;
+  return data;
+}
 
 async function optionalSelect(label, query, fallback = []) {
   const { data, error } = await query;

@@ -16,14 +16,17 @@ function first(data) {
 export async function getStaffWorkspace(userId) {
   if (!userId) throw new Error("A signed-in Staff account is required.");
   const supabase = await getClient();
-  const [profileResult, staffResult, capabilityResult, caseResult, requestResult] = await Promise.all([
+  const [profileResult, staffResult, capabilityResult, caseResult, requestResult, historyResult, searchEventResult, notificationResult] = await Promise.all([
     supabase.from("profiles").select("id, portal_id, full_name, email, phone, avatar_path, account_status").eq("id", userId).maybeSingle(),
     supabase.from("staff_profiles").select("user_id, job_title, department, created_at").eq("user_id", userId).maybeSingle(),
     supabase.from("staff_capabilities").select("capability, enabled").eq("staff_user_id", userId).order("capability"),
     supabase.rpc("staff_get_active_case"),
-    supabase.from("staff_requests").select("id, case_id, issue, requested_action, reason, status, admin_response, decided_at, created_at").eq("staff_user_id", userId).order("created_at", { ascending: false }).limit(50)
+    supabase.from("staff_requests").select("id, case_id, issue, requested_action, reason, status, admin_response, decided_at, created_at").eq("staff_user_id", userId).order("created_at", { ascending: false }).limit(50),
+    supabase.from("staff_support_cases").select("id, case_reference, status, issue, created_at, updated_at, closed_at").eq("owner_staff_id", userId).order("updated_at", { ascending: false }).limit(50),
+    supabase.from("staff_search_events").select("id, result_count, blocked, created_at").eq("staff_user_id", userId).order("created_at", { ascending: false }).limit(50),
+    supabase.from("portal_notifications").select("id, title, message, notification_type, link_path, read_at, created_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(50)
   ]);
-  const failed = [profileResult, staffResult, capabilityResult, caseResult, requestResult].find((result) => result.error);
+  const failed = [profileResult, staffResult, capabilityResult, caseResult, requestResult, historyResult, searchEventResult, notificationResult].find((result) => result.error);
   if (failed?.error) throw failed.error;
   const profile = await attachProfileAvatarUrl(profileResult.data);
   const activeCase = first(caseResult.data);
@@ -46,7 +49,10 @@ export async function getStaffWorkspace(userId) {
     activeCase,
     notes,
     events,
-    requests: requestResult.data || []
+    requests: requestResult.data || [],
+    caseHistory: historyResult.data || [],
+    searchEvents: searchEventResult.data || [],
+    notifications: notificationResult.data || []
   };
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Bell,
+  BadgeDollarSign,
   BookOpen,
   CalendarDays,
   CheckCircle2,
@@ -14,6 +15,7 @@ import {
   MoreHorizontal,
   School,
   Settings,
+  ShieldCheck,
   Sun,
   Moon,
   UserRound,
@@ -25,6 +27,7 @@ import LiveClassCards from "../components/LiveClassCards";
 import ProgramBanner from "../components/ProgramBanner";
 import ProgramChatPanel from "../components/ProgramChatPanel";
 import PortalIdCard from "../components/portal/PortalIdCard";
+import PortalAvatarUpload from "../components/portal/PortalAvatarUpload";
 import PortalBackButton from "../components/portal/PortalBackButton";
 import PortalNavigationPage from "../components/portal/PortalNavigationPage";
 import PortalShell from "../components/portal/PortalShell";
@@ -71,7 +74,9 @@ const sections = [
   ["resources", "Learning Resources", BookOpen],
   ["availability", "Availability", CalendarDays],
   ["notifications", "Notifications", Bell],
+  ["salary-bank", "Salary / Bank Details", BadgeDollarSign],
   ["support", "Support", LifeBuoy],
+  ["security", "Security", ShieldCheck],
   ["settings", "Settings", Settings]
 ];
 
@@ -303,8 +308,10 @@ function TutorMorePage() {
     { to: "/tutor/availability", label: "Availability", description: "Approved teaching availability", Icon: CalendarDays },
     { to: "/tutor/notifications", label: "Notifications", description: "Account and class updates", Icon: Bell },
     { to: "/tutor/profile", label: "Profile", description: "Professional account information", Icon: UserRound },
+    { to: "/tutor/salary-bank", label: "Salary / Bank Details", description: "Read-only payment setup status", Icon: BadgeDollarSign },
     { to: "/tutor/support", label: "Support", description: "Support tickets", Icon: LifeBuoy },
-    { to: "/tutor/settings", label: "Security & Settings", description: "Theme and session controls", Icon: Settings },
+    { to: "/tutor/security", label: "Security", description: "Password and session protection", Icon: ShieldCheck },
+    { to: "/tutor/settings", label: "Settings", description: "Portal appearance", Icon: Settings },
     { label: "Sign Out", description: "End this Tutor session", Icon: LogOut, onSelect: handleSignOut }
   ]} />;
 }
@@ -322,7 +329,21 @@ function TutorAvailabilitySection({ data }) {
   );
 }
 
-function ProfileSection({ data }) {
+function TutorSalaryBankSection() {
+  return (
+    <div className="portal-page">
+      <PageHeading title="Salary / Bank Details" />
+      <dl className="portal-detail-rows">
+        <div><dt>Payment profile</dt><dd>Managed securely by Zentel Insight Administration</dd></div>
+        <div><dt>Self-service changes</dt><dd>Disabled</dd></div>
+      </dl>
+      <p className="portal-help-text">Bank information is not displayed in the Tutor Portal. Contact Support for a verified update.</p>
+      <Link className="button button-secondary" to="/tutor/support">Contact Support</Link>
+    </div>
+  );
+}
+
+function ProfileSection({ data, onChanged }) {
   const { profile, user } = useAuth();
   const assignment = data.assignments[0] || null;
 
@@ -334,9 +355,7 @@ function ProfileSection({ data }) {
       />
       <article className="form-card management-form">
         <div className="portal-profile-summary">
-          <span className="portal-avatar xl">
-            {profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : <span>{tutorDisplayName(data.profile).slice(0, 1).toUpperCase()}</span>}
-          </span>
+          <PortalAvatarUpload profile={{ ...data.profile, avatar_url: profile?.avatar_url || data.profile?.avatar_url }} name={tutorDisplayName(data.profile)} onChanged={onChanged} />
           <div className="portal-metric-card">
             <span>Profile completion</span>
             <strong>{Number(data.profile?.profile_completion || calculateProfileCompletion(data.profile))}%</strong>
@@ -865,36 +884,33 @@ function TutorSupportSection({ records, onSaved }) {
   );
 }
 
-function SettingsSection() {
-  const { user, signOut } = useAuth();
-  const { theme, setTheme } = useTheme();
-  const navigate = useNavigate();
+function TutorSecuritySection() {
+  const { user } = useAuth();
+  return (
+    <div className="portal-page">
+      <PageHeading title="Security" />
+      <dl className="portal-detail-rows">
+        <div><dt>Account email</dt><dd>{user?.email}</dd></div>
+        <div><dt>Idle protection</dt><dd>Automatic sign-out after 10 minutes without activity</dd></div>
+      </dl>
+      <Link className="button button-secondary" to="/forgot-password">Request Password Reset</Link>
+    </div>
+  );
+}
 
-  async function handleSignOut() {
-    await signOut({ scope: "local" });
-    navigate("/login", { replace: true });
-  }
+function SettingsSection() {
+  const { theme, setTheme } = useTheme();
 
   return (
     <div className="portal-page">
-      <PageHeading title="Settings." description="Manage this tutor session." />
-      <article className="portal-record-card">
-        <h3>Account email</h3>
-        <p>{user?.email}</p>
-      </article>
-      <article className="portal-record-card">
-        <h3>Appearance</h3>
+      <PageHeading title="Settings" />
+      <section className="portal-flat-section">
+        <h2>Appearance</h2>
         <div className="segmented-control compact" role="group" aria-label="Portal theme">
           <button type="button" className={theme === "light" ? "active" : ""} onClick={() => setTheme("light")}><Sun size={16} aria-hidden="true" /> Light</button>
           <button type="button" className={theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")}><Moon size={16} aria-hidden="true" /> Dark</button>
         </div>
-      </article>
-      <article className="portal-record-card">
-        <h3>Session security</h3>
-        <p>For your security, your Portal session will automatically sign out after 10 minutes without activity. You will receive a warning shortly before logout.</p>
-        <Link className="button button-secondary" to="/forgot-password">Request Password Reset</Link>
-      </article>
-      <button className="button button-primary" type="button" onClick={handleSignOut}>Sign Out</button>
+      </section>
     </div>
   );
 }
@@ -1032,7 +1048,7 @@ export default function TutorDashboard({ forcedSection = "" }) {
       {activeSection === "performance" ? <TutorAcademySection view="performance" /> : null}
       {activeSection === "messages" ? <TutorMessagesPage /> : null}
       {activeSection === "more" ? <TutorMorePage /> : null}
-      {activeSection === "profile" ? <ProfileSection data={data} /> : null}
+      {activeSection === "profile" ? <ProfileSection data={data} onChanged={dataQuery.refetch} /> : null}
       {activeSection === "programme" ? <ProgrammeSection data={data} /> : null}
       {activeSection === "students" ? <StudentsSection data={data} /> : null}
       {activeSection === "classroom" ? <TutorClassroomSection data={data} onSaved={dataQuery.refetch} /> : null}
@@ -1052,12 +1068,14 @@ export default function TutorDashboard({ forcedSection = "" }) {
         <TutorResourcesSection data={data} onSaved={dataQuery.refetch} />
       ) : null}
       {activeSection === "availability" ? <TutorAvailabilitySection data={data} /> : null}
+      {activeSection === "salary-bank" ? <TutorSalaryBankSection /> : null}
       {activeSection === "notifications" ? (
         <TutorNotificationsSection records={data.notifications} onSaved={dataQuery.refetch} />
       ) : null}
       {activeSection === "support" ? (
         <TutorSupportSection records={data.supportTickets} onSaved={dataQuery.refetch} />
       ) : null}
+      {activeSection === "security" ? <TutorSecuritySection /> : null}
       {activeSection === "settings" ? <SettingsSection /> : null}
     </TutorFrame>
   );

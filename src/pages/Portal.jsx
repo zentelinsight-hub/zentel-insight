@@ -34,6 +34,7 @@ import {
 import LiveClassCards from "../components/LiveClassCards";
 import ProgramChatPanel from "../components/ProgramChatPanel";
 import PortalIdCard from "../components/portal/PortalIdCard";
+import PortalAvatarUpload from "../components/portal/PortalAvatarUpload";
 import PortalBackButton from "../components/portal/PortalBackButton";
 import PortalNavigationPage from "../components/portal/PortalNavigationPage";
 import PortalShell from "../components/portal/PortalShell";
@@ -324,6 +325,9 @@ export function PortalLayout() {
         "program_chat_reactions",
         "program_levels",
         "resources",
+        "profiles",
+        "student_feed_posts",
+        "student_feed_refresh_events",
         "support_ticket_messages",
         "support_tickets",
         "timetable_entries",
@@ -1149,7 +1153,7 @@ export function PortalProfile() {
         return (
           <article className="form-card portal-profile-form">
             <div className="portal-profile-summary">
-              <PortalAvatar profile={profile} user={user} size="xl" />
+              <PortalAvatarUpload profile={profile} name={profile.full_name || user?.email} onChanged={query.refetch} />
               <div className="portal-metric-card">
                 <span>Profile completion</span>
                 <strong>{calculateProfileCompletion(profile)}%</strong>

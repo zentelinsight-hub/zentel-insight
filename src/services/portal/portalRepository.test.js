@@ -1,12 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getPortalPageContent, getStudentDashboard } from "./portalRepository";
+import { getPortalPageContent, getStudentDashboard, updateOwnProfileAvatar } from "./portalRepository";
 
 const supabaseMocks = vi.hoisted(() => ({
-  from: vi.fn()
+  from: vi.fn(),
+  rpc: vi.fn(),
+  storageFrom: vi.fn()
 }));
 
 vi.mock("../supabaseClient", () => ({
-  getSupabaseClient: vi.fn(async () => supabaseMocks)
+  getSupabaseClient: vi.fn(async () => ({
+    from: supabaseMocks.from,
+    rpc: supabaseMocks.rpc,
+    storage: { from: supabaseMocks.storageFrom }
+  }))
 }));
 
 function resolveTableQuery(state) {
@@ -68,7 +74,17 @@ function createQueryBuilder(table) {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
   supabaseMocks.from.mockImplementation((table) => createQueryBuilder(table));
+  supabaseMocks.rpc.mockResolvedValue({
+    data: { id: "user-1", full_name: "Victor Udofiah", avatar_path: "user-1/avatar-new.png" },
+    error: null
+  });
+  supabaseMocks.storageFrom.mockReturnValue({
+    upload: vi.fn(async () => ({ error: null })),
+    remove: vi.fn(async () => ({ error: null })),
+    createSignedUrl: vi.fn(async (path) => ({ data: { signedUrl: `https://assets.example/${path}` }, error: null }))
+  });
 });
 
 describe("portal repository fallbacks", () => {
@@ -88,5 +104,28 @@ describe("portal repository fallbacks", () => {
     expect(dashboard.timetable).toEqual([]);
     expect(dashboard.upcomingClass).toBeNull();
     expect(supabaseMocks.from).not.toHaveBeenCalledWith("student_program_preferences");
+  });
+
+  it("uploads an owner-scoped avatar and confirms it through the profile RPC", async () => {
+    const file = new File(["image"], "avatar.png", { type: "image/png" });
+    const result = await updateOwnProfileAvatar({ userId: "user-1", file, previousPath: "user-1/avatar-old.png" });
+    const storage = supabaseMocks.storageFrom.mock.results[0].value;
+
+    expect(storage.upload).toHaveBeenCalledWith(
+      expect.stringMatching(/^user-1\/avatar-.+\.png$/),
+      file,
+      expect.objectContaining({ contentType: "image/png", upsert: false })
+    );
+    expect(supabaseMocks.rpc).toHaveBeenCalledWith("update_own_profile_avatar", {
+      next_avatar_path: expect.stringMatching(/^user-1\/avatar-.+\.png$/)
+    });
+    expect(storage.remove).toHaveBeenCalledWith(["user-1/avatar-old.png"]);
+    expect(result.avatar_url).toBe("https://assets.example/user-1/avatar-new.png");
+  });
+
+  it("rejects unsupported profile pictures before Storage is called", async () => {
+    const file = new File(["text"], "avatar.txt", { type: "text/plain" });
+    await expect(updateOwnProfileAvatar({ userId: "user-1", file })).rejects.toThrow("JPEG, PNG or WebP");
+    expect(supabaseMocks.storageFrom).not.toHaveBeenCalled();
   });
 });

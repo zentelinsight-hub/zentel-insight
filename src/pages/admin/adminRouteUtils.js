@@ -8,6 +8,7 @@ const validAdminSections = new Set([
   "enrolments",
   "classrooms",
   "zentel-ai",
+  "feed",
   "live-classes",
   "timetable",
   "announcements",

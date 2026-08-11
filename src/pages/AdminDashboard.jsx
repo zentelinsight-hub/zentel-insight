@@ -36,6 +36,7 @@ import AdminAiSection from "./admin/AdminAiSection";
 import AdminLoanManagement from "./admin/AdminLoanManagement";
 import { AdminPaymentDetails, AdminPaymentSearch } from "./admin/AdminPaymentSearch";
 import AdminStaffSection from "./admin/AdminStaffSection";
+import AdminFeedModeration from "./admin/AdminFeedModeration";
 import { resolveAdminRoute } from "./admin/adminRouteUtils";
 import { useAuth } from "../context/authHooks";
 import { useAsyncData } from "../hooks/useAsyncData";
@@ -75,6 +76,7 @@ const sections = [
   ["enrolments", "Enrolments", FileCheck2],
   ["classrooms", "Classrooms", MessageSquare],
   ["zentel-ai", "Zentel AI", Sparkles],
+  ["feed", "Student Feed", MessageSquare],
   ["live-classes", "Live Classes", Video],
   ["timetable", "Timetable", CalendarDays],
   ["announcements", "Announcements", Megaphone],
@@ -170,6 +172,8 @@ function AdminFrame({ data, onRealtimeChange, children }) {
         "program_levels",
         "programs",
         "resources",
+        "student_feed_posts",
+        "student_feed_refresh_events",
         "support_ticket_messages",
         "support_tickets",
         "timetable_entries",
@@ -185,7 +189,7 @@ function AdminFrame({ data, onRealtimeChange, children }) {
 }
 
 function AdminMoreSection() {
-  const slugs = ["staff", "programmes", "enrolments", "classrooms", "live-classes", "timetable", "announcements", "assignments", "resources", "finance", "payments", "zentel-ai", "support", "audit", "profile", "settings"];
+  const slugs = ["staff", "programmes", "enrolments", "classrooms", "live-classes", "timetable", "announcements", "assignments", "resources", "feed", "finance", "payments", "zentel-ai", "support", "audit", "profile", "settings"];
   return <PortalNavigationPage eyebrow="Admin Portal" title="More" description="Open an administration workspace." items={slugs.map((slug) => {
     const [, label, Icon] = sections.find(([itemSlug]) => itemSlug === slug);
     return { to: `/admin/${slug}`, label, description: `Open ${label.toLowerCase()}`, Icon };
@@ -1771,6 +1775,7 @@ export default function AdminDashboard({ forcedSection = "" }) {
       ) : null}
       {activeSection === "classroom-chat" ? <div className="portal-page chat-route-page"><ProgramChatPanel audience="admin" canModerate standalone backTo="/admin/classrooms" roomId={roomId === "all" ? "" : roomId} /></div> : null}
       {activeSection === "zentel-ai" ? <AdminAiSection /> : null}
+      {activeSection === "feed" ? <AdminFeedModeration /> : null}
       {["timetable", "announcements", "assignments", "resources", "articles"].includes(activeSection)
         ? <ContentSection data={data} onSaved={dataQuery.refetch} activeSection={activeSection} />
         : null}
