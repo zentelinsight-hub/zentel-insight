@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { ChevronDown, LogOut, UserRound } from "lucide-react";
+import { Bell, ChevronDown, LogOut, UserRound } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import BrandLogo from "../BrandLogo";
 import IdleSessionGuard from "../IdleSessionGuard";
@@ -33,6 +33,25 @@ function PortalNavLink({ item, onNavigate }) {
       <item.Icon size={18} aria-hidden="true" />
       <span>{item.label}</span>
       {Number(item.badge || 0) > 0 ? <span className="portal-nav-badge">{Number(item.badge) > 99 ? "99+" : item.badge}</span> : null}
+    </NavLink>
+  );
+}
+
+function PortalNotificationLink({ item, onNavigate }) {
+  if (!item?.to) return null;
+  const unreadCount = Number(item.badge || 0);
+  const label = item.label || "Notifications";
+
+  return (
+    <NavLink
+      to={item.to}
+      onClick={onNavigate}
+      className={({ isActive }) => isActive ? "portal-top-link portal-notification-link active" : "portal-top-link portal-notification-link"}
+      aria-label={`${label}${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
+      title={label}
+    >
+      <Bell size={20} aria-hidden="true" />
+      {unreadCount > 0 ? <span className="portal-nav-badge">{unreadCount > 99 ? "99+" : unreadCount}</span> : null}
     </NavLink>
   );
 }
@@ -147,37 +166,39 @@ export default function PortalShell({
           <span>Zentel Insight</span>
         </NavLink>
 
-        {sidebar.profileTo ? (
-          <NavLink className="portal-mobile-profile-link" to={sidebar.profileTo} onClick={closeMenus} aria-label={`Open ${sidebar.profileName || "account"} profile`}>
-            <ProfileAvatar name={sidebar.profileName} avatarUrl={sidebar.avatarUrl} initial={sidebar.profileInitial} />
-          </NavLink>
-        ) : null}
-
         <nav className="portal-top-navigation" aria-label={sidebar.navLabel}>
           {primaryItems.map((item) => <PortalNavLink key={item.to} item={item} onNavigate={closeMenus} />)}
         </nav>
 
-        <details ref={accountMenuRef} className="portal-top-menu portal-account-menu">
-          <summary className="portal-account-trigger" aria-label="Account menu" title="Account menu">
-            <ProfileAvatar name={sidebar.profileName} avatarUrl={sidebar.avatarUrl} initial={sidebar.profileInitial} />
-            <span className="portal-account-copy"><strong>{sidebar.profileName}</strong><small>{sidebar.profileDetail}</small></span>
-            <ChevronDown size={15} aria-hidden="true" />
-          </summary>
-          <div className="portal-top-menu-panel account-panel">
-            <div className="portal-account-summary">
+        <div className="portal-header-actions">
+          <PortalNotificationLink item={sidebar.notificationItem} onNavigate={closeMenus} />
+          {sidebar.profileTo ? (
+            <NavLink className="portal-mobile-profile-link" to={sidebar.profileTo} onClick={closeMenus} aria-label={`Open ${sidebar.profileName || "account"} profile`}>
               <ProfileAvatar name={sidebar.profileName} avatarUrl={sidebar.avatarUrl} initial={sidebar.profileInitial} />
-              <span><strong>{sidebar.profileName}</strong><small>{sidebar.profileDetail}</small></span>
+            </NavLink>
+          ) : null}
+          <details ref={accountMenuRef} className="portal-top-menu portal-account-menu">
+            <summary className="portal-account-trigger" aria-label="Account menu" title="Account menu">
+              <ProfileAvatar name={sidebar.profileName} avatarUrl={sidebar.avatarUrl} initial={sidebar.profileInitial} />
+              <span className="portal-account-copy"><strong>{sidebar.profileName}</strong><small>{sidebar.profileDetail}</small></span>
+              <ChevronDown size={15} aria-hidden="true" />
+            </summary>
+            <div className="portal-top-menu-panel account-panel">
+              <div className="portal-account-summary">
+                <ProfileAvatar name={sidebar.profileName} avatarUrl={sidebar.avatarUrl} initial={sidebar.profileInitial} />
+                <span><strong>{sidebar.profileName}</strong><small>{sidebar.profileDetail}</small></span>
+              </div>
+              {sidebar.profileTo ? (
+                <NavLink className="portal-top-link" to={sidebar.profileTo} onClick={closeMenus}>
+                  <UserRound size={18} aria-hidden="true" /><span>Profile</span>
+                </NavLink>
+              ) : null}
+              <button className="portal-top-link signout" type="button" onClick={handleSignOut}>
+                <LogOut size={18} aria-hidden="true" /><span>Sign Out</span>
+              </button>
             </div>
-            {sidebar.profileTo ? (
-              <NavLink className="portal-top-link" to={sidebar.profileTo} onClick={closeMenus}>
-                <UserRound size={18} aria-hidden="true" /><span>Profile</span>
-              </NavLink>
-            ) : null}
-            <button className="portal-top-link signout" type="button" onClick={handleSignOut}>
-              <LogOut size={18} aria-hidden="true" /><span>Sign Out</span>
-            </button>
-          </div>
-        </details>
+          </details>
+        </div>
       </header>
       <main className="portal-main">{children}</main>
       <IdleSessionGuard enabled={idleEnabled} onBeforeSignOut={onBeforeSignOut} />

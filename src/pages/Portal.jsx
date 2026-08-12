@@ -263,13 +263,14 @@ export function PortalLayout() {
         avatarUrl: profile?.avatar_url,
         profileInitial: getInitials(profile, user),
         profileTo: "/portal/profile",
+        notificationItem: { to: "/portal/notifications", label: "Notifications", badge: unreadNotificationCount },
         navLabel: "Student portal",
         primaryItems: [
           { to: "/portal", label: "Home", Icon: LayoutDashboard, end: true },
           { to: "/portal/learning", label: "Learning", Icon: GraduationCap },
           { to: "/portal/messages", label: "Messages", Icon: MessageSquare, badge: unreadChatCount },
           { to: "/portal/zentel-ai", label: "Zentel AI", Icon: Sparkles },
-          { to: "/portal/more", label: "More", Icon: MoreHorizontal, badge: unreadNotificationCount }
+          { to: "/portal/more", label: "More", Icon: MoreHorizontal }
         ]
       }}
       header={{
@@ -361,7 +362,6 @@ export function StudentMorePage() {
     { to: "/portal/live-classes", label: "Live Classes", description: "Scheduled and active sessions", Icon: Video },
     { to: "/portal/attendance", label: "Attendance", description: "Class participation records", Icon: CheckCircle2 },
     { to: "/portal/announcements", label: "Announcements", description: "Academic and platform notices", Icon: Bell },
-    { to: "/portal/notifications", label: "Notifications", description: "Account and classroom updates", Icon: Bell },
     { to: "/portal/finance", label: "Finance", description: "Active payment and loan status", Icon: CreditCard },
     { to: "/portal/profile", label: "Profile", description: "Your read-only account credentials", Icon: UserRound },
     { to: "/portal/support", label: "Support", description: "Tickets and support replies", Icon: LifeBuoy },

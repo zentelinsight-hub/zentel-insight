@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Activity, Bell, BookOpenCheck, BriefcaseBusiness, FileText, Home, LifeBuoy, LogOut, MessageSquare, MoreHorizontal, Search, Send, Settings, ShieldCheck, Sun, Moon, UserRound } from "lucide-react";
+import { Activity, BookOpenCheck, BriefcaseBusiness, FileText, Home, LifeBuoy, LogOut, MessageSquare, MoreHorizontal, Search, Send, Settings, ShieldCheck, Sun, Moon, UserRound } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import PortalBackButton from "../components/portal/PortalBackButton";
 import PortalAvatarUpload from "../components/portal/PortalAvatarUpload";
@@ -165,7 +165,6 @@ function StaffMore() {
   return <PortalNavigationPage eyebrow="Staff Portal" title="More" items={[
     { to: "/staff/cases", label: "Case History", description: "Assigned case records", Icon: BriefcaseBusiness },
     { to: "/staff/requests", label: "Requests & Admin Decisions", description: "Escalations and responses", Icon: Send },
-    { to: "/staff/notifications", label: "Notifications", description: "Staff account updates", Icon: Bell },
     { to: "/staff/activity", label: "Activity", description: "Permitted case and search events", Icon: Activity },
     { to: "/staff/profile", label: "Profile", description: "View identity and profile picture", Icon: UserRound },
     { to: "/staff/guidance", label: "Guidance", description: "Case handling boundaries", Icon: BookOpenCheck },
@@ -193,7 +192,7 @@ export default function StaffDashboard() {
   if (workspaceQuery.loading) return <div className="route-loader">Loading Staff workspace</div>;
   if (workspaceQuery.error || !data) return <section className="restricted-account-screen"><div className="restricted-account-card"><h1>Staff workspace could not be loaded</h1><p>Please retry. If the issue continues, contact Admin.</p><button className="button button-primary" onClick={workspaceQuery.refetch}>Try Again</button></div></section>;
   const displayName = data.profile?.full_name || profile?.full_name || user?.email || "Staff";
-  return <PortalShell sidebar={{ homeTo: "/staff", brandLabel: "Staff Portal", profileName: displayName, profileDetail: data.staffProfile?.job_title || "Support Staff", avatarUrl: data.profile?.avatar_url, profileInitial: displayName.slice(0, 1), profileTo: "/staff/profile", navLabel: "Staff portal", shellClass: "management-shell staff-shell", primaryItems: nav }} header={{ title: displayName }} realtimeTables={["staff_support_cases", "staff_case_notes", "staff_requests", "staff_capabilities", "staff_search_events", "portal_notifications"]} onRealtimeChange={workspaceQuery.refetch}>
+  return <PortalShell sidebar={{ homeTo: "/staff", brandLabel: "Staff Portal", profileName: displayName, profileDetail: data.staffProfile?.job_title || "Support Staff", avatarUrl: data.profile?.avatar_url, profileInitial: displayName.slice(0, 1), profileTo: "/staff/profile", notificationItem: { to: "/staff/notifications", label: "Notifications", badge: data.notifications.filter((item) => !item.read_at).length }, navLabel: "Staff portal", shellClass: "management-shell staff-shell", primaryItems: nav }} header={{ title: displayName }} realtimeTables={["staff_support_cases", "staff_case_notes", "staff_requests", "staff_capabilities", "staff_search_events", "portal_notifications"]} onRealtimeChange={workspaceQuery.refetch}>
     {activeSection === "home" ? <StaffHome data={data} /> : null}
     {activeSection === "search" ? <StaffSearch onChanged={workspaceQuery.refetch} /> : null}
     {activeSection === "cases" ? <StaffCases data={data} /> : null}

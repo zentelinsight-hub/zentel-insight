@@ -205,6 +205,7 @@ function TutorFrame({ data, onRealtimeChange, children }) {
           : "Programme pending",
         avatarUrl: data?.profile?.avatar_url || profile?.avatar_url,
         profileTo: "/tutor/profile",
+        notificationItem: { to: "/tutor/notifications", label: "Notifications", badge: data.notifications.filter((item) => !item.read_at).length },
         navLabel: "Tutor portal",
         shellClass: "management-shell tutor-shell",
         primaryItems: [
@@ -212,7 +213,7 @@ function TutorFrame({ data, onRealtimeChange, children }) {
           navigationItem("classrooms"),
           { to: "/tutor/messages", label: "Messages", Icon: MessageSquare, badge: data.unreadMessages },
           navigationItem("assessment"),
-          { to: "/tutor/more", label: "More", Icon: MoreHorizontal, badge: data.notifications.filter((item) => !item.read_at).length }
+          { to: "/tutor/more", label: "More", Icon: MoreHorizontal }
         ]
       }}
       header={{ eyebrow: "Welcome back", title: displayName, status: <span className="portal-tag success">Tutor</span> }}
@@ -297,7 +298,6 @@ function TutorMorePage() {
 
   return <PortalNavigationPage eyebrow="Tutor Portal" title="More" items={[
     { to: "/tutor/availability", label: "Availability", description: "Approved teaching availability", Icon: CalendarDays },
-    { to: "/tutor/notifications", label: "Notifications", description: "Account and class updates", Icon: Bell },
     { to: "/tutor/profile", label: "Profile", description: "Professional account information", Icon: UserRound },
     { to: "/tutor/salary-bank", label: "Salary / Bank Details", description: "Read-only payment setup status", Icon: BadgeDollarSign },
     { to: "/tutor/support", label: "Support", description: "Support tickets", Icon: LifeBuoy },
