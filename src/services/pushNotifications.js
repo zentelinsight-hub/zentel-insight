@@ -62,3 +62,19 @@ export async function disableDeviceNotifications() {
   }
   return { supported: true, enabled: false, permission: Notification.permission };
 }
+
+export async function showDeviceNotification({ title, body, url, tag }) {
+  if (!supportsPush() || Notification.permission !== "granted") return false;
+  const registration = await getRegistration();
+  const subscription = await registration.pushManager.getSubscription();
+  if (!subscription) return false;
+  await registration.showNotification(title || "Zentel Insight", {
+    body: body || "You have a new portal update.",
+    icon: "/favicon-192.png",
+    badge: "/favicon-192.png",
+    tag: tag || "zentel-update",
+    renotify: true,
+    data: { url: url || "/portal" }
+  });
+  return true;
+}

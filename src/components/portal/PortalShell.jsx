@@ -5,6 +5,7 @@ import BrandLogo from "../BrandLogo";
 import IdleSessionGuard from "../IdleSessionGuard";
 import { useAuth } from "../../context/authHooks";
 import { getSupabaseClient } from "../../services/supabaseClient";
+import { showDeviceNotification } from "../../services/pushNotifications";
 
 function ProfileAvatar({ name, avatarUrl, initial }) {
   const [failed, setFailed] = useState(false);
@@ -85,9 +86,28 @@ export default function PortalShell({
             { event: "*", schema: "public", table },
             (payload) => {
               if (table === "program_chat_messages" && payload?.new?.sender_id === user?.id) return;
+              if (payload?.eventType === "INSERT" && table === "program_chat_messages" && payload?.new) {
+                const message = payload.new;
+                const chatUrl = sidebar.homeTo.startsWith("/tutor") ? "/tutor/messages/classroom" : "/portal/messages/classroom";
+                void showDeviceNotification({
+                  title: `New message from ${message.sender_display_name || "your classroom"}`,
+                  body: message.message_type === "image" ? "Sent an image." : String(message.body || "Sent a new message.").slice(0, 180),
+                  url: chatUrl,
+                  tag: `zentel-chat-${message.id}`
+                }).catch(() => undefined);
+              }
+              if (payload?.eventType === "INSERT" && table === "portal_notifications" && payload?.new?.user_id === user?.id) {
+                const notification = payload.new;
+                void showDeviceNotification({
+                  title: notification.title,
+                  body: notification.message,
+                  url: notification.link_path || sidebar.homeTo,
+                  tag: `zentel-notification-${notification.id}`
+                }).catch(() => undefined);
+              }
               window.clearTimeout(refreshTimer);
               refreshTimer = window.setTimeout(() => {
-                window.dispatchEvent(new CustomEvent("zentel:portal-realtime", { detail: { table, eventType: payload?.eventType || "*" } }));
+                window.dispatchEvent(new CustomEvent("zentel:portal-realtime", { detail: { table, eventType: payload?.eventType || "*", record: payload?.new || null } }));
                 window.dispatchEvent(new Event("zentel:portal-data-refresh"));
                 onRealtimeChange?.(payload);
               }, 250);
@@ -106,7 +126,7 @@ export default function PortalShell({
       window.clearTimeout(refreshTimer);
       if (channel && client) void client.removeChannel(channel);
     };
-  }, [onRealtimeChange, realtimeKey, shellId, user?.id]);
+  }, [onRealtimeChange, realtimeKey, shellId, sidebar.homeTo, user?.id]);
 
   async function handleSignOut() {
     closeDetails(accountMenuRef);
