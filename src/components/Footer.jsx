@@ -82,11 +82,12 @@ export default function Footer({ brand = "main" }) {
             <div>
               <h2 className="footer-heading">Programs</h2>
               <ul className="footer-list">
-                {programs.map((program) => (
+                {programs.slice(0, 5).map((program) => (
                   <li key={program.slug}>
                     <Link to={`/programs/${program.slug}`}>{program.title}</Link>
                   </li>
                 ))}
+                <li><Link to="/programs">All programmes</Link></li>
               </ul>
             </div>
 

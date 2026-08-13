@@ -133,7 +133,7 @@ function ScrollToTop() {
   return null;
 }
 
-export default function App() {
+export default function App({ startupMode }) {
   const location = useLocation();
   const welcomeBrand = getRouteBrand(location) === "studyhub" ? "studyhub" : "main";
 
@@ -142,7 +142,7 @@ export default function App() {
       <BrandRouteSync />
       <ScrollToTop />
       <GlobalToastHost />
-      <WelcomeExperience brand={welcomeBrand}>
+      <WelcomeExperience brand={welcomeBrand} initialStartupMode={startupMode}>
         <RouteTransitionGate>
           {(displayLocation) => (
             <Routes location={displayLocation}>

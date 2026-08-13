@@ -27,8 +27,6 @@ export default function Checkout() {
 
   return (
     <section className="page-section checkout-section visual-section payment-visual-section">
-      <div className="visual-section__background" aria-hidden="true" />
-      <div className="visual-section__overlay" aria-hidden="true" />
       <div className="container payment-layout visual-section__content">
         <div>
           <BrandLogo brand="main" className="page-brand-logo" size="auth" />

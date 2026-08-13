@@ -18,16 +18,30 @@ function makeRequestId() {
   throw new Error("Payments are temporarily unavailable. Please try again shortly.");
 }
 
-export function verifyPaymentReference(reference) {
+export async function verifyPaymentReference(reference) {
   const safeReference = normalizePaymentReference(reference);
-  if (!safeReference) return Promise.reject(new Error("A valid payment reference is required."));
-  return invokeEdgeFunction("verify-payment", {
+  if (!safeReference) throw new Error("A valid payment reference is required.");
+  const result = await invokeEdgeFunction("verify-payment", {
     body: { reference: safeReference },
     requireSession: false,
     timeoutMs: 30000,
     unavailableMessage: "Payment confirmation is temporarily unavailable. Keep your reference and try again shortly.",
     failureMessage: "Payment confirmation could not be completed. Keep your reference and try again shortly."
   });
+  const providerStatus = cleanText(result?.status).toLowerCase();
+  const temporaryStatus = result?.verified
+    ? "success"
+    : ["abandoned", "cancelled"].includes(providerStatus)
+      ? "cancelled"
+      : ["failed", "declined", "reversed"].includes(providerStatus)
+        ? "failed"
+        : "pending";
+  updateTemporaryPayment(safeReference, {
+    temporaryStatus,
+    verificationStatus: result?.verified ? "verified" : "unverified",
+    failureReason: result?.verified ? "" : providerStatus
+  });
+  return result;
 }
 
 export function readTemporaryPayment(reference) {
@@ -57,6 +71,10 @@ export function saveTemporaryPayment(record) {
     subjectNames: Array.isArray(record.subjectNames) ? record.subjectNames.map(cleanText).filter(Boolean) : [],
     months: Number(record.months) || null,
     amountKobo: Number(record.amountKobo) || 0,
+    customerName: cleanText(record.customerName),
+    customerEmail: cleanText(record.customerEmail).toLowerCase(),
+    customerPhone: cleanText(record.customerPhone),
+    studentName: cleanText(record.studentName),
     currency: "NGN",
     createdAt: record.createdAt || new Date().toISOString(),
     temporaryStatus: "redirected",
@@ -66,6 +84,26 @@ export function saveTemporaryPayment(record) {
     window.sessionStorage.setItem(PENDING_PAYMENT_STORAGE_KEY, JSON.stringify(safeRecord));
   }
   return safeRecord;
+}
+
+export function updateTemporaryPayment(reference, updates = {}) {
+  const safeReference = normalizePaymentReference(reference);
+  if (!safeReference || typeof window === "undefined") return null;
+  try {
+    const current = JSON.parse(window.sessionStorage.getItem(PENDING_PAYMENT_STORAGE_KEY) || "null");
+    if (current?.reference !== safeReference) return null;
+    const next = {
+      ...current,
+      temporaryStatus: cleanText(updates.temporaryStatus) || current.temporaryStatus,
+      verificationStatus: cleanText(updates.verificationStatus) || current.verificationStatus,
+      failureReason: cleanText(updates.failureReason),
+      updatedAt: new Date().toISOString()
+    };
+    window.sessionStorage.setItem(PENDING_PAYMENT_STORAGE_KEY, JSON.stringify(next));
+    return next;
+  } catch {
+    return null;
+  }
 }
 
 function validateCustomer(customer, requiresStudentName) {
@@ -152,6 +190,10 @@ export async function startPaystackPayment({ item, customer, redirect = (url) =>
     subjectNames: request.subjects,
     months: request.months,
     amountKobo: result.amountKobo,
+    customerName: request.customer.fullName,
+    customerEmail: request.customer.email,
+    customerPhone: request.customer.phone,
+    studentName: request.customer.studentName,
     createdAt: new Date().toISOString()
   });
 

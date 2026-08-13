@@ -105,8 +105,6 @@ export default function PaymentSuccess() {
   if (!data) {
     return (
       <section className="page-section visual-section payment-visual-section">
-        <div className="visual-section__background" aria-hidden="true" />
-        <div className="visual-section__overlay" aria-hidden="true" />
         <div className="container narrow visual-section__content">
           <div className="receipt-card">
             <BrandLogo brand={brand} className="receipt-brand-logo" size="payment" />
@@ -134,8 +132,6 @@ export default function PaymentSuccess() {
 
   return (
     <section className={isStudyHub ? "page-section visual-section studyhub-payment-section" : "page-section visual-section payment-visual-section"}>
-      <div className="visual-section__background" aria-hidden="true" />
-      <div className="visual-section__overlay" aria-hidden="true" />
       <div className="container narrow visual-section__content">
         <div className="receipt-card">
           <BrandLogo brand={isStudyHub ? "studyhub" : "main"} className="receipt-brand-logo" size="payment" />

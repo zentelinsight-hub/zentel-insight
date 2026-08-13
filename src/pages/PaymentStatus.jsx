@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { CircleCheck, CircleX, Clock, Receipt, TriangleAlert } from "lucide-react";
 import BrandLogo from "../components/BrandLogo";
 import { siteConfig } from "../data/site";
@@ -69,6 +69,7 @@ function getFailureReason(status) {
 export default function PaymentStatus() {
   const [searchParams] = useSearchParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const reference = useMemo(
     () => normalizePaymentReference(searchParams.get("reference"), searchParams.get("trxref")),
     [searchParams]
@@ -85,7 +86,9 @@ export default function PaymentStatus() {
   const serverStatus = verification.data?.status;
   const status = verification.data?.verified
     ? "success"
-    : ["failed", "reversed", "declined"].includes(serverStatus)
+    : serverStatus === "declined"
+      ? "declined"
+      : ["failed", "reversed"].includes(serverStatus)
       ? "error"
       : ["abandoned", "cancelled"].includes(serverStatus)
         ? "cancelled"
@@ -101,6 +104,17 @@ export default function PaymentStatus() {
   const successHref = `${brand === "studyhub" ? "/studyhub/payment-success" : "/payment-success"}?reference=${encodeURIComponent(reference)}`;
   const failedHref = `${brand === "studyhub" ? "/studyhub/payment-failed" : "/payment-failed"}?reference=${encodeURIComponent(reference)}&reason=${getFailureReason(status)}`;
 
+  useEffect(() => {
+    if (!reference || verification.loading || !verification.data) return;
+    if (verification.data.verified) {
+      navigate(successHref, { replace: true });
+      return;
+    }
+    if (["failed", "reversed", "declined", "abandoned", "cancelled"].includes(serverStatus)) {
+      navigate(failedHref.replace("payment-failed", status === "cancelled" ? "payment-cancelled" : "payment-failed"), { replace: true });
+    }
+  }, [failedHref, navigate, reference, serverStatus, status, successHref, verification.data, verification.loading]);
+
   usePageMeta({
     path: brand === "studyhub" ? "/studyhub/payment-status" : "/payment-status",
     title: `${copy.title} | ${brandConfig.name}`,
@@ -115,8 +129,6 @@ export default function PaymentStatus() {
 
   return (
     <section className={brand === "studyhub" ? "page-section visual-section studyhub-payment-section" : "page-section visual-section payment-visual-section"}>
-      <div className="visual-section__background" aria-hidden="true" />
-      <div className="visual-section__overlay" aria-hidden="true" />
       <div className="container narrow visual-section__content">
         <div className="receipt-card">
           <BrandLogo brand={brand === "studyhub" ? "studyhub" : "main"} className="receipt-brand-logo" size="payment" />

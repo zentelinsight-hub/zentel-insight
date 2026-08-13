@@ -76,6 +76,7 @@ function getClassGroup(classLevel: string, classGroup: string) {
 }
 
 function createPaystackMetadata(payment: any, trusted: any) {
+  const statusPath = trusted.brand === "studyhub" ? "/studyhub/payment-status" : "/payment-status";
   const metadata = {
     payment_id: payment.id,
     brand: trusted.brand,
@@ -84,6 +85,7 @@ function createPaystackMetadata(payment: any, trusted: any) {
     track_slug: trusted.trackSlug || null,
     class_level: trusted.classLevel || null,
     student_name: trusted.studentName || null,
+    cancel_action: `${SITE_URL}${statusPath}?reference=${encodeURIComponent(payment.reference)}&reason=cancelled`,
     custom_fields: [
       { display_name: "Payment Reference", variable_name: "payment_reference", value: payment.reference },
       { display_name: "Payment ID", variable_name: "payment_id", value: payment.id },

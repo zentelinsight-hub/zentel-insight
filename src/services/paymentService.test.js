@@ -72,7 +72,64 @@ describe("backend-only Paystack checkout", () => {
     expect(readTemporaryPayment(pending.reference)).toMatchObject({
       reference: pending.reference,
       temporaryStatus: "redirected",
-      verificationStatus: "unverified"
+      verificationStatus: "unverified",
+      customerName: "Test Student",
+      customerEmail: "student@example.com",
+      customerPhone: "08000000000"
+    });
+  });
+
+  it("marks a successful callback record as verified for the receipt route", async () => {
+    const redirect = vi.fn();
+    mocks.invoke
+      .mockResolvedValueOnce({
+        ok: true,
+        mode: "backend",
+        paymentId: "payment-1",
+        reference: "ZI-COURSE-1790000000000-ABCDEF1234",
+        authorizationUrl: "https://checkout.paystack.com/secure-token",
+        amountKobo: 2000000
+      })
+      .mockResolvedValueOnce({
+        status: "success",
+        verified: true,
+        reference: "ZI-COURSE-1790000000000-ABCDEF1234"
+      });
+    const { readTemporaryPayment, startPaystackPayment, verifyPaymentReference } = await import("./paymentService.js");
+    const pending = await startPaystackPayment({ item: courseItem, customer, redirect });
+
+    await verifyPaymentReference(pending.reference);
+
+    expect(readTemporaryPayment(pending.reference)).toMatchObject({
+      temporaryStatus: "success",
+      verificationStatus: "verified"
+    });
+  });
+
+  it("marks an abandoned callback record as cancelled", async () => {
+    const redirect = vi.fn();
+    mocks.invoke
+      .mockResolvedValueOnce({
+        ok: true,
+        mode: "backend",
+        paymentId: "payment-1",
+        reference: "ZI-COURSE-1790000000000-ABCDEF1234",
+        authorizationUrl: "https://checkout.paystack.com/secure-token",
+        amountKobo: 2000000
+      })
+      .mockResolvedValueOnce({
+        status: "abandoned",
+        verified: false,
+        reference: "ZI-COURSE-1790000000000-ABCDEF1234"
+      });
+    const { readTemporaryPayment, startPaystackPayment, verifyPaymentReference } = await import("./paymentService.js");
+    const pending = await startPaystackPayment({ item: courseItem, customer, redirect });
+
+    await verifyPaymentReference(pending.reference);
+
+    expect(readTemporaryPayment(pending.reference)).toMatchObject({
+      temporaryStatus: "cancelled",
+      failureReason: "abandoned"
     });
   });
 

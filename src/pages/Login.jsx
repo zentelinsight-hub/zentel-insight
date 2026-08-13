@@ -16,12 +16,12 @@ export default function Login() {
 
   return (
     <section className="auth-section visual-section auth-visual">
-      <div className="visual-section__background" aria-hidden="true" />
-      <div className="visual-section__overlay" aria-hidden="true" />
       <div className="container auth-layout visual-section__content">
-        <div>
+        <div className="auth-intro">
           <BrandLogo brand="main" className="page-brand-logo" size="auth" />
-          <h1>Login</h1>
+          <p className="eyebrow">Student account</p>
+          <h1>Welcome back.</h1>
+          <p>Sign in to continue to your Zentel Insight portal.</p>
         </div>
         <div className="auth-form-stack">
           {reason === "idle" ? (

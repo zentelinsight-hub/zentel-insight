@@ -18,8 +18,6 @@ export function StudyHubHero({ eyebrow, title, body, background = "studyhub-home
 
   return (
     <motion.section className={`page-hero visual-section studyhub-visual ${background}`} {...entrance}>
-      <div className="visual-section__background" aria-hidden="true" />
-      <div className="visual-section__overlay" aria-hidden="true" />
       <div className="container split-section visual-section__content">
         <div>
           <BrandLogo brand="studyhub" className="hero-brand-logo" size="auth" />

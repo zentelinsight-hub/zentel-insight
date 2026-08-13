@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { resolveWelcomeStartupMode } from "./components/welcomeConfig";
 import { AuthProvider } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { getSupabaseSafeStatus } from "./services/supabaseClient";
@@ -16,6 +17,8 @@ if (import.meta.env.DEV) {
   });
 }
 
+const startupMode = resolveWelcomeStartupMode();
+
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ErrorBoundary>
@@ -23,7 +26,7 @@ createRoot(document.getElementById("root")).render(
         <AuthProvider>
           <BrowserRouter>
             <Suspense fallback={<div className="route-loader">Loading Zentel Insight</div>}>
-              <App />
+              <App startupMode={startupMode} />
             </Suspense>
           </BrowserRouter>
         </AuthProvider>

@@ -12,7 +12,13 @@ import RouteTransitionGate from "./RouteTransitionGate";
 import ProgramBanner from "./ProgramBanner";
 import WelcomeExperience from "./WelcomeExperience";
 import { NAVBAR_DESKTOP_BREAKPOINT_PX } from "./navbarConfig";
-import { welcomeDurationMs } from "./welcomeConfig";
+import {
+  resetWelcomeStartupModeForTests,
+  returningLoaderDurationMs,
+  welcomeSessionStorageKey,
+  welcomeDurationMs,
+  welcomeVisitorStorageKey
+} from "./welcomeConfig";
 import { AuthContext } from "../context/authContextCore";
 import { ThemeProvider } from "../context/ThemeContext";
 import { studyHubActionItems, studyHubNavItems } from "../data/site";
@@ -166,6 +172,10 @@ describe("square brand logos", () => {
 });
 
 describe("welcome experience", () => {
+  beforeEach(() => {
+    resetWelcomeStartupModeForTests();
+  });
+
   it("blocks child content until the welcome duration completes", () => {
     vi.useFakeTimers();
     render(<WelcomeExperience brand="main"><div>Homepage content</div></WelcomeExperience>);
@@ -179,8 +189,41 @@ describe("welcome experience", () => {
 
     expect(screen.queryByRole("status", { name: "Welcome to Zentel Insight" })).not.toBeInTheDocument();
     expect(screen.getByText("Homepage content")).toBeInTheDocument();
-    expect(window.sessionStorage.length).toBe(0);
+    expect(window.localStorage.getItem(welcomeVisitorStorageKey)).toBe("1");
+    expect(window.sessionStorage.getItem(welcomeSessionStorageKey)).toBe("1");
     vi.useRealTimers();
+  });
+
+  it("shows only the loading splash to returning visitors", () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(welcomeVisitorStorageKey, "1");
+
+    render(<WelcomeExperience brand="main"><div>Homepage content</div></WelcomeExperience>);
+
+    expect(screen.queryByRole("status", { name: "Welcome to Zentel Insight" })).not.toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Loading Zentel Insight" })).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(returningLoaderDurationMs);
+    });
+
+    expect(screen.getByText("Homepage content")).toBeInTheDocument();
+  });
+
+  it("uses the loading splash on a page reload without replaying welcome", () => {
+    vi.useFakeTimers();
+    vi.spyOn(window.performance, "getEntriesByType").mockReturnValue([{ type: "reload" }]);
+
+    render(<WelcomeExperience brand="main"><div>Homepage content</div></WelcomeExperience>);
+
+    expect(screen.queryByRole("status", { name: "Welcome to Zentel Insight" })).not.toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Loading Zentel Insight" })).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(returningLoaderDurationMs);
+    });
+
+    expect(screen.getByText("Homepage content")).toBeInTheDocument();
   });
 });
 

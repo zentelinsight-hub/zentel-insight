@@ -1,16 +1,13 @@
 import {
   ArrowRight,
   BadgeCheck,
-  BookOpen,
   CalendarDays,
   GraduationCap,
   MonitorPlay,
-  ShieldCheck,
-  Users
+  ShieldCheck
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import ProgramCard from "../components/ProgramCard";
-import PageVisual from "../components/PageVisual";
 import SectionHeader from "../components/SectionHeader";
 import { announcements } from "../data/announcements";
 import { programs } from "../data/programs";
@@ -61,8 +58,8 @@ export default function Home() {
         <div className="visual-section__overlay" aria-hidden="true" />
         <div className="container hero-grid visual-section__content">
           <div className="hero-copy">
-            <p className="eyebrow">Inspiring Creativity, Empowering Minds.</p>
-            <h1>Build practical digital skills for today&apos;s world.</h1>
+            <p className="eyebrow">Zentel Insight Technology Academy</p>
+            <h1>Build practical digital skills that shape the future.</h1>
             <p>
               Zentel Insight helps learners grow creative confidence, technical ability, and structured learning habits
               through practical programmes and community support.
@@ -80,37 +77,6 @@ export default function Home() {
               </Link>
             </div>
           </div>
-          <div className="hero-visual" aria-label="Zentel Insight learning focus">
-            <div className="hero-panel">
-              <div className="panel-topline">
-                <span className="live-dot" aria-hidden="true" />
-                Practical learning dashboard
-              </div>
-              <div className="skill-bars" aria-hidden="true">
-                <span style={{ "--width": "82%" }} />
-                <span style={{ "--width": "64%" }} />
-                <span style={{ "--width": "74%" }} />
-              </div>
-              <div className="hero-metrics">
-                <div>
-                  <BookOpen size={20} aria-hidden="true" />
-                  <strong>Project-based</strong>
-                  <span>Learn by doing</span>
-                </div>
-                <div>
-                  <Users size={20} aria-hidden="true" />
-                  <strong>Community</strong>
-                  <span>Grow with peers</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="page-visual-section" aria-label="Zentel Insight learning platform overview">
-        <div className="container">
-          <PageVisual visualKey="mainHomepage" />
         </div>
       </section>
 
@@ -171,11 +137,12 @@ export default function Home() {
           />
           <div className="feature-list">
             {[
-              ["Practical projects", "Learners practise with tasks that feel close to real work."],
-              ["Clear progression", "Programmes are organized around foundations, practice, and application."],
-              ["Community support", "Discussions and announcements help learners stay connected beyond class time."]
-            ].map(([title, body]) => (
-              <article key={title} className="feature-row">
+              ["01", "Practical projects", "Learners practise with tasks that feel close to real work."],
+              ["02", "Clear progression", "Programmes are organized around foundations, practice, and application."],
+              ["03", "Community support", "Discussions and announcements help learners stay connected beyond class time."]
+            ].map(([number, title, body]) => (
+              <article key={title} className="feature-row console-feature-row">
+                <span className="console-index">{number}</span>
                 <BadgeCheck size={22} aria-hidden="true" />
                 <div>
                   <h3>{title}</h3>
@@ -195,9 +162,9 @@ export default function Home() {
             description="Each featured course shows meaningful track prices from the same catalogue used at checkout."
             align="center"
           />
-          <div className="program-grid">
-            {featuredPrograms.map((program) => (
-              <ProgramCard key={program.slug} program={program} />
+          <div className="program-grid home-program-grid">
+            {featuredPrograms.map((program, index) => (
+              <ProgramCard key={program.slug} program={program} index={index} />
             ))}
           </div>
         </div>

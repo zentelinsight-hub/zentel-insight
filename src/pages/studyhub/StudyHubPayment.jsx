@@ -18,8 +18,6 @@ export default function StudyHubPayment() {
 
   return (
     <section className="page-section visual-section studyhub-payment-section">
-      <div className="visual-section__background" aria-hidden="true" />
-      <div className="visual-section__overlay" aria-hidden="true" />
       <div className="container narrow visual-section__content">
         <div className="notice-card">
           <BrandLogo brand="studyhub" className="page-brand-logo" size="payment" />

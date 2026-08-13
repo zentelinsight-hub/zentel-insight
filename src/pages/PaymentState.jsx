@@ -37,10 +37,13 @@ const copyByReason = {
 
 function getPaymentState(searchParams, routeState) {
   const reference = normalizePaymentReference(searchParams.get("reference"), searchParams.get("trxref"));
-  const reason = String(searchParams.get("reason") || routeState || "failed").toLowerCase();
+  const requestedReason = String(searchParams.get("reason") || routeState || "failed").toLowerCase();
   const record = readTemporaryPayment(reference);
-  if (!reference || !record) return { reference, record: null, reason: "unavailable" };
-  const statusReason = record.failureReason || record.temporaryStatus || reason;
+  if (!reference) return { reference, record: null, reason: "unavailable" };
+  if (!record) return { reference, record: null, reason: copyByReason[requestedReason] ? requestedReason : "unavailable" };
+  const statusReason = ["cancelled", "declined", "error", "failed"].includes(requestedReason)
+    ? requestedReason
+    : record.failureReason || record.temporaryStatus || requestedReason;
   const normalizedReason = statusReason === "closed" ? "cancelled" : statusReason === "failed" ? "error" : statusReason;
   return { reference, record, reason: ["success", "client_success"].includes(normalizedReason) ? "pending" : normalizedReason };
 }
@@ -68,8 +71,6 @@ export default function PaymentState({ state = "failed" }) {
 
   return (
     <section className="page-section visual-section payment-visual-section">
-      <div className="visual-section__background" aria-hidden="true" />
-      <div className="visual-section__overlay" aria-hidden="true" />
       <div className="container narrow visual-section__content">
         <div className="receipt-card">
           <BrandLogo brand="main" className="receipt-brand-logo" size="payment" />

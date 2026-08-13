@@ -37,10 +37,8 @@ export default function Programs() {
 
   return (
     <>
-      <section className="page-hero visual-section programs-hero">
-        <div className="visual-section__background" aria-hidden="true" />
-        <div className="visual-section__overlay" aria-hidden="true" />
-        <div className="container narrow visual-section__content">
+      <section className="page-hero programs-hero">
+        <div className="container narrow">
           <p className="eyebrow">Programs</p>
           <h1>Practical learning pathways for creative and digital growth.</h1>
           <p>
@@ -84,8 +82,8 @@ export default function Programs() {
 
           {filteredPrograms.length ? (
             <div className="program-grid">
-              {filteredPrograms.map((program) => (
-                <ProgramCard key={program.slug} program={program} />
+              {filteredPrograms.map((program, index) => (
+                <ProgramCard key={program.slug} program={program} index={index} />
               ))}
             </div>
           ) : programsQuery.loading ? (

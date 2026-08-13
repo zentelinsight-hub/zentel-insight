@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, BookOpen, Check, CreditCard, HelpCircle, Wrench } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import BrandLogo from "../components/BrandLogo";
 import ProgramBanner from "../components/ProgramBanner";
 import SectionHeader from "../components/SectionHeader";
 import { getProgramBySlug } from "../data/programs";
@@ -13,17 +12,14 @@ import { usePageMeta } from "../utils/usePageMeta";
 
 function InfoList({ icon: Icon = Check, items }) {
   return (
-    <div className="feature-list">
+    <ul className="program-info-list">
       {items.map((item) => (
-        <article className="feature-row" key={item}>
+        <li key={item}>
           <Icon size={22} aria-hidden="true" />
-          <div>
-            <h3>{item}</h3>
-            <p>Included in the programme structure.</p>
-          </div>
-        </article>
+          <span>{item}</span>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }
 
@@ -96,13 +92,10 @@ export default function ProgramDetail() {
   return (
     <>
       <section className="page-hero visual-section program-detail-hero">
-        <div className="visual-section__background" aria-hidden="true" />
-        <div className="visual-section__overlay" aria-hidden="true" />
         <div className="container visual-section__content program-detail-hero__content">
           <ProgramBanner program={program} placement="detail" />
           <div className="split-section program-detail-hero__details">
             <div>
-              <BrandLogo brand="main" size="auth" className="hero-brand-logo" />
               <p className="eyebrow">Program details</p>
               <h1>{program.title}</h1>
               <p>{program.fullDescription}</p>
@@ -184,7 +177,7 @@ export default function ProgramDetail() {
           />
           <div className="program-grid">
             {program.levels.map((level) => (
-              <article className="program-card" key={level.slug}>
+              <article className="program-track-card" key={level.slug}>
                 <h3>{level.name}</h3>
                 <p>{level.summary}</p>
                 <strong>{formatCurrency(level.price)}</strong>
@@ -226,13 +219,12 @@ export default function ProgramDetail() {
       <section className="page-section">
         <div className="container">
           <SectionHeader eyebrow="FAQ" title="Questions before enrolment." align="center" />
-          <div className="value-grid compact">
+          <div className="faq-list">
             {program.faq.map(([question, answer]) => (
-              <article className="value-card" key={question}>
-                <HelpCircle size={24} aria-hidden="true" />
-                <h3>{question}</h3>
+              <details key={question}>
+                <summary><HelpCircle size={19} aria-hidden="true" /><span>{question}</span></summary>
                 <p>{answer}</p>
-              </article>
+              </details>
             ))}
           </div>
         </div>

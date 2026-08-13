@@ -128,8 +128,6 @@ export default function StudyHubEnrol({ programme = "" }) {
       />
 
       <section className="page-section alt visual-section studyhub-payment-section">
-        <div className="visual-section__background" aria-hidden="true" />
-        <div className="visual-section__overlay" aria-hidden="true" />
         <div className="container payment-layout visual-section__content">
           <div>
             <p className="eyebrow">StudyHub checkout</p>
