@@ -11383,6 +11383,13 @@ h3,
   text-transform: uppercase;
 }
 
+/* The account directory scrolls horizontally only; keep its header in normal
+   table flow so it never covers the first account row. */
+.account-directory-table th {
+  position: static;
+  top: auto;
+}
+
 .feed-entry > header::after {
   content: "";
   flex: 1;
