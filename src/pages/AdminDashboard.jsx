@@ -50,6 +50,7 @@ import {
   saveArticle,
   saveAssignment,
   saveProgram,
+  saveProgramCohort,
   saveProgramLevel,
   saveResource,
   saveTimetableEntry,
@@ -1141,6 +1142,7 @@ function ProgramLevelPriceEditor({ level, onSaved }) {
 function ProgrammesSection({ data, onSaved }) {
   const [programForm, setProgramForm] = useState(emptyProgramForm);
   const [trackForm, setTrackForm] = useState({ program_id: "", level_name: "", level_description: "", duration_text: "", price: "", active: true });
+  const [cohortForm, setCohortForm] = useState({ program_id: "", track_id: "", name: "", code: "", start_date: new Date().toISOString().slice(0, 10), end_date: "", status: "active" });
   const [status, setStatus] = useState({ type: "", message: "" });
 
   async function submitProgram(event) {
@@ -1167,9 +1169,21 @@ function ProgrammesSection({ data, onSaved }) {
     }
   }
 
+  async function submitCohort(event) {
+    event.preventDefault();
+    try {
+      await saveProgramCohort(cohortForm);
+      setCohortForm({ program_id: "", track_id: "", name: "", code: "", start_date: new Date().toISOString().slice(0, 10), end_date: "", status: "active" });
+      setStatus({ type: "success", message: "Cohort, classroom and chat room created." });
+      onSaved();
+    } catch (error) {
+      setStatus({ type: "warning", message: error.message || "Cohort could not be created." });
+    }
+  }
+
   return (
     <div className="portal-page">
-      <PageHeading title="Programmes, tracks and prices." description="Manage published programme information and official track prices." />
+      <PageHeading title="Programmes, tracks and cohorts." description="Manage programme tiers, official prices and their classroom chat cohorts." />
       <div className="portal-grid">
         <form className="form-card management-form" onSubmit={submitProgram}>
           <h3>Add Programme</h3>
@@ -1206,6 +1220,19 @@ function ProgrammesSection({ data, onSaved }) {
           <button className="button button-primary" type="submit">Save Track</button>
         </form>
       </div>
+      <form className="form-card management-form" onSubmit={submitCohort}>
+        <h3>Create Cohort and Chat Classroom</h3>
+        <div className="form-grid">
+          <label><span>Programme</span><select value={cohortForm.program_id} onChange={(event) => setCohortForm({ ...cohortForm, program_id: event.target.value, track_id: "" })} required><option value="">Choose programme</option>{data.programs.map((program) => <option key={program.id} value={program.id}>{program.title}</option>)}</select></label>
+          <label><span>Programme tier</span><select value={cohortForm.track_id} onChange={(event) => setCohortForm({ ...cohortForm, track_id: event.target.value })} required><option value="">Choose tier</option>{getTrackOptions(data.programs, cohortForm.program_id).map((level) => <option key={level.id} value={level.id}>{level.level_name}</option>)}</select></label>
+          <label><span>Cohort name</span><input value={cohortForm.name} onChange={(event) => setCohortForm({ ...cohortForm, name: event.target.value })} placeholder="September 2026 Intake" required /></label>
+          <label><span>Cohort code</span><input value={cohortForm.code} onChange={(event) => setCohortForm({ ...cohortForm, code: event.target.value.toUpperCase() })} placeholder="SEP-2026-WEB" required /></label>
+          <label><span>Start date</span><input type="date" value={cohortForm.start_date} onChange={(event) => setCohortForm({ ...cohortForm, start_date: event.target.value })} required /></label>
+          <label><span>End date</span><input type="date" min={cohortForm.start_date} value={cohortForm.end_date} onChange={(event) => setCohortForm({ ...cohortForm, end_date: event.target.value })} /></label>
+          <label><span>Status</span><select value={cohortForm.status} onChange={(event) => setCohortForm({ ...cohortForm, status: event.target.value })}><option value="active">Active</option><option value="planned">Planned</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label>
+        </div>
+        <button className="button button-primary" type="submit">Create Cohort</button>
+      </form>
       <StatusMessage status={status} />
       <div className="portal-list">
         {data.programs.map((program) => (
@@ -1217,7 +1244,10 @@ function ProgrammesSection({ data, onSaved }) {
             </div>
             <div className="program-price-list">
               {(program.program_levels || []).map((level) => (
-                <ProgramLevelPriceEditor key={level.id} level={level} onSaved={onSaved} />
+                <div key={level.id}>
+                  <ProgramLevelPriceEditor level={level} onSaved={onSaved} />
+                  <p className="muted-line">{(data.cohorts || []).filter((cohort) => cohort.track_id === level.id).length} cohort(s)</p>
+                </div>
               ))}
             </div>
           </article>

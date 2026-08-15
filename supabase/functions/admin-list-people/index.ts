@@ -32,6 +32,18 @@ function lower(value: unknown) {
   return clean(value).toLowerCase();
 }
 
+function authRole(user: any) {
+  const role = lower(user?.app_metadata?.role || user?.user_metadata?.role);
+  return ["student", "tutor", "staff", "admin"].includes(role) ? role : "student";
+}
+
+function authStatus(user: any) {
+  const status = lower(user?.app_metadata?.account_status || user?.user_metadata?.account_status);
+  if (["active", "inactive", "suspended", "restricted"].includes(status)) return status;
+  if (user?.banned_until && new Date(user.banned_until).getTime() > Date.now()) return "suspended";
+  return "active";
+}
+
 function sortPeople(left: any, right: any) {
   const leftName = lower(left.full_name || left.email);
   const rightName = lower(right.full_name || right.email);
@@ -105,6 +117,7 @@ Deno.serve(async (request) => {
     const programs = new Map((programsResult.data || []).map((item: any) => [item.id, item]));
     const levels = new Map((levelsResult.data || []).map((item: any) => [item.id, item]));
     const authById = new Map((authUsers || []).map((item: any) => [item.id, item]));
+    const profileById = new Map(profiles.map((item: any) => [item.id, item]));
 
     const activeAssignmentsByTutor = new Map<string, any[]>();
     for (const assignment of assignmentsResult.data || []) {
@@ -120,13 +133,18 @@ Deno.serve(async (request) => {
       activeEnrolmentsByStudent.set(enrolment.user_id, current);
     }
 
-    const people = profiles.map((profile: any) => {
-      const role = roles.get(profile.id) || "student";
-      const authUser = authById.get(profile.id) || {};
-      const tutorProfile = tutorProfiles.get(profile.id) || {};
-      const staffProfile = staffProfiles.get(profile.id) || {};
-      const tutorAssignments = activeAssignmentsByTutor.get(profile.id) || [];
-      const studentEnrolments = activeEnrolmentsByStudent.get(profile.id) || [];
+    const accountIds = [...new Set([
+      ...(authUsers || []).map((item: any) => item.id),
+      ...profiles.map((item: any) => item.id)
+    ])];
+    const people = accountIds.map((accountId: string) => {
+      const profile: any = profileById.get(accountId) || {};
+      const authUser = authById.get(accountId) || {};
+      const role = roles.get(accountId) || authRole(authUser);
+      const tutorProfile = tutorProfiles.get(accountId) || {};
+      const staffProfile = staffProfiles.get(accountId) || {};
+      const tutorAssignments = activeAssignmentsByTutor.get(accountId) || [];
+      const studentEnrolments = activeEnrolmentsByStudent.get(accountId) || [];
       const primaryTutorAssignment = [...tutorAssignments].sort((left, right) => String(right.updated_at || right.created_at || "").localeCompare(String(left.updated_at || left.created_at || "")))[0] || null;
       const primaryStudentEnrolment = [...studentEnrolments].sort((left, right) => String(right.updated_at || right.created_at || "").localeCompare(String(left.updated_at || left.created_at || "")))[0] || null;
       const primaryAssignment = role === "tutor" ? primaryTutorAssignment : primaryStudentEnrolment;
@@ -136,19 +154,19 @@ Deno.serve(async (request) => {
       const assignmentCount = role === "tutor" ? tutorAssignments.length : studentEnrolments.length;
 
       return {
-        id: profile.id,
-        user_id: profile.id,
-        portal_id: profile.portal_id || "",
+        id: accountId,
+        user_id: accountId,
+        portal_id: profile.portal_id || authUser.user_metadata?.portal_id || "",
         role,
         title: tutorProfile.title || staffProfile.job_title || profile.title || (role === "tutor" ? "Mr" : ""),
-        full_name: profile.full_name || "",
+        full_name: profile.full_name || authUser.user_metadata?.full_name || authUser.user_metadata?.name || "",
         email: profile.email || authUser.email || "",
         phone: profile.phone || "",
         avatar_path: profile.avatar_path || "",
         date_of_birth: profile.date_of_birth || null,
         education_level: profile.education_level || "",
         address: profile.address || "",
-        account_status: profile.account_status || "inactive",
+        account_status: profile.account_status || authStatus(authUser),
         status_changed_at: profile.status_changed_at || null,
         status_changed_by: profile.status_changed_by || null,
         status_reason: profile.status_reason || "",

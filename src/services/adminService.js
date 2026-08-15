@@ -55,13 +55,13 @@ const adminSectionData = {
   accounts: ["programs"],
   staff: [],
   finance: [],
-  programmes: ["programs"],
+  programmes: ["programs", "cohorts", "classrooms"],
   enrolments: ["profiles", "programs", "enrolments"],
   classrooms: [],
   "classroom-chat": [],
   "zentel-ai": [],
   feed: [],
-  "live-classes": ["profiles", "tutors", "programs", "liveClasses"],
+  "live-classes": ["profiles", "tutors", "programs", "cohorts", "classrooms", "liveClasses"],
   timetable: ["programs", "timetable"],
   announcements: ["profiles", "roles", "tutors", "programs", "announcements"],
   assignments: ["programs", "assignments"],
@@ -169,7 +169,9 @@ export async function getAdminDashboardData(section = "overview") {
     supportTickets,
     payments,
     certificates,
-    auditLogs
+    auditLogs,
+    cohorts,
+    classrooms
   ] = await Promise.all([
     sectionSelect(requiredData, "profiles", "profiles", () => supabase.from("profiles").select("*").order("created_at", { ascending: false }).limit(500), [], isPeopleDirectory),
     sectionSelect(requiredData, "roles", "roles", () => supabase.from("user_roles").select("*").order("created_at", { ascending: false }).limit(500), [], isPeopleDirectory),
@@ -187,7 +189,9 @@ export async function getAdminDashboardData(section = "overview") {
     sectionSelect(requiredData, "supportTickets", "support tickets", () => supabase.from("support_tickets").select("*, support_ticket_messages(*)").order("created_at", { ascending: false }).limit(200)),
     sectionSelect(requiredData, "payments", "payments", () => supabase.from("payments").select("*, payment_attempt_events(*)").order("created_at", { ascending: false }).limit(500)),
     sectionSelect(requiredData, "certificates", "certificates", () => supabase.from("certificates").select("*, enrolments(id, programs(id, slug, title), program_levels(id, level_name))").order("created_at", { ascending: false }).limit(200)),
-    sectionSelect(requiredData, "auditLogs", "audit logs", () => supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(100))
+    sectionSelect(requiredData, "auditLogs", "audit logs", () => supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(100)),
+    sectionSelect(requiredData, "cohorts", "cohorts", () => supabase.from("cohorts").select("*, programs(id, title), program_levels(id, level_name), classrooms(id, name, code, status)").order("start_date", { ascending: false }).limit(500)),
+    sectionSelect(requiredData, "classrooms", "classrooms", () => supabase.from("classrooms").select("*, programs(id, title), program_levels(id, level_name), cohorts(id, name, code)").order("created_at", { ascending: false }).limit(500))
   ]);
   const roleByUserId = new Map(normalizeList(roles).map((item) => [item.user_id, item.role]));
   const profileByUserId = new Map(normalizeList(profiles).map((item) => [item.id, item]));
@@ -266,7 +270,9 @@ export async function getAdminDashboardData(section = "overview") {
     supportTickets: hydratedSupportTickets,
     payments: normalizeList(payments),
     certificates: hydratedCertificates,
-    auditLogs: normalizeList(auditLogs)
+    auditLogs: normalizeList(auditLogs),
+    cohorts: normalizeList(cohorts),
+    classrooms: normalizeList(classrooms)
   };
 }
 
@@ -583,6 +589,21 @@ export async function saveProgramLevel(values) {
     price_kobo: payload.price_kobo,
     active: payload.active
   });
+  return data;
+}
+
+export async function saveProgramCohort(values) {
+  const supabase = await getClient();
+  const { data, error } = await supabase.rpc("admin_save_cohort_with_classroom", {
+    target_program_id: values.program_id,
+    target_track_id: values.track_id,
+    next_name: String(values.name || "").trim(),
+    next_code: String(values.code || "").trim().toUpperCase(),
+    next_start_date: values.start_date,
+    next_end_date: values.end_date || null,
+    next_status: values.status || "active"
+  });
+  if (error) throw error;
   return data;
 }
 
