@@ -16,6 +16,12 @@ function throwIfError(error, message) {
   throw new Error(message);
 }
 
+function throwAdminAssignmentError(error, fallback) {
+  if (!error) return;
+  const serverMessage = String(error.message || "").trim();
+  throw new Error(serverMessage || fallback);
+}
+
 export async function getStudentAcademyDashboard() {
   const supabase = await client();
   const { data, error } = await supabase.rpc("get_my_academic_dashboard");
@@ -243,20 +249,22 @@ export async function saveSubmissionGrade({ submissionId, score, feedback, statu
 
 export async function getAdminAcademyWorkspace() {
   const supabase = await client();
-  const [classrooms, cohorts, tutorAssignments, weights, transactions, reconciliations, programs] = await Promise.all([
-    supabase.from("classrooms").select("*, programs(id, title), program_levels!classrooms_track_id_fkey(id, level_name), cohorts(id, name, start_date, end_date), classroom_memberships(id, member_role, active)").order("created_at", { ascending: false }),
+  const [classrooms, cohorts, tutorAssignments, weights, transactions, reconciliations, programs, participants] = await Promise.all([
+    supabase.from("classrooms").select("*, programs(id, title), program_levels!classrooms_track_id_fkey(id, level_name), cohorts(id, name, start_date, end_date), classroom_memberships(id, member_role, active)").eq("status", "active").order("created_at", { ascending: false }),
     supabase.from("cohorts").select("*, programs(id, title), program_levels!cohorts_track_id_fkey(id, level_name)").order("start_date", { ascending: false }),
     supabase.from("tutor_classroom_assignments").select("*, classrooms(id, name, code)").order("assigned_at", { ascending: false }),
     supabase.from("grading_weights").select("*").is("effective_until", null),
     supabase.from("payment_transactions").select("*, payments!inner(reference, product_name, customer_email, normalized_email, user_id)").order("created_at", { ascending: false }).limit(200),
     supabase.from("payment_reconciliation_runs").select("*").order("started_at", { ascending: false }).limit(25),
-    supabase.from("programs").select("id, title, program_levels(id, level_name, active)").eq("active", true).order("title")
+    supabase.from("programs").select("id, title, program_levels(id, level_name, active)").eq("active", true).order("title"),
+    supabase.rpc("admin_get_tier_participants")
   ]);
-  const records = [classrooms, cohorts, tutorAssignments, weights, transactions, reconciliations, programs];
+  const records = [classrooms, cohorts, tutorAssignments, weights, transactions, reconciliations, programs, participants];
   records.forEach((record) => throwIfError(record.error, "Academy administration records could not be loaded."));
   return {
     classrooms: list(classrooms.data), cohorts: list(cohorts.data), tutorAssignments: list(tutorAssignments.data),
-    weights: list(weights.data), transactions: list(transactions.data), reconciliations: list(reconciliations.data), programs: list(programs.data)
+    weights: list(weights.data), transactions: list(transactions.data), reconciliations: list(reconciliations.data),
+    programs: list(programs.data), participants: list(participants.data)
   };
 }
 
@@ -305,7 +313,7 @@ export async function assignTutorClassroom({ tutorId, classroomId, role, active,
     assignment_active: active,
     change_reason: String(reason || "").trim()
   });
-  throwIfError(error, "The Tutor classroom assignment could not be saved.");
+  throwAdminAssignmentError(error, "The Tutor classroom assignment could not be saved.");
 }
 
 export async function assignStudentClassroom({ userId, classroomId, reason }) {
@@ -315,5 +323,5 @@ export async function assignStudentClassroom({ userId, classroomId, reason }) {
     target_classroom_id: classroomId,
     change_reason: String(reason || "").trim()
   });
-  throwIfError(error, "The Student classroom assignment could not be saved.");
+  throwAdminAssignmentError(error, "The Student classroom assignment could not be saved.");
 }

@@ -39,6 +39,7 @@ beforeEach(() => {
   chatMocks.getProgramChatMessages.mockResolvedValue([]);
   chatMocks.getProgramChatRooms.mockResolvedValue([]);
   chatMocks.getProgramChatUnreadCounts.mockResolvedValue({ "room-1": 0 });
+  chatMocks.joinProgramChat.mockResolvedValue({ room_id: "room-1", joined: true });
   chatMocks.markProgramChatRead.mockResolvedValue(true);
   chatMocks.subscribeToProgramChat.mockResolvedValue(() => {});
   chatMocks.sendProgramChatMessage.mockResolvedValue({
@@ -102,5 +103,22 @@ describe("Programme Classroom chat", () => {
     expect(await screen.findByText("No messages yet")).toBeInTheDocument();
     expect(chatMocks.getProgramChatRooms).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("link", { name: "Back to classroom" })).toHaveAttribute("href", "/portal/classroom");
+  });
+
+  it("keeps messages server-gated until Join Chat and refreshes room access after membership changes", async () => {
+    chatMocks.ensureProgramClassroom
+      .mockResolvedValueOnce({ id: "room-1", title: "Data Analysis — Advanced", program_title: "Data Analysis", joined: false })
+      .mockResolvedValue({ id: "room-1", title: "Data Analysis — Advanced", program_title: "Data Analysis", joined: true });
+
+    render(<ProgramChatPanel programId="program-1" trackId="track-advanced" />);
+    expect(await screen.findByRole("button", { name: "Join Chat" })).toBeInTheDocument();
+    expect(chatMocks.getProgramChatMessages).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Join Chat" }));
+    expect(await screen.findByText("No messages yet")).toBeInTheDocument();
+    expect(chatMocks.joinProgramChat).toHaveBeenCalledWith("room-1");
+
+    window.dispatchEvent(new CustomEvent("zentel:portal-realtime", { detail: { table: "enrolments" } }));
+    await waitFor(() => expect(chatMocks.ensureProgramClassroom).toHaveBeenCalledTimes(3));
   });
 });

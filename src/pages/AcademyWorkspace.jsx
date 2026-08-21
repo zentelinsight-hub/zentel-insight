@@ -23,10 +23,8 @@ import {
   assignStudentClassroom,
   assignTutorClassroom,
   saveAssessmentQuestion,
-  saveClassroom,
   saveClassroomAssessment,
   saveClassroomTimetableEntry,
-  saveCohort,
   saveGradingWeights,
   saveSubmissionGrade,
   submitStudentAssessment,
@@ -344,34 +342,39 @@ export function TutorAcademySection({ view = "classrooms", classroomIdOverride =
 
 export function AdminAcademySection({ view = "academics" }) {
   const query = useAsyncData(getAdminAcademyWorkspace, [], { errorMessage: "Academy administration records could not be loaded." });
+  const refetchAcademy = query.refetch;
   const tutorQuery = useAsyncData(() => searchAdminTutors({ pageSize: 50 }), [], { enabled: view === "academics", errorMessage: "Tutor accounts could not be loaded." });
   const studentQuery = useAsyncData(() => searchAdminStudents({ pageSize: 50 }), [], { enabled: view === "academics", errorMessage: "Student accounts could not be loaded." });
-  const [cohort, setCohort] = useState({ programId: "", trackId: "", name: "", code: "", startDate: "", endDate: "", status: "planned" });
-  const [classroom, setClassroom] = useState({ cohortId: "", name: "", code: "", capacity: "", status: "planned" });
   const [tutorAssignment, setTutorAssignment] = useState({ tutorId: "", classroomId: "", role: "lead_tutor", active: true, reason: "Tutor classroom assignment" });
   const [studentAssignment, setStudentAssignment] = useState({ userId: "", classroomId: "", reason: "Student classroom assignment" });
   const [weightForm, setWeightForm] = useState({ classroomId: "", assignment: 25, quiz: 15, test: 20, project: 30, attendance: 10 });
   const [message, setMessage] = useState("");
+  useEffect(() => {
+    const refresh = () => refetchAcademy();
+    window.addEventListener("zentel:portal-data-refresh", refresh);
+    return () => window.removeEventListener("zentel:portal-data-refresh", refresh);
+  }, [refetchAcademy]);
   if (query.loading) return <div className="route-loader">Loading academy administration</div>;
   if (query.error) return <AcademyError message={query.error} retry={query.refetch} />;
   const data = query.data || {};
   const finance = view === "finance";
-  const tracks = list(data.programs).find((item) => item.id === cohort.programId)?.program_levels || [];
-
-  async function submitCohort(event) {
-    event.preventDefault(); setMessage("");
-    try { await saveCohort(cohort); setCohort({ programId: "", trackId: "", name: "", code: "", startDate: "", endDate: "", status: "planned" }); setMessage("Cohort saved."); query.refetch(); }
-    catch (error) { setMessage(error.message); }
-  }
-  async function submitClassroom(event) {
-    event.preventDefault(); setMessage("");
-    try { await saveClassroom(classroom); setClassroom({ cohortId: "", name: "", code: "", capacity: "", status: "planned" }); setMessage("Classroom saved."); query.refetch(); }
-    catch (error) { setMessage(error.message); }
-  }
+  const participantGroups = list(data.participants).reduce((groups, row) => {
+    const existing = groups.get(row.classroom_id) || { ...row, students: [] };
+    if (row.student_user_id) existing.students.push(row);
+    groups.set(row.classroom_id, existing);
+    return groups;
+  }, new Map());
   async function submitTutorAssignment(event) {
     event.preventDefault(); setMessage("");
     try { await assignTutorClassroom(tutorAssignment); setMessage("Tutor classroom assignment saved."); query.refetch(); }
     catch (error) { setMessage(error.message); }
+  }
+  async function endTutorAssignment(assignment) {
+    setMessage("");
+    try {
+      await assignTutorClassroom({ tutorId: assignment.tutor_id, classroomId: assignment.classroom_id, role: assignment.assignment_role, active: false, reason: "Tutor cohort assignment ended by Admin" });
+      setMessage("Tutor assignment ended."); query.refetch();
+    } catch (error) { setMessage(error.message); }
   }
   async function submitStudentAssignment(event) {
     event.preventDefault(); setMessage("");
@@ -388,19 +391,20 @@ export function AdminAcademySection({ view = "academics" }) {
   }
   return (
     <div className="portal-page academy-workspace">
-      <PageHeading eyebrow="Admin Portal" title={finance ? "Finance" : "Academics"} description={finance ? "Immutable verified transaction and reconciliation records." : "Cohorts, classrooms, Tutor coverage and academic controls."} />
+      <PageHeading eyebrow="Admin Portal" title={finance ? "Finance" : "Academics"} description={finance ? "Immutable verified transaction and reconciliation records." : "Programme-tier cohorts, Tutor coverage and classroom controls."} />
       <SectionTabs items={[["/admin/academics", "Academics", School], ["/admin/finance", "Finance", CreditCard]]} />
       {message ? <div className="form-status" role="status">{message}</div> : null}
       {finance ? <><div className="dashboard-grid"><article className="dashboard-card"><CreditCard size={20} /><span>Transactions</span><strong>{list(data.transactions).length}</strong><small>Latest 200 immutable records</small></article><article className="dashboard-card"><RefreshCw size={20} /><span>Reconciliation Runs</span><strong>{list(data.reconciliations).length}</strong><small>Scheduled, manual and dry runs</small></article></div><div className="portal-table-wrap"><table className="portal-table"><thead><tr><th>Reference</th><th>Account</th><th>Amount</th><th>Transaction</th><th>Verification</th><th>Date</th></tr></thead><tbody>{list(data.transactions).map((item) => <tr key={item.id}><td>{item.reference}</td><td>{item.payments?.normalized_email || "Unlinked"}</td><td>{formatCurrency(Number(item.amount_kobo || 0) / 100)}</td><td>{item.transaction_status}</td><td>{item.verification_status}</td><td>{formatDateTime(item.paid_at || item.created_at)}</td></tr>)}</tbody></table></div></> : <>
-        <div className="dashboard-grid"><article className="dashboard-card"><School size={20} /><span>Classrooms</span><strong>{list(data.classrooms).length}</strong><small>All statuses</small></article><article className="dashboard-card"><GraduationCap size={20} /><span>Cohorts</span><strong>{list(data.cohorts).length}</strong><small>Programme track intakes</small></article><article className="dashboard-card"><Users size={20} /><span>Tutor Assignments</span><strong>{list(data.tutorAssignments).filter((item) => item.active).length}</strong><small>Active classroom assignments</small></article></div>
+        <div className="dashboard-grid"><article className="dashboard-card"><School size={20} /><span>Programme tiers</span><strong>{list(data.classrooms).length}</strong><small>Canonical active classrooms</small></article><article className="dashboard-card"><GraduationCap size={20} /><span>Cohorts</span><strong>{participantGroups.size}</strong><small>One cohort per programme tier</small></article><article className="dashboard-card"><Users size={20} /><span>Tutor Assignments</span><strong>{list(data.tutorAssignments).filter((item) => item.active).length}</strong><small>Active tier assignments</small></article></div>
         <div className="academy-admin-forms">
-          <form className="form-card management-form" onSubmit={submitCohort}><h3>Create cohort</h3><label><span>Programme</span><select value={cohort.programId} onChange={(event) => setCohort({ ...cohort, programId: event.target.value, trackId: "" })} required><option value="">Choose programme</option>{list(data.programs).map((item) => <option value={item.id} key={item.id}>{item.title}</option>)}</select></label><label><span>Track</span><select value={cohort.trackId} onChange={(event) => setCohort({ ...cohort, trackId: event.target.value })} required><option value="">Choose track</option>{tracks.filter((item) => item.active).map((item) => <option value={item.id} key={item.id}>{item.level_name}</option>)}</select></label><label><span>Name</span><input value={cohort.name} onChange={(event) => setCohort({ ...cohort, name: event.target.value })} required /></label><label><span>Code</span><input value={cohort.code} onChange={(event) => setCohort({ ...cohort, code: event.target.value })} required /></label><label><span>Start date</span><input type="date" value={cohort.startDate} onChange={(event) => setCohort({ ...cohort, startDate: event.target.value })} required /></label><button className="button button-primary" type="submit">Save cohort</button></form>
-          <form className="form-card management-form" onSubmit={submitClassroom}><h3>Create classroom</h3><label><span>Cohort</span><select value={classroom.cohortId} onChange={(event) => setClassroom({ ...classroom, cohortId: event.target.value })} required><option value="">Choose cohort</option>{list(data.cohorts).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label><span>Name</span><input value={classroom.name} onChange={(event) => setClassroom({ ...classroom, name: event.target.value })} required /></label><label><span>Code</span><input value={classroom.code} onChange={(event) => setClassroom({ ...classroom, code: event.target.value })} required /></label><label><span>Capacity</span><input type="number" min="1" value={classroom.capacity} onChange={(event) => setClassroom({ ...classroom, capacity: event.target.value })} /></label><button className="button button-primary" type="submit">Save classroom</button></form>
-          <form className="form-card management-form" onSubmit={submitTutorAssignment}><h3>Assign Tutor</h3><label><span>Tutor</span><select value={tutorAssignment.tutorId} onChange={(event) => setTutorAssignment({ ...tutorAssignment, tutorId: event.target.value })} required><option value="">Choose Tutor</option>{list(tutorQuery.data?.records).map((item) => <option value={item.user_id || item.id} key={item.user_id || item.id}>{item.full_name} ({item.portal_id})</option>)}</select></label><label><span>Classroom</span><select value={tutorAssignment.classroomId} onChange={(event) => setTutorAssignment({ ...tutorAssignment, classroomId: event.target.value })} required><option value="">Choose classroom</option>{list(data.classrooms).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label><span>Role</span><select value={tutorAssignment.role} onChange={(event) => setTutorAssignment({ ...tutorAssignment, role: event.target.value })}><option value="lead_tutor">Lead Tutor</option><option value="assistant_tutor">Assistant Tutor</option><option value="reviewer">Reviewer</option></select></label><label><span>Reason</span><input value={tutorAssignment.reason} onChange={(event) => setTutorAssignment({ ...tutorAssignment, reason: event.target.value })} required /></label><button className="button button-primary" type="submit">Save assignment</button></form>
-          <form className="form-card management-form" onSubmit={submitStudentAssignment}><h3>Assign Student</h3><label><span>Student</span><select value={studentAssignment.userId} onChange={(event) => setStudentAssignment({ ...studentAssignment, userId: event.target.value })} required><option value="">Choose Student</option>{list(studentQuery.data?.records).map((item) => <option value={item.user_id || item.id} key={item.user_id || item.id}>{item.full_name} ({item.portal_id})</option>)}</select></label><label><span>Classroom</span><select value={studentAssignment.classroomId} onChange={(event) => setStudentAssignment({ ...studentAssignment, classroomId: event.target.value })} required><option value="">Choose classroom</option>{list(data.classrooms).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label><span>Reason</span><input value={studentAssignment.reason} onChange={(event) => setStudentAssignment({ ...studentAssignment, reason: event.target.value })} required /></label><button className="button button-primary" type="submit">Save assignment</button></form>
+          <form className="form-card management-form" onSubmit={submitTutorAssignment}><h3>Assign Tutor</h3><label><span>Tutor</span><select value={tutorAssignment.tutorId} onChange={(event) => setTutorAssignment({ ...tutorAssignment, tutorId: event.target.value })} required><option value="">Choose Tutor</option>{list(tutorQuery.data?.records).map((item) => <option value={item.user_id || item.id} key={item.user_id || item.id}>{item.full_name} ({item.portal_id})</option>)}</select></label><label><span>Programme tier</span><select value={tutorAssignment.classroomId} onChange={(event) => setTutorAssignment({ ...tutorAssignment, classroomId: event.target.value })} required><option value="">Choose programme tier</option>{list(data.classrooms).map((item) => <option value={item.id} key={item.id}>{item.programs?.title} — {item.program_levels?.level_name}</option>)}</select></label><label><span>Role</span><select value={tutorAssignment.role} onChange={(event) => setTutorAssignment({ ...tutorAssignment, role: event.target.value })}><option value="lead_tutor">Lead Tutor</option><option value="assistant_tutor">Assistant Tutor</option><option value="reviewer">Reviewer</option></select></label><label><span>Reason</span><input value={tutorAssignment.reason} onChange={(event) => setTutorAssignment({ ...tutorAssignment, reason: event.target.value })} required /></label><button className="button button-primary" type="submit">Assign Tutor</button></form>
+          <form className="form-card management-form" onSubmit={submitStudentAssignment}><h3>Move Student</h3><label><span>Student</span><select value={studentAssignment.userId} onChange={(event) => setStudentAssignment({ ...studentAssignment, userId: event.target.value })} required><option value="">Choose Student</option>{list(studentQuery.data?.records).map((item) => <option value={item.user_id || item.id} key={item.user_id || item.id}>{item.full_name} ({item.portal_id})</option>)}</select></label><label><span>Programme tier</span><select value={studentAssignment.classroomId} onChange={(event) => setStudentAssignment({ ...studentAssignment, classroomId: event.target.value })} required><option value="">Choose programme tier</option>{list(data.classrooms).map((item) => <option value={item.id} key={item.id}>{item.programs?.title} — {item.program_levels?.level_name}</option>)}</select></label><label><span>Reason</span><input value={studentAssignment.reason} onChange={(event) => setStudentAssignment({ ...studentAssignment, reason: event.target.value })} required /></label><button className="button button-primary" type="submit">Move Student</button></form>
           <form className="form-card management-form" onSubmit={submitWeights}><h3>Grading weights</h3><label><span>Classroom</span><select value={weightForm.classroomId} onChange={(event) => setWeightForm({ ...weightForm, classroomId: event.target.value })} required><option value="">Choose classroom</option>{list(data.classrooms).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>{["assignment", "quiz", "test", "project", "attendance"].map((key) => <label key={key}><span>{key}</span><input type="number" min="0" max="100" value={weightForm[key]} onChange={(event) => setWeightForm({ ...weightForm, [key]: Number(event.target.value) })} /></label>)}<button className="button button-primary" type="submit">Save weights</button></form>
         </div>
-        <div className="portal-table-wrap"><table className="portal-table"><thead><tr><th>Classroom</th><th>Programme</th><th>Track</th><th>Cohort</th><th>Students</th><th>Status</th></tr></thead><tbody>{list(data.classrooms).map((item) => <tr key={item.id}><td>{item.name}<small>{item.code}</small></td><td>{item.programs?.title}</td><td>{item.program_levels?.level_name}</td><td>{item.cohorts?.name}</td><td>{list(item.classroom_memberships).filter((member) => member.member_role === "student" && member.active).length}</td><td>{item.status}</td></tr>)}</tbody></table></div>
+        <section className="academy-cohort-directory" aria-labelledby="cohort-participants-heading"><h2 id="cohort-participants-heading">Cohort participants</h2>{[...participantGroups.values()].map((group) => {
+          const tutorAssignmentRecord = list(data.tutorAssignments).find((item) => item.classroom_id === group.classroom_id && item.active);
+          return <article className="academy-cohort-group" key={group.classroom_id}><header><div><span>{group.program_title}</span><h3>{group.tier_title}</h3></div><Link className="button button-secondary" to={`/admin/classrooms/${group.room_id}/chat`}>Open Chat</Link></header><div className="academy-cohort-tutor"><span>Tutor</span><strong>{group.tutor_name || "Not assigned"}</strong>{group.tutor_portal_id ? <small>{group.tutor_portal_id}</small> : null}{tutorAssignmentRecord ? <button className="text-link danger" type="button" onClick={() => endTutorAssignment(tutorAssignmentRecord)}>End assignment</button> : null}</div><div className="portal-table-wrap"><table className="portal-table"><thead><tr><th>Student</th><th>Student ID</th><th>Account</th><th>Chat</th></tr></thead><tbody>{group.students.map((student) => <tr key={student.student_user_id}><td>{student.student_name}</td><td>{student.student_portal_id || "Pending ID"}</td><td>{student.student_account_status}</td><td><span className={`portal-tag ${student.chat_state === "Joined Chat" ? "success" : student.chat_state === "Chat Restricted" ? "warning" : ""}`}>{student.chat_state}</span></td></tr>)}{!group.students.length ? <tr><td colSpan="4">No Students are assigned to this programme tier.</td></tr> : null}</tbody></table></div></article>;
+        })}</section>
       </>}
     </div>
   );

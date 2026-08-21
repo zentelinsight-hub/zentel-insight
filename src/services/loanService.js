@@ -18,6 +18,12 @@ function extensionFor(file) {
   return "jpg";
 }
 
+function assertOwnedKycPath(path, userId, applicationId, label) {
+  if (!path || !String(path).startsWith(`${userId}/${applicationId}/`)) {
+    throw new Error(`${label} must finish uploading before submission.`);
+  }
+}
+
 async function clientAndUser() {
   const supabase = await getSupabaseClient();
   if (!supabase) throw new Error("The secure loan service is unavailable.");
@@ -37,43 +43,47 @@ export async function getMyLoanSnapshot() {
   return { applications: applications.data || [], repayments: repayments.data || [] };
 }
 
-export async function submitLoanApplication(values) {
-  assertKycFile(values.passportPhoto, "Passport photo");
-  assertKycFile(values.identificationFile, "Identification file");
+export async function uploadLoanKycFile({ applicationId, kind, file, previousPath = "" }) {
+  const label = kind === "passport" ? "Passport photo" : "Identification file";
+  if (!applicationId) throw new Error("The loan upload session is unavailable. Please try again.");
+  if (!['passport', 'identification'].includes(kind)) throw new Error("Select a valid KYC document type.");
+  assertKycFile(file, label);
   const { supabase, user } = await clientAndUser();
-  const applicationId = crypto.randomUUID();
-  const basePath = `${user.id}/${applicationId}`;
-  const passportPath = `${basePath}/passport.${extensionFor(values.passportPhoto)}`;
-  const identificationPath = `${basePath}/identification.${extensionFor(values.identificationFile)}`;
-  const uploaded = [];
-
-  try {
-    for (const [path, file] of [[passportPath, values.passportPhoto], [identificationPath, values.identificationFile]]) {
-      const { error } = await supabase.storage.from(LOAN_KYC_BUCKET).upload(path, file, { contentType: file.type, upsert: false });
-      if (error) throw error;
-      uploaded.push(path);
-    }
-    const { data, error } = await supabase.rpc("student_submit_loan_application", {
-      application_id: applicationId,
-      applicant_full_name: values.fullName,
-      applicant_email: values.email,
-      applicant_phone: values.phone,
-      applicant_date_of_birth: values.dateOfBirth,
-      applicant_nin: values.nin,
-      applicant_bvn: values.bvn,
-      applicant_identification_type: values.identificationType,
-      passport_photo_path: passportPath,
-      identification_path: identificationPath,
-      requested_amount: Number(values.requestedAmount),
-      loan_purpose: values.purpose,
-      supporting_information: values.supportingInformation || ""
-    });
-    if (error) throw error;
-    return data;
-  } catch (error) {
-    if (uploaded.length) await supabase.storage.from(LOAN_KYC_BUCKET).remove(uploaded);
-    throw error;
+  if (previousPath && previousPath.startsWith(`${user.id}/${applicationId}/`)) {
+    const { error: removeError } = await supabase.storage.from(LOAN_KYC_BUCKET).remove([previousPath]);
+    if (removeError) throw removeError;
   }
+  const path = `${user.id}/${applicationId}/${kind}-${crypto.randomUUID()}.${extensionFor(file)}`;
+  const { error } = await supabase.storage.from(LOAN_KYC_BUCKET).upload(path, file, {
+    contentType: file.type,
+    upsert: false
+  });
+  if (error) throw error;
+  return { path, name: file.name, type: file.type, size: file.size };
+}
+
+export async function submitLoanApplication(values) {
+  const { supabase, user } = await clientAndUser();
+  const applicationId = values.applicationId;
+  assertOwnedKycPath(values.passportPhotoPath, user.id, applicationId, "Passport photo");
+  assertOwnedKycPath(values.identificationPath, user.id, applicationId, "Identification file");
+  const { data, error } = await supabase.rpc("student_submit_loan_application", {
+    application_id: applicationId,
+    applicant_full_name: values.fullName,
+    applicant_email: values.email,
+    applicant_phone: values.phone,
+    applicant_date_of_birth: values.dateOfBirth,
+    applicant_nin: values.nin,
+    applicant_bvn: values.bvn,
+    applicant_identification_type: values.identificationType,
+    passport_photo_path: values.passportPhotoPath,
+    identification_path: values.identificationPath,
+    requested_amount: Number(values.requestedAmount),
+    loan_purpose: values.purpose,
+    supporting_information: values.supportingInformation || ""
+  });
+  if (error) throw error;
+  return data;
 }
 
 export async function saveLoanBankDetails(values) {

@@ -5,7 +5,7 @@ import PortalNavigationPage from "../../components/portal/PortalNavigationPage";
 import { showToast } from "../../utils/toast";
 import { useAuth } from "../../context/authHooks";
 import { useAsyncData } from "../../hooks/useAsyncData";
-import { getMyLoanSnapshot, saveLoanBankDetails, submitLoanApplication, submitLoanRepayment } from "../../services/loanService";
+import { getMyLoanSnapshot, saveLoanBankDetails, submitLoanApplication, submitLoanRepayment, uploadLoanKycFile } from "../../services/loanService";
 import { formatCurrency, formatDateTime } from "../../utils/format";
 
 const statusLabels = {
@@ -44,13 +44,41 @@ export function StudentLoanApplicationPage() {
   const { user, profile } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [values, setValues] = useState({ fullName: profile?.full_name || "", email: user?.email || "", phone: profile?.phone || "", dateOfBirth: "", nin: "", bvn: "", identificationType: "national_id", requestedAmount: "", purpose: "", supportingInformation: "", passportPhoto: null, identificationFile: null });
+  const [applicationId, setApplicationId] = useState(() => crypto.randomUUID());
+  const initialValues = () => ({ fullName: profile?.full_name || "", email: user?.email || "", phone: profile?.phone || "", dateOfBirth: "", nin: "", bvn: "", identificationType: "national_id", requestedAmount: "", purpose: "", supportingInformation: "" });
+  const emptyUploads = () => ({ passport: { file: null, path: "", previewUrl: "", status: "idle", error: "" }, identification: { file: null, path: "", previewUrl: "", status: "idle", error: "" } });
+  const [values, setValues] = useState(initialValues);
+  const [uploads, setUploads] = useState(emptyUploads);
   const update = (key, value) => setValues((current) => ({ ...current, [key]: value }));
+  const uploadFile = async (kind, file) => {
+    if (!file) return;
+    const previewUrl = file.type.startsWith("image/") && typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : "";
+    const previousPath = uploads[kind].path;
+    setUploads((current) => ({ ...current, [kind]: { file, path: previousPath, previewUrl, status: "uploading", error: "" } }));
+    try {
+      const uploaded = await uploadLoanKycFile({ applicationId, kind, file, previousPath });
+      setUploads((current) => ({ ...current, [kind]: { ...current[kind], path: uploaded.path, status: "uploaded", error: "" } }));
+    } catch (uploadError) {
+      setUploads((current) => ({ ...current, [kind]: { ...current[kind], path: previousPath, status: "error", error: uploadError.message || "Upload failed." } }));
+    }
+  };
+  const chooseFile = (kind, event) => { void uploadFile(kind, event.target.files?.[0] || null); };
+  const retryUpload = (kind) => { void uploadFile(kind, uploads[kind].file); };
   const submit = async (event) => {
     event.preventDefault(); setBusy(true); setError("");
-    try { await submitLoanApplication(values); showToast("Loan submitted"); event.currentTarget.reset(); }
+    try {
+      await submitLoanApplication({ ...values, applicationId, passportPhotoPath: uploads.passport.path, identificationPath: uploads.identification.path });
+      showToast("Loan submitted");
+      Object.values(uploads).forEach((upload) => { if (upload.previewUrl && typeof URL.revokeObjectURL === "function") URL.revokeObjectURL(upload.previewUrl); });
+      setValues(initialValues()); setUploads(emptyUploads()); setApplicationId(crypto.randomUUID());
+    }
     catch (submitError) { setError(submitError.message || "The loan application could not be submitted."); }
     finally { setBusy(false); }
+  };
+  const uploadsReady = uploads.passport.status === "uploaded" && uploads.identification.status === "uploaded";
+  const uploadField = (kind, label, accept) => {
+    const upload = uploads[kind];
+    return <div className="loan-upload-field"><label><span>{label}</span><input key={`${applicationId}-${kind}`} required type="file" accept={accept} onChange={(event) => chooseFile(kind, event)} /></label>{upload.previewUrl ? <img src={upload.previewUrl} alt={`${label} preview`} /> : upload.file ? <small className="loan-upload-name">{upload.file.name}</small> : null}<div className={`loan-upload-status ${upload.status}`} aria-live="polite">{upload.status === "uploading" ? <><LoaderCircle className="spin-icon" size={16} /><span>Uploading...</span></> : null}{upload.status === "uploaded" ? <span>Uploaded</span> : null}{upload.status === "error" ? <><span>Upload failed. {upload.error}</span><button className="text-link" type="button" onClick={() => retryUpload(kind)}>Retry</button></> : null}</div></div>;
   };
   return <div className="portal-page loan-page"><PageTitle title="Apply for Loan" /><form className="loan-form" onSubmit={submit}>
     <div className="loan-form-grid">
@@ -62,14 +90,14 @@ export function StudentLoanApplicationPage() {
       <label><span>BVN</span><input required inputMode="numeric" pattern="[0-9]{11}" maxLength="11" value={values.bvn} onChange={(event) => update("bvn", event.target.value.replace(/\D/g, ""))} /></label>
       <label><span>Identification type</span><select value={values.identificationType} onChange={(event) => update("identificationType", event.target.value)}><option value="national_id">National ID</option><option value="drivers_licence">Driver&apos;s licence</option><option value="international_passport">International passport</option><option value="voters_card">Voter&apos;s card</option></select></label>
       <label><span>Requested amount</span><input required type="number" min="1" step="0.01" value={values.requestedAmount} onChange={(event) => update("requestedAmount", event.target.value)} /></label>
-      <label><span>Passport photo</span><input required type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => update("passportPhoto", event.target.files?.[0] || null)} /></label>
-      <label><span>Identification file</span><input required type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => update("identificationFile", event.target.files?.[0] || null)} /></label>
+      {uploadField("passport", "Passport photo", "image/jpeg,image/png,image/webp")}
+      {uploadField("identification", "Identification file", "image/jpeg,image/png,image/webp,application/pdf")}
     </div>
     <label><span>Loan purpose</span><textarea required rows="3" minLength="10" maxLength="1500" value={values.purpose} onChange={(event) => update("purpose", event.target.value)} /></label>
     <label><span>Supporting information</span><textarea rows="3" maxLength="3000" value={values.supportingInformation} onChange={(event) => update("supportingInformation", event.target.value)} /></label>
     <p className="loan-privacy-note">NIN, BVN and KYC files are encrypted or privately stored for review, then purged after the final decision.</p>
     {error ? <div className="form-status warning" role="alert">{error}</div> : null}
-    <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Submitting" : "Submit Application"}<ArrowRight size={15} /></button>
+    <button className="button button-primary" type="submit" disabled={busy || !uploadsReady}>{busy ? "Submitting" : "Submit Application"}<ArrowRight size={15} /></button>
   </form></div>;
 }
 

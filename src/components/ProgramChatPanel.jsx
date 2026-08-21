@@ -121,6 +121,7 @@ export default function ProgramChatPanel({
     [programId, trackId, classroomId, requestedRoomId],
     { errorMessage: "We could not load your classroom. Please try again." }
   );
+  const refetchRooms = roomsQuery.refetch;
   const rooms = useMemo(() => roomsQuery.data || [], [roomsQuery.data]);
   const unreadQuery = useAsyncData(() => getProgramChatUnreadCounts(), [], {
     enabled: Boolean(user?.id),
@@ -176,6 +177,15 @@ export default function ProgramChatPanel({
 
   useEffect(() => { onRoomStateRef.current = onRoomState; }, [onRoomState]);
   useEffect(() => { onRoomStateRef.current?.({ roomId: selectedRoom?.id || "", unreadCount: selectedUnreadCount, joined }); }, [joined, selectedRoom?.id, selectedUnreadCount]);
+  useEffect(() => {
+    const refreshRoomAccess = (event) => {
+      if (["enrolments", "classroom_memberships", "program_chat_members", "tutor_classroom_assignments", "tutor_program_assignments"].includes(event.detail?.table)) {
+        refetchRooms();
+      }
+    };
+    window.addEventListener("zentel:portal-realtime", refreshRoomAccess);
+    return () => window.removeEventListener("zentel:portal-realtime", refreshRoomAccess);
+  }, [refetchRooms]);
   useEffect(() => () => { if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl); }, [imagePreviewUrl]);
   useEffect(() => () => window.clearTimeout(longPressTimerRef.current), []);
   useEffect(() => { setMessages(messagesQuery.data || []); }, [messagesQuery.data]);
@@ -434,7 +444,7 @@ export default function ProgramChatPanel({
       <section className={`chat-join-state ${standalone ? "standalone" : ""}`}>
         {backControl}
         <MessageSquare size={28} aria-hidden="true" />
-        <p className="eyebrow">{selectedRoom?.program_title || selectedRoom?.title}</p>
+        <p className="eyebrow">{selectedRoom?.title || selectedRoom?.program_title}</p>
         <h2>Join Programme Chat</h2>
         <p>Join the conversation for your programme. You will receive new messages sent after you join.</p>
         <button className="button button-primary" type="button" disabled={joining} onClick={joinChat}>{joining ? "Joining Chat" : "Join Chat"}</button>
@@ -446,12 +456,12 @@ export default function ProgramChatPanel({
   const activeCall = callQuery.data;
   return (
     <div className={`chat-panel ${standalone ? "chat-standalone" : ""} ${rooms.length <= 1 ? "single-room" : ""}`.trim()}>
-      {rooms.length > 1 ? <aside className="chat-room-list" aria-label="Programme rooms">{rooms.map((room) => <button key={room.id} type="button" className={selectedRoom?.id === room.id ? "active" : ""} onClick={() => setSelectedRoomId(room.id)}><MessageSquare size={16} aria-hidden="true" /><span>{room.program_title || room.title}</span>{Number(unreadQuery.data?.[room.id] || 0) > 0 ? <span className="portal-nav-badge">{Math.min(99, unreadQuery.data[room.id])}{unreadQuery.data[room.id] > 99 ? "+" : ""}</span> : null}</button>)}</aside> : null}
+      {rooms.length > 1 ? <aside className="chat-room-list" aria-label="Programme rooms">{rooms.map((room) => <button key={room.id} type="button" className={selectedRoom?.id === room.id ? "active" : ""} onClick={() => setSelectedRoomId(room.id)}><MessageSquare size={16} aria-hidden="true" /><span>{room.title || room.program_title}</span>{Number(unreadQuery.data?.[room.id] || 0) > 0 ? <span className="portal-nav-badge">{Math.min(99, unreadQuery.data[room.id])}{unreadQuery.data[room.id] > 99 ? "+" : ""}</span> : null}</button>)}</aside> : null}
       <section className="chat-thread conversation-workspace" aria-label="Programme chat messages">
         <header className="chat-thread-header conversation-header">
           <div className="chat-thread-identity">
             {standalone && backTo ? <Link className="chat-header-action" to={backTo} aria-label="Back to classroom" title="Back to classroom"><ArrowLeft size={19} /><span className="sr-only">Back to classroom</span></Link> : null}
-            <div><strong>{selectedRoom?.program_title || selectedRoom?.title}</strong><ParticipantState onlineCount={onlineCount} typingNames={typingNames} connection={connection} /></div>
+            <div><strong>{selectedRoom?.title || selectedRoom?.program_title}</strong><ParticipantState onlineCount={onlineCount} typingNames={typingNames} connection={connection} /></div>
           </div>
           <div className="chat-header-actions">
             {activeCall ? <button className="chat-header-action call-live" type="button" disabled={callBusy} onClick={() => openCall("join")} title="Join voice call"><Phone size={18} /><span>Join</span></button> : canHostCall ? <button className="chat-header-action" type="button" disabled={callBusy} onClick={() => openCall("start")} title="Start voice call"><Phone size={18} /><span>Call</span></button> : <button className="chat-header-action" type="button" disabled title="No active voice call"><Phone size={18} /><span>Call</span></button>}
